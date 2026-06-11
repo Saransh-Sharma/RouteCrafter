@@ -4,8 +4,15 @@ import {
   projectSchema,
   CURRENT_SCHEMA_VERSION,
   type Project,
+  type Duration,
+  type TravelerType,
 } from "../schemas";
 import { seedProjects } from "../seed-projects";
+
+export interface ExpandHint {
+  duration: Duration;
+  travelerType: TravelerType;
+}
 
 export interface CreateProjectInput {
   name: string;
@@ -39,6 +46,9 @@ interface ProjectsState {
   duplicate: (id: string) => Project | undefined;
   getById: (id: string) => Project | undefined;
   importProject: (project: unknown) => Project;
+  /** Transient (non-persisted) hint to prefill the expanded-itinerary creator. */
+  expandHint: ExpandHint | null;
+  setExpandHint: (hint: ExpandHint | null) => void;
 }
 
 function now() {
@@ -50,8 +60,10 @@ export const useProjectsStore = createZustand<ProjectsState>()(
     (set, get) => ({
       projects: [],
       hasHydrated: false,
+      expandHint: null,
 
       setHasHydrated: (v) => set({ hasHydrated: v }),
+      setExpandHint: (hint) => set({ expandHint: hint }),
 
       hydrateSeeds: () => {
         if (get().projects.length === 0) {

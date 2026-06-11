@@ -10,7 +10,7 @@ import {
 } from "./enums";
 import { tripConfigurationSchema } from "./trip-config";
 import { portfolioImagePromptSchema } from "./image-prompt";
-import { itineraryOutputSchema } from "./itinerary";
+import { itineraryOutputSchema, itineraryMatrixSchema } from "./itinerary";
 import { marketplaceListingSchema } from "./listing";
 
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -47,6 +47,7 @@ export const projectSchema = z.object({
   // Generated artifacts (filled in by later phases)
   tripConfigs: z.array(tripConfigurationSchema).default([]),
   imagePrompts: z.array(portfolioImagePromptSchema).default([]),
+  matrix: itineraryMatrixSchema.optional(),
   itineraries: z.array(itineraryOutputSchema).default([]),
   listing: marketplaceListingSchema.optional(),
   /** Raw generated prompt text keyed by template id. */

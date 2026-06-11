@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { budgetEnum, paceEnum, travelStyleEnum, travelerTypeEnum } from "./enums";
+import {
+  budgetEnum,
+  durationEnum,
+  paceEnum,
+  travelStyleEnum,
+  travelerTypeEnum,
+} from "./enums";
 
 /**
  * Itinerary structures. Defined now so the data model is stable; they are
@@ -53,3 +59,28 @@ export const itineraryOutputSchema = z.object({
 });
 
 export type ItineraryOutput = z.infer<typeof itineraryOutputSchema>;
+
+/**
+ * Compact duration x traveler-type variation grid (Phase 6). Each cell holds a
+ * short list of itinerary "spines" the buyer can pick from before expanding.
+ */
+export const matrixVariationSchema = z.object({
+  label: z.string(),
+  spine: z.string().default(""),
+});
+
+export const matrixCellSchema = z.object({
+  duration: durationEnum,
+  travelerType: travelerTypeEnum,
+  variations: z.array(matrixVariationSchema).default([]),
+});
+
+export const itineraryMatrixSchema = z.object({
+  id: z.string(),
+  cells: z.array(matrixCellSchema).default([]),
+  updatedAt: z.string(),
+});
+
+export type MatrixVariation = z.infer<typeof matrixVariationSchema>;
+export type MatrixCell = z.infer<typeof matrixCellSchema>;
+export type ItineraryMatrix = z.infer<typeof itineraryMatrixSchema>;
