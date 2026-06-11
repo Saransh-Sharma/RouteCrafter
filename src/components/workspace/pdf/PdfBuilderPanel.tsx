@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/field";
 import { ItineraryDocument } from "./ItineraryDocument";
+import { PdfThemeControls } from "./PdfThemeControls";
 
 export function PdfBuilderPanel({
   project,
@@ -103,8 +104,17 @@ export function PdfBuilderPanel({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6">
-        <ItineraryDocument ref={docRef} itinerary={selected} project={project} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
+        <div className="rc-no-print lg:sticky lg:top-6 lg:self-start">
+          <PdfThemeControls project={project} itinerary={selected} />
+        </div>
+        <div className="overflow-hidden rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6">
+          <ItineraryDocument
+            ref={docRef}
+            itinerary={selected}
+            project={project}
+          />
+        </div>
       </div>
     </div>
   );
