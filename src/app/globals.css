@@ -142,17 +142,163 @@
   }
 }
 
-/* The printable itinerary document surface (screen preview + PDF capture) */
+/*
+  The printable itinerary document surface (screen preview + PDF capture).
+  All colors come from --doc-* variables set inline from the selected theme,
+  so the document is themed independently of the app chrome and html2canvas
+  captures concrete colors.
+*/
 .rc-doc {
-  background: #ffffff;
-  color: var(--rc-ink);
+  --doc-bg: #efe7d6;
+  --doc-paper: #fbf8f1;
+  --doc-ink: #3a3328;
+  --doc-ink-soft: #6a6051;
+  --doc-ink-muted: #9a8e78;
+  --doc-accent: #b5764f;
+  --doc-accent-soft: #f1ddcc;
+  --doc-border: #e2d6bf;
+  --doc-on-accent: #fbf8f1;
+
+  background: var(--doc-bg);
+  color: var(--doc-ink);
+  font-family: var(--font-sans);
+}
+
+.rc-doc h1,
+.rc-doc h2,
+.rc-doc h3,
+.rc-doc h4 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+  color: var(--doc-ink);
 }
 
 .rc-print-page {
   /* A4-ish proportions for on-screen preview */
+  position: relative;
   width: 100%;
   max-width: 794px;
   margin-inline: auto;
+  background: var(--doc-paper);
+}
+
+/* --- Document building blocks --- */
+.rc-doc-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  color: var(--doc-accent);
+}
+
+.rc-doc-rule {
+  height: 2px;
+  width: 44px;
+  background: var(--doc-accent);
+  border-radius: 2px;
+}
+
+.rc-doc-hairline {
+  height: 1px;
+  width: 100%;
+  background: var(--doc-border);
+}
+
+.rc-doc-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--doc-border);
+  background: var(--doc-accent-soft);
+  color: var(--doc-ink-soft);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rc-doc-img {
+  width: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Cover */
+.rc-doc-cover {
+  position: relative;
+  overflow: hidden;
+  min-height: 1040px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: var(--doc-accent-soft);
+}
+
+.rc-doc-cover-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rc-doc-cover-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0.18) 45%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+}
+
+.rc-doc-cover-inner {
+  position: relative;
+  padding: 3.5rem;
+}
+
+.rc-doc-cover.has-photo .rc-doc-cover-inner,
+.rc-doc-cover.has-photo .rc-doc-eyebrow {
+  color: #fff;
+}
+
+.rc-doc-cover.has-photo .rc-doc-eyebrow {
+  color: #fff;
+}
+
+.rc-doc-cover.has-photo .rc-doc-rule {
+  background: #fff;
+}
+
+/* Day time-block row: label column + content */
+.rc-day-row {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--doc-border);
+}
+
+.rc-day-row-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--doc-accent);
+  padding-top: 0.15rem;
+}
+
+.rc-day-row-body {
+  color: var(--doc-ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.rc-day-num {
+  font-family: var(--font-serif);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--doc-accent);
 }
 
 /* Print-friendly base for the PDF builder */
@@ -196,5 +342,23 @@
   .rc-print-page:last-child {
     break-after: auto;
     page-break-after: auto;
+  }
+
+  /* Ensure themed backgrounds + photos render in print/PDF. */
+  .rc-doc,
+  .rc-print-page,
+  .rc-doc-cover,
+  .rc-doc-chip {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .rc-doc img {
+    max-width: 100%;
+  }
+
+  .rc-day-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
