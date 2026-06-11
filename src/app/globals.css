@@ -142,7 +142,20 @@
   }
 }
 
-/* Print-friendly base (used heavily by the later PDF builder phase) */
+/* The printable itinerary document surface (screen preview + PDF capture) */
+.rc-doc {
+  background: #ffffff;
+  color: var(--rc-ink);
+}
+
+.rc-print-page {
+  /* A4-ish proportions for on-screen preview */
+  width: 100%;
+  max-width: 794px;
+  margin-inline: auto;
+}
+
+/* Print-friendly base for the PDF builder */
 @media print {
   body {
     background: #ffffff;
@@ -150,5 +163,38 @@
 
   .rc-no-print {
     display: none !important;
+  }
+
+  /* Isolate the document: hide app chrome, show only the print root */
+  body * {
+    visibility: hidden;
+  }
+
+  .rc-print-root,
+  .rc-print-root * {
+    visibility: visible;
+  }
+
+  .rc-print-root {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  .rc-print-page {
+    max-width: none;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .rc-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 }
