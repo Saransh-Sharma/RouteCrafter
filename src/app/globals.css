@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/*
+  RouteCrafter design system
+  A premium, editorial "boutique itinerary studio" palette:
+  warm ivory paper, sage + forest green, terracotta, warm brown,
+  dusty teal, and muted gold accents.
+*/
+
+:root {
+  /* Surfaces */
+  --rc-ivory: #f6f1e7;
+  --rc-paper: #fbf8f1;
+  --rc-paper-2: #f1ead9;
+  --rc-border: #e4dbc8;
+  --rc-border-strong: #d6cab0;
+
+  /* Ink / text */
+  --rc-ink: #2c2a24;
+  --rc-ink-soft: #58534a;
+  --rc-ink-muted: #8a8273;
+
+  /* Brand colors */
+  --rc-sage: #9caf88;
+  --rc-sage-soft: #e6ecdc;
+  --rc-forest: #344e3c;
+  --rc-forest-deep: #25382c;
+  --rc-terracotta: #c06a48;
+  --rc-terracotta-soft: #f1ddd2;
+  --rc-brown: #7a5c44;
+  --rc-teal: #5f8b8b;
+  --rc-teal-soft: #dbe8e6;
+  --rc-gold: #c19a4b;
+  --rc-gold-soft: #f0e6cd;
+}
+
+@theme inline {
+  /* Map palette into Tailwind color utilities (bg-ivory, text-forest, etc.) */
+  --color-ivory: var(--rc-ivory);
+  --color-paper: var(--rc-paper);
+  --color-paper-2: var(--rc-paper-2);
+  --color-border-soft: var(--rc-border);
+  --color-border-strong: var(--rc-border-strong);
+
+  --color-ink: var(--rc-ink);
+  --color-ink-soft: var(--rc-ink-soft);
+  --color-ink-muted: var(--rc-ink-muted);
+
+  --color-sage: var(--rc-sage);
+  --color-sage-soft: var(--rc-sage-soft);
+  --color-forest: var(--rc-forest);
+  --color-forest-deep: var(--rc-forest-deep);
+  --color-terracotta: var(--rc-terracotta);
+  --color-terracotta-soft: var(--rc-terracotta-soft);
+  --color-brown: var(--rc-brown);
+  --color-teal: var(--rc-teal);
+  --color-teal-soft: var(--rc-teal-soft);
+  --color-gold: var(--rc-gold);
+  --color-gold-soft: var(--rc-gold-soft);
+
+  --color-background: var(--rc-ivory);
+  --color-foreground: var(--rc-ink);
+
+  /* Typography */
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius + shadow scale tuned for soft, rounded cards */
+  --radius-card: 1.25rem;
+  --shadow-soft: 0 1px 2px rgba(44, 42, 36, 0.04),
+    0 8px 24px rgba(44, 42, 36, 0.06);
+  --shadow-lift: 0 2px 4px rgba(44, 42, 36, 0.05),
+    0 16px 40px rgba(44, 42, 36, 0.1);
+}
+
+@layer base {
+  html {
+    color: var(--rc-ink);
+  }
+
+  body {
+    background-color: var(--rc-ivory);
+    color: var(--rc-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--rc-sage-soft);
+    color: var(--rc-forest-deep);
+  }
+}
+
+@layer components {
+  /* Subtle paper texture applied to the app background */
+  .rc-paper-texture {
+    background-color: var(--rc-ivory);
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(122, 92, 68, 0.05) 1px,
+        transparent 0
+      ),
+      radial-gradient(
+        circle at 80% 0%,
+        rgba(156, 175, 136, 0.1),
+        transparent 55%
+      ),
+      radial-gradient(
+        circle at 0% 100%,
+        rgba(192, 106, 72, 0.06),
+        transparent 45%
+      );
+    background-size: 22px 22px, 100% 100%, 100% 100%;
+    background-attachment: fixed;
+  }
+
+  .rc-card {
+    background-color: var(--rc-paper);
+    border: 1px solid var(--rc-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .rc-divider {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--rc-border-strong),
+      transparent
+    );
+  }
+}
+
+/* Print-friendly base (used heavily by the later PDF builder phase) */
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .rc-no-print {
+    display: none !important;
+  }
+}
