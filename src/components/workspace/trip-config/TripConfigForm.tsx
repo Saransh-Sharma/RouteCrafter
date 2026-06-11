@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Save } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import {
   tripConfigurationSchema,
   createEmptyTripConfig,
@@ -12,16 +12,22 @@ import {
 } from "@/lib/schemas";
 import type { Project } from "@/lib/types";
 import { useProjectsStore } from "@/lib/store/projects-store";
-import { Button } from "@/components/ui/Button";
 import { FormField, Input, Select } from "@/components/ui/field";
 import { Section } from "./Section";
 import { ChipGroup } from "./ChipGroup";
 import { TagInput } from "./TagInput";
 import { ConfigSummary } from "./ConfigSummary";
 
+type SaveStatus = "idle" | "saving" | "saved";
+
+/** Serialize form values for change detection, ignoring id/updatedAt. */
+function serializeConfig(v: TripConfiguration): string {
+  return JSON.stringify({ ...v, id: undefined, updatedAt: undefined });
+}
+
 export function TripConfigForm({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
-  const [saved, setSaved] = React.useState(false);
+  const [status, setStatus] = React.useState<SaveStatus>("idle");
 
   const defaults = React.useMemo<TripConfiguration>(
     () =>
@@ -30,31 +36,50 @@ export function TripConfigForm({ project }: { project: Project }) {
     [project.tripConfigs, project.regions],
   );
 
-  const { register, handleSubmit, control, reset } = useForm<TripConfiguration>({
+  const { register, control, reset } = useForm<TripConfiguration>({
     resolver: zodResolver(tripConfigurationSchema) as Resolver<TripConfiguration>,
     defaultValues: defaults,
   });
 
+  // Tracks the last persisted snapshot to break the save -> reset -> save loop.
+  const lastSavedRef = React.useRef<string>(serializeConfig(defaults));
+  const mountedRef = React.useRef(false);
+
   React.useEffect(() => {
     reset(defaults);
+    lastSavedRef.current = serializeConfig(defaults);
   }, [defaults, reset]);
 
   const values = useWatch({ control }) as TripConfiguration;
 
-  function onSubmit(data: TripConfiguration) {
-    const config: TripConfiguration = {
-      ...data,
-      id: defaults.id,
-      updatedAt: new Date().toISOString(),
-    };
-    update(project.id, { tripConfigs: [config] });
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2000);
-  }
+  // Debounced auto-save: persist whenever the form differs from what's stored.
+  React.useEffect(() => {
+    if (!values) return;
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    const snapshot = serializeConfig(values);
+    if (snapshot === lastSavedRef.current) return;
+
+    setStatus("saving");
+    const timer = window.setTimeout(() => {
+      const config: TripConfiguration = {
+        ...values,
+        id: defaults.id,
+        updatedAt: new Date().toISOString(),
+      };
+      update(project.id, { tripConfigs: [config] });
+      lastSavedRef.current = snapshot;
+      setStatus("saved");
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [values, defaults.id, project.id, update]);
 
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={(e) => e.preventDefault()}
       className="grid grid-cols-1 gap-6 lg:grid-cols-3"
     >
       <div className="space-y-6 lg:col-span-2">
@@ -310,17 +335,20 @@ export function TripConfigForm({ project }: { project: Project }) {
           />
         </Section>
 
-        <div className="flex items-center justify-end gap-3">
-          {saved ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-forest">
-              <Check className="size-4" />
-              Saved
+        <div className="flex items-center justify-end gap-2 text-sm">
+          {status === "saving" ? (
+            <span className="inline-flex items-center gap-1.5 text-ink-muted">
+              <Loader2 className="size-4 animate-spin" />
+              Saving...
             </span>
-          ) : null}
-          <Button type="submit">
-            <Save className="size-4" />
-            Save configuration
-          </Button>
+          ) : status === "saved" ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-forest">
+              <Check className="size-4" />
+              All changes saved
+            </span>
+          ) : (
+            <span className="text-ink-muted">Changes save automatically</span>
+          )}
         </div>
       </div>
 
