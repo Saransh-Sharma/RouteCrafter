@@ -1,24 +1,34 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { useProjectsStore } from "@/lib/store/projects-store";
+import { importProjectJson } from "@/lib/io/project-io";
 
-/**
- * Import project JSON. Stub for Phase 1 — full parse/validate/persist arrives
- * with the Zod schemas + localStorage layer in Phase 2.
- */
+/** Import a project from a validated JSON file and open it. */
 export function ImportProjectButton() {
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const [note, setNote] = React.useState<string | null>(null);
+  const router = useRouter();
+  const importProject = useProjectsStore((s) => s.importProject);
+  const [error, setError] = React.useState<string | null>(null);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setNote(
-      `"${file.name}" selected. Import is wired up in Phase 2 (schemas + persistence).`,
-    );
     e.target.value = "";
+    if (!file) return;
+    setError(null);
+
+    const text = await file.text();
+    const result = importProjectJson(text);
+    if (!result.ok || !result.project) {
+      setError(result.error ?? "Could not import this file.");
+      return;
+    }
+
+    const created = importProject(result.project);
+    router.push(`/projects/${created.id}`);
   }
 
   return (
@@ -34,8 +44,8 @@ export function ImportProjectButton() {
         onChange={handleFile}
         className="hidden"
       />
-      {note ? (
-        <p className="max-w-xs text-right text-xs text-ink-muted">{note}</p>
+      {error ? (
+        <p className="max-w-xs text-right text-xs text-terracotta">{error}</p>
       ) : null}
     </div>
   );

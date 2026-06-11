@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   Plus,
@@ -10,7 +12,8 @@ import {
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PreviewCard } from "@/components/ui/PreviewCard";
 import { ImportProjectButton } from "@/components/dashboard/ImportProjectButton";
-import { mockProjects } from "@/lib/mock-data";
+import { useProjectsStore } from "@/lib/store/projects-store";
+import { useMounted } from "@/lib/hooks";
 
 const quickActions = [
   {
@@ -40,6 +43,10 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
+  const mounted = useMounted();
+  const projects = useProjectsStore((s) => s.projects);
+  const recent = mounted ? projects.slice(0, 5) : [];
+
   return (
     <div className="space-y-12">
       <SectionHeader
@@ -119,7 +126,7 @@ export default function DashboardPage() {
             </span>
           </Link>
 
-          {mockProjects.map((project) => (
+          {recent.map((project) => (
             <PreviewCard key={project.id} project={project} />
           ))}
         </div>

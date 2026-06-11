@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import {
   FormField,
   Input,
@@ -14,36 +14,15 @@ import {
   Select,
   CheckboxChip,
 } from "@/components/ui/field";
-import type { TravelStyle, TravelerType } from "@/lib/types";
-
-const TRAVEL_STYLES: TravelStyle[] = [
-  "Classic first-timer",
-  "Local-first slow travel",
-  "Food/culture heavy",
-  "Nature/adventure",
-  "Romantic",
-  "Family-friendly",
-  "Premium comfort",
-  "Budget-friendly",
-  "Wellness",
-  "Photography",
-  "Shopping",
-  "Nightlife",
-  "Spiritual/cultural",
-];
-
-const TRAVELER_TYPES: TravelerType[] = [
-  "Solo",
-  "Couple",
-  "Family",
-  "Group",
-  "Senior travelers",
-  "Luxury travelers",
-  "Budget travelers",
-  "Business + leisure",
-];
+import { useProjectsStore } from "@/lib/store/projects-store";
+import { enumValues } from "@/lib/schemas";
+import type { BrandVoice, TravelStyle, TravelerType } from "@/lib/types";
 
 export default function NewProjectPage() {
+  const router = useRouter();
+  const create = useProjectsStore((s) => s.create);
+  const update = useProjectsStore((s) => s.update);
+
   const [name, setName] = React.useState("");
   const [country, setCountry] = React.useState("");
   const [regions, setRegions] = React.useState("");
@@ -51,7 +30,7 @@ export default function NewProjectPage() {
   const [positioning, setPositioning] = React.useState("");
   const [styles, setStyles] = React.useState<TravelStyle[]>([]);
   const [travelers, setTravelers] = React.useState<TravelerType[]>([]);
-  const [submitted, setSubmitted] = React.useState(false);
+  const [voice, setVoice] = React.useState<BrandVoice>("editorial");
 
   function toggle<T>(list: T[], value: T): T[] {
     return list.includes(value)
@@ -61,75 +40,27 @@ export default function NewProjectPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    const project = create({
+      name: name.trim(),
+      country: country.trim(),
+      regions: regions
+        .split(",")
+        .map((r) => r.trim())
+        .filter(Boolean),
+      positioning: positioning.trim(),
+      targetAudience: audience.trim(),
+      travelStyles: styles,
+      travelerTypes: travelers,
+    });
+    if (voice !== "editorial") {
+      update(project.id, {
+        brandStyle: { ...project.brandStyle, voice },
+      });
     }
+    router.push(`/projects/${project.id}`);
   }
 
   const canSubmit = name.trim() && country.trim();
-
-  if (submitted) {
-    return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <Card>
-          <CardContent className="space-y-5 p-8 text-center">
-            <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-sage-soft text-forest">
-              <Check className="size-7" />
-            </span>
-            <div className="space-y-1.5">
-              <h2 className="text-2xl font-semibold text-ink">
-                Project configured
-              </h2>
-              <p className="text-sm leading-relaxed text-ink-soft">
-                {name || "Your project"} for {country || "your country"} is ready
-                to open. Saving to local storage and seeding the workspace lands
-                in Phase 2 — for now, preview the studio with a sample project.
-              </p>
-            </div>
-
-            <div className="rc-divider" />
-
-            <div className="space-y-3 text-left">
-              <Detail label="Name" value={name || "—"} />
-              <Detail label="Country" value={country || "—"} />
-              <Detail label="Cities / regions" value={regions || "—"} />
-              <Detail label="Target audience" value={audience || "—"} />
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-32 shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                  Travel styles
-                </span>
-                <span className="flex flex-wrap gap-1.5">
-                  {styles.length ? (
-                    styles.map((s) => (
-                      <Badge key={s} tone="sage">
-                        {s}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-ink-soft">—</span>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col justify-center gap-2 pt-2 sm:flex-row">
-              <Link
-                href="/projects/japan-family-7"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-forest px-5 text-sm font-medium text-paper transition-colors hover:bg-forest-deep"
-              >
-                <Sparkles className="size-4" />
-                Open sample workspace
-              </Link>
-              <Button variant="outline" onClick={() => setSubmitted(false)}>
-                Edit configuration
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8">
@@ -213,7 +144,7 @@ export default function NewProjectPage() {
               hint="Pick the angles this product leans into."
             >
               <div className="flex flex-wrap gap-2">
-                {TRAVEL_STYLES.map((style) => (
+                {enumValues.travelStyle.map((style) => (
                   <CheckboxChip
                     key={style}
                     label={style}
@@ -229,7 +160,7 @@ export default function NewProjectPage() {
               hint="Who can this product be tailored for?"
             >
               <div className="flex flex-wrap gap-2">
-                {TRAVELER_TYPES.map((t) => (
+                {enumValues.travelerType.map((t) => (
                   <CheckboxChip
                     key={t}
                     label={t}
@@ -240,8 +171,16 @@ export default function NewProjectPage() {
               </div>
             </FormField>
 
-            <FormField label="Brand voice" htmlFor="voice" hint="Used to tune generated copy later.">
-              <Select id="voice" defaultValue="editorial">
+            <FormField
+              label="Brand voice"
+              htmlFor="voice"
+              hint="Used to tune generated copy later."
+            >
+              <Select
+                id="voice"
+                value={voice}
+                onChange={(e) => setVoice(e.target.value as BrandVoice)}
+              >
                 <option value="editorial">Editorial &amp; warm</option>
                 <option value="premium">Premium &amp; understated</option>
                 <option value="friendly">Friendly &amp; practical</option>
@@ -263,17 +202,6 @@ export default function NewProjectPage() {
           </Button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="w-32 shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-        {label}
-      </span>
-      <span className="text-sm text-ink">{value}</span>
     </div>
   );
 }
