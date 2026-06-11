@@ -7,6 +7,27 @@ import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { OverviewPanel } from "./OverviewPanel";
+import { TripConfigForm } from "./trip-config/TripConfigForm";
+import { PromptStudioPanel } from "./prompts/PromptStudioPanel";
+import { ImagePromptsPanel } from "./image-prompts/ImagePromptsPanel";
+import { MatrixPanel } from "./matrix/MatrixPanel";
+import { ExpandedItineraryPanel } from "./itinerary/ExpandedItineraryPanel";
+import { ListingPanel } from "./listing/ListingPanel";
+import { PdfBuilderPanel } from "./pdf/PdfBuilderPanel";
+import { ExportPanel } from "./export/ExportPanel";
+
+/** Module ids that have a real, implemented panel (no "locked" badge). */
+const IMPLEMENTED = new Set([
+  "overview",
+  "trip-config",
+  "prompts",
+  "image-prompts",
+  "matrix",
+  "expanded",
+  "listing",
+  "pdf",
+  "export",
+]);
 
 export function WorkspaceTabs({
   project,
@@ -36,7 +57,7 @@ export function WorkspaceTabs({
               )}
             >
               {m.label}
-              {m.phase > 1 ? (
+              {!IMPLEMENTED.has(m.id) ? (
                 <Lock
                   className={cn(
                     "size-3",
@@ -49,13 +70,39 @@ export function WorkspaceTabs({
         })}
       </div>
 
-      {current?.id === "overview" ? (
-        <OverviewPanel project={project} />
-      ) : current ? (
-        <ModulePlaceholder module={current} />
-      ) : null}
+      {renderPanel(current, project, setActive)}
     </div>
   );
+}
+
+function renderPanel(
+  current: WorkspaceModule | undefined,
+  project: Project,
+  onNavigate: (moduleId: string) => void,
+) {
+  if (!current) return null;
+  switch (current.id) {
+    case "overview":
+      return <OverviewPanel project={project} />;
+    case "trip-config":
+      return <TripConfigForm project={project} />;
+    case "prompts":
+      return <PromptStudioPanel project={project} />;
+    case "image-prompts":
+      return <ImagePromptsPanel project={project} />;
+    case "matrix":
+      return <MatrixPanel project={project} onNavigate={onNavigate} />;
+    case "expanded":
+      return <ExpandedItineraryPanel project={project} />;
+    case "listing":
+      return <ListingPanel project={project} />;
+    case "pdf":
+      return <PdfBuilderPanel project={project} onNavigate={onNavigate} />;
+    case "export":
+      return <ExportPanel project={project} />;
+    default:
+      return <ModulePlaceholder module={current} />;
+  }
 }
 
 function ModulePlaceholder({ module }: { module: WorkspaceModule }) {

@@ -1,21 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileText, FileSpreadsheet, FileJson, FileType } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, FileJson } from "lucide-react";
 import { Button } from "./Button";
 import { cn } from "@/lib/utils";
-
-const options = [
-  { id: "pdf", label: "Export PDF", icon: FileType, phase: "Phase 9" },
-  { id: "markdown", label: "Export Markdown", icon: FileText, phase: "Phase 9" },
-  { id: "csv", label: "Export CSV", icon: FileSpreadsheet, phase: "Phase 10" },
-  { id: "json", label: "Export JSON", icon: FileJson, phase: "Phase 2" },
-] as const;
+import type { Project } from "@/lib/types";
+import { downloadProjectJson } from "@/lib/io/project-io";
+import {
+  buildMarkdownBundle,
+  downloadText,
+  hasAnyContent,
+  projectSlug,
+} from "@/components/workspace/export/export-bundle";
 
 /**
- * Export menu. Visual stub for Phase 1 — wiring lands with the export phases.
+ * Export menu. JSON export is live (Phase 2); PDF/Markdown/CSV are enabled in
+ * their respective later phases.
  */
-export function ExportButton({ className }: { className?: string }) {
+export function ExportButton({
+  className,
+  project,
+}: {
+  className?: string;
+  project?: Project;
+}) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -28,6 +36,47 @@ export function ExportButton({ className }: { className?: string }) {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+
+  const hasContent = project ? hasAnyContent(project) : false;
+
+  const options = [
+    {
+      id: "markdown",
+      label: "Export Markdown",
+      icon: FileText,
+      phase: hasContent ? "Ready" : "Empty",
+      enabled: Boolean(project) && hasContent,
+    },
+    {
+      id: "json",
+      label: "Export JSON",
+      icon: FileJson,
+      phase: "Ready",
+      enabled: Boolean(project),
+    },
+    {
+      id: "more",
+      label: "More in Export tab",
+      icon: FileSpreadsheet,
+      phase: "PDF / CSV",
+      enabled: false,
+    },
+  ] as const;
+
+  function handle(id: string) {
+    if (!project) return;
+    if (id === "json") {
+      downloadProjectJson(project);
+      setOpen(false);
+    } else if (id === "markdown") {
+      downloadText(
+        `${projectSlug(project)}-bundle.md`,
+        buildMarkdownBundle(project),
+        "text/markdown",
+      );
+      setOpen(false);
+    }
+  }
 
   return (
     <div ref={ref} className={cn("relative", className)}>
@@ -52,14 +101,25 @@ export function ExportButton({ className }: { className?: string }) {
               <button
                 key={opt.id}
                 role="menuitem"
-                disabled
-                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-ink-soft opacity-70"
+                disabled={!opt.enabled}
+                onClick={() => handle(opt.id)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                  opt.enabled
+                    ? "text-ink hover:bg-paper-2/70"
+                    : "text-ink-soft opacity-70",
+                )}
               >
                 <span className="flex items-center gap-2.5">
                   <Icon className="size-4" />
                   {opt.label}
                 </span>
-                <span className="text-[10px] uppercase tracking-wide text-ink-muted">
+                <span
+                  className={cn(
+                    "text-[10px] uppercase tracking-wide",
+                    opt.enabled ? "text-forest" : "text-ink-muted",
+                  )}
+                >
                   {opt.phase}
                 </span>
               </button>
