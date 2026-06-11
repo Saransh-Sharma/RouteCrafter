@@ -32,6 +32,7 @@ export type {
   ProjectStatus,
   Accent,
   BrandVoice,
+  PdfTheme,
 } from "./schemas";
 
 /** A module/section inside the project workspace (UI-only). */

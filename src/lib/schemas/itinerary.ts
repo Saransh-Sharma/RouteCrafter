@@ -3,6 +3,7 @@ import {
   budgetEnum,
   durationEnum,
   paceEnum,
+  pdfThemeEnum,
   travelStyleEnum,
   travelerTypeEnum,
 } from "./enums";
@@ -29,6 +30,8 @@ export const dayPlanSchema = z.object({
   lowEnergyAlternative: z.string().default(""),
   rainyDayAlternative: z.string().default(""),
   whyThisWorks: z.string().default(""),
+  /** Optional illustration for this day (data URL or remote URL). */
+  image: z.string().default(""),
 });
 
 export type DayPlan = z.infer<typeof dayPlanSchema>;
@@ -54,6 +57,9 @@ export const itineraryOutputSchema = z.object({
   bookingChecklist: z.string().default(""),
   personalizationQuestions: z.string().default(""),
   verificationNotes: z.string().default(""),
+  /** PDF presentation config. */
+  pdfTheme: pdfThemeEnum.default("beige"),
+  coverImage: z.string().default(""),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -145,6 +145,14 @@ export const brandVoiceEnum = z.enum([
   "adventurous",
 ]);
 
+export const pdfThemeEnum = z.enum([
+  "beige",
+  "sage",
+  "terracotta",
+  "teal",
+  "noir",
+]);
+
 /** Convenience: array of literal values for building UI option lists. */
 export const enumValues = {
   duration: durationEnum.options,
@@ -161,6 +169,7 @@ export const enumValues = {
   projectStatus: projectStatusEnum.options,
   accent: accentEnum.options,
   brandVoice: brandVoiceEnum.options,
+  pdfTheme: pdfThemeEnum.options,
 } as const;
 
 export type Duration = z.infer<typeof durationEnum>;
@@ -177,3 +186,4 @@ export type Deliverable = z.infer<typeof deliverableEnum>;
 export type ProjectStatus = z.infer<typeof projectStatusEnum>;
 export type Accent = z.infer<typeof accentEnum>;
 export type BrandVoice = z.infer<typeof brandVoiceEnum>;
+export type PdfTheme = z.infer<typeof pdfThemeEnum>;
