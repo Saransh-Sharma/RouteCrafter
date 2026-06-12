@@ -27,8 +27,16 @@ export function ImportProjectButton() {
       return;
     }
 
-    const created = importProject(result.project);
-    router.push(`/projects/${created.id}`);
+    try {
+      const created = importProject(result.project);
+      router.push(`/projects/${created.id}`);
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Could not save this project.",
+      );
+    }
   }
 
   return (
