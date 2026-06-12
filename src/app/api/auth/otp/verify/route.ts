@@ -12,6 +12,7 @@ import {
   rateLimitHeaders,
 } from "@/lib/auth/rate-limit";
 import { verifyOtpChallenge } from "@/lib/auth/otp";
+import { isAuthConfigurationError } from "@/lib/auth/config";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,17 @@ export async function POST(request: Request) {
     response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions);
     return response;
   } catch (error) {
+    if (isAuthConfigurationError(error)) {
+      console.error("OTP verification configuration error:", error.message);
+      return NextResponse.json(
+        {
+          error:
+            "Email sign-in is not configured correctly. Please contact the administrator.",
+        },
+        { status: 500 },
+      );
+    }
+
     console.error("OTP verification error:", error);
     return NextResponse.json(
       { error: "Internal server error" },

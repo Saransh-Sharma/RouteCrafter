@@ -12,6 +12,7 @@ import {
   storeOtpChallenge,
 } from "@/lib/auth/otp";
 import { sendOtpEmail } from "@/lib/auth/email";
+import { isAuthConfigurationError } from "@/lib/auth/config";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (isAuthConfigurationError(error)) {
+      console.error("OTP send configuration error:", error.message);
+      return NextResponse.json(
+        {
+          error:
+            "Email sign-in is not configured correctly. Please contact the administrator.",
+        },
+        { status: 500 },
+      );
+    }
+
     console.error("OTP send error:", error);
     return NextResponse.json(
       { error: "Failed to send OTP" },

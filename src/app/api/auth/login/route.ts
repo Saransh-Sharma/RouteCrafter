@@ -11,6 +11,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
 } from "@/lib/auth/rate-limit";
+import { isAuthConfigurationError } from "@/lib/auth/config";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,17 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (isAuthConfigurationError(error)) {
+      console.error("Password login configuration error:", error.message);
+      return NextResponse.json(
+        {
+          error:
+            "Authentication is not configured correctly. Please contact the administrator.",
+        },
+        { status: 500 },
+      );
+    }
+
     console.error("Password login error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
