@@ -1,4 +1,5 @@
-import { projectSchema, type Project } from "../schemas";
+import type { Project } from "../schemas";
+import { normalizeProject } from "../project-normalization";
 
 export interface ImportResult {
   ok: boolean;
@@ -45,15 +46,25 @@ export function importProjectJson(text: string): ImportResult {
     return { ok: false, error: "File is not valid JSON." };
   }
 
-  const result = projectSchema.safeParse(data);
-  if (!result.success) {
-    const first = result.error.issues[0];
+  try {
+    return { ok: true, project: normalizeProject(data) };
+  } catch (error) {
+    if (!(error instanceof Error) || !("issues" in error)) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Invalid project file.",
+      };
+    }
+    const issues = (
+      error as Error & {
+        issues: Array<{ path: PropertyKey[]; message: string }>;
+      }
+    ).issues;
+    const first = issues[0];
     const path = first?.path.join(".") || "root";
     return {
       ok: false,
       error: `Invalid project file (${path}: ${first?.message ?? "unknown error"}).`,
     };
   }
-
-  return { ok: true, project: result.data };
 }

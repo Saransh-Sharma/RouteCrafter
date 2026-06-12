@@ -18,6 +18,7 @@ export type {
   MarketplaceListing,
   ListingPackage,
   FaqItem,
+  AiAcceptedRun,
   Duration,
   TravelerType,
   TravelStyle,
