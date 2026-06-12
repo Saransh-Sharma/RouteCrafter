@@ -3,7 +3,8 @@ import type { User } from "../schemas/auth";
 
 interface AuthState {
   user: User | null;
-  isLoading: boolean;
+  isHydrating: boolean;
+  isSubmitting: boolean;
   error: string | null;
 
   /** Hydrate session from cookie via /api/auth/me */
@@ -12,11 +13,11 @@ interface AuthState {
   /** Login with username + password */
   login: (username: string, password: string) => Promise<void>;
 
-  /** Request OTP for email */
-  sendOtp: (email: string) => Promise<void>;
+  /** Request OTP for a username */
+  sendOtp: (username: string) => Promise<void>;
 
   /** Verify OTP code */
-  verifyOtp: (email: string, code: string) => Promise<void>;
+  verifyOtp: (username: string, code: string) => Promise<void>;
 
   /** Logout and clear session */
   logout: () => Promise<void>;
@@ -27,26 +28,27 @@ interface AuthState {
 
 export const useAuthStore = createZustand<AuthState>()((set) => ({
   user: null,
-  isLoading: true,
+  isHydrating: false,
+  isSubmitting: false,
   error: null,
 
   refresh: async () => {
     try {
-      set({ isLoading: true, error: null });
+      set({ isHydrating: true, error: null });
       const res = await fetch("/api/auth/me", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        set({ user: data.user, isLoading: false });
+        set({ user: data.user, isHydrating: false });
       } else {
-        set({ user: null, isLoading: false });
+        set({ user: null, isHydrating: false });
       }
     } catch {
-      set({ user: null, isLoading: false });
+      set({ user: null, isHydrating: false });
     }
   },
 
   login: async (username, password) => {
-    set({ isLoading: true, error: null });
+    set({ isSubmitting: true, error: null });
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -54,63 +56,72 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
         body: JSON.stringify({ username, password }),
         credentials: "include",
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) {
-        set({ isLoading: false, error: data.error || "Login failed" });
-        throw new Error(data.error);
+        const message = data.error || "Login failed";
+        set({ isSubmitting: false, error: message });
+        throw new AuthRequestError(message);
       }
-      set({ user: data.user, isLoading: false, error: null });
+      set({ user: data.user, isSubmitting: false, error: null });
     } catch (e) {
-      if (e instanceof Error && !e.message.includes("Login failed")) {
-        set({ isLoading: false, error: "Network error. Please try again." });
-      } else {
-        set((s) => ({ ...s, isLoading: false }));
+      if (!(e instanceof AuthRequestError)) {
+        set({
+          isSubmitting: false,
+          error: "Network error. Please try again.",
+        });
       }
       throw e;
     }
   },
 
-  sendOtp: async (email) => {
-    set({ error: null });
+  sendOtp: async (username) => {
+    set({ isSubmitting: true, error: null });
     try {
       const res = await fetch("/api/auth/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ username }),
       });
+      const data = await readJson(res);
       if (!res.ok) {
-        const data = await res.json();
-        set({ error: data.error || "Failed to send OTP" });
-        throw new Error(data.error);
+        const message = data.error || "Failed to send OTP";
+        set({ isSubmitting: false, error: message });
+        throw new AuthRequestError(message);
       }
+      set({ isSubmitting: false });
     } catch (e) {
-      if (e instanceof Error && !e.message.includes("Failed")) {
-        set({ error: "Network error. Please try again." });
+      if (!(e instanceof AuthRequestError)) {
+        set({
+          isSubmitting: false,
+          error: "Network error. Please try again.",
+        });
       }
       throw e;
     }
   },
 
-  verifyOtp: async (email, code) => {
-    set({ isLoading: true, error: null });
+  verifyOtp: async (username, code) => {
+    set({ isSubmitting: true, error: null });
     try {
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ username, code }),
         credentials: "include",
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) {
-        set({ isLoading: false, error: data.error || "Verification failed" });
-        throw new Error(data.error);
+        const message = data.error || "Verification failed";
+        set({ isSubmitting: false, error: message });
+        throw new AuthRequestError(message);
       }
-      set({ user: data.user, isLoading: false, error: null });
+      set({ user: data.user, isSubmitting: false, error: null });
     } catch (e) {
-      if (e instanceof Error && !e.message.includes("failed")) {
-        set({ isLoading: false, error: "Network error. Please try again." });
-      } else {
-        set((s) => ({ ...s, isLoading: false }));
+      if (!(e instanceof AuthRequestError)) {
+        set({
+          isSubmitting: false,
+          error: "Network error. Please try again.",
+        });
       }
       throw e;
     }
@@ -123,9 +134,29 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
         credentials: "include",
       });
     } finally {
-      set({ user: null, isLoading: false, error: null });
+      set({
+        user: null,
+        isHydrating: false,
+        isSubmitting: false,
+        error: null,
+      });
     }
   },
 
   clearError: () => set({ error: null }),
 }));
+
+class AuthRequestError extends Error {}
+
+interface AuthResponseBody {
+  error?: string;
+  user?: User;
+}
+
+async function readJson(response: Response): Promise<AuthResponseBody> {
+  try {
+    return (await response.json()) as AuthResponseBody;
+  } catch {
+    return {};
+  }
+}
