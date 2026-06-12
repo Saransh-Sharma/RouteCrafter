@@ -6,15 +6,24 @@ itinerary products and marketplace (Fiverr / Etsy / Gumroad) listing assets.
 RouteCrafter is a **travel itinerary product factory** for creators who sell
 custom travel-planning services. It helps you repeatedly produce premium,
 editorial, configurable itinerary products for any country, traveler type, trip
-length, budget, and deliverable format.
+length, budget, and deliverable format — without hardcoding any single country.
+
+It runs **fully offline-capable in the browser**: every artifact can be produced
+through copy-paste prompts (no API key required). Optional, opt-in AI assist lets
+you bring your own provider key (OpenAI, Anthropic, or Gemini) to draft content
+directly inside the app.
 
 ## Tech stack
 
 - [Next.js 16](https://nextjs.org) (App Router) + React 19
 - TypeScript
 - Tailwind CSS v4
+- [Zod](https://zod.dev) schemas as the single source of truth for the data model
+- [Zustand](https://zustand.docs.pmnd.rs) + `localStorage` for persistence
 - Hand-built UI component system (`src/components/ui`)
 - `lucide-react` icons, `clsx` + `tailwind-merge` for class composition
+- `html2pdf.js` for client-side PDF export
+- `vitest` + Testing Library for unit tests
 
 ## Getting started
 
@@ -23,12 +32,19 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Demo projects are seeded on
+first run.
 
 ```bash
 npm run lint     # ESLint
+npm run test     # Vitest (unit tests)
 npm run build    # Production build
 ```
+
+> **Note for contributors and agents:** this repo pins Next.js 16, which has
+> breaking changes from earlier versions. Read the bundled guides in
+> `node_modules/next/dist/docs/` before changing routing, layouts, or APIs (see
+> [`AGENTS.md`](AGENTS.md)).
 
 ## Project structure
 
@@ -39,20 +55,46 @@ src/
     projects/page.tsx        # All projects
     projects/new/page.tsx    # Create project
     projects/[id]/page.tsx   # Project workspace shell
-    templates/page.tsx       # Template library (roadmap)
-    settings/page.tsx        # Settings (roadmap)
+    templates/page.tsx       # Template library (roadmap placeholder)
+    settings/page.tsx        # AI provider keys + defaults
+    api/ai/text/route.ts     # Server-side AI text proxy
+    api/ai/image/route.ts    # Server-side AI image proxy
     layout.tsx, globals.css  # Shell + design system
   components/
     layout/                  # AppShell, Sidebar, MobileNav, nav
-    ui/                       # Button, Card, Badge, fields, etc.
-    workspace/               # Workspace tabs + panels
+    ui/                       # Button, Card, Badge, fields, OutputBlock, etc.
+    workspace/               # Workspace tabs + panels (9 modules)
+    ai/                       # AiRunSheet, AiCostButton
     dashboard/               # Dashboard-specific widgets
   lib/
-    types.ts                 # Lightweight types (full models in Phase 2)
-    mock-data.ts             # Sample projects for the shell
-    generation/              # Prompt-template engine (Phase 4+)
-    schemas/                 # Zod schemas + data model (Phase 2)
+    schemas/                 # Zod schemas + data model (source of truth)
+    generation/              # Pure prompt-template + scaffold engine
+    ai/                       # BYOK AI provider layer (client + server)
+    store/                   # Zustand stores (projects, ai-settings)
+    io/                       # Project JSON import/export
+    project-normalization.ts # Schema migration/normalization
+    seed-projects.ts         # First-run demo data
 ```
+
+## Documentation
+
+Full documentation lives in [`docs/`](docs/README.md):
+
+- **Product**
+  - [Product overview](docs/product/overview.md) — what it is, who it's for, features, principles
+- **Guides**
+  - [Getting started](docs/guides/getting-started.md) — install, scripts, where data lives
+  - [User guide](docs/guides/user-guide.md) — end-to-end workspace walkthrough
+  - [AI setup (BYOK)](docs/guides/ai-setup.md) — provider keys, models, safety
+- **Architecture**
+  - [Architecture overview](docs/architecture/overview.md) — system map and principles
+  - [Data model](docs/architecture/data-model.md) — entities, enums, normalization, import/export
+  - [Generation engine](docs/architecture/generation-engine.md) — templates, scaffolds, realism rules
+  - [AI integration](docs/architecture/ai-integration.md) — providers, tasks, API routes, security
+  - [State & persistence](docs/architecture/state-and-persistence.md) — Zustand stores, hydration
+  - [UI & design system](docs/architecture/ui-and-design-system.md) — components, tokens, PDF builder
+- **Development**
+  - [Contributing](docs/development/contributing.md) — conventions, testing, CI, extension guides
 
 ## Design direction
 
@@ -60,23 +102,6 @@ Warm ivory paper, sage + forest green, terracotta, warm brown, dusty teal, and
 muted gold accents. Editorial serif headings (Fraunces) with a clean sans body
 (Inter). Rounded cards, soft shadows, calm whitespace — a boutique itinerary
 studio, not a generic SaaS dashboard.
-
-## Build phases
-
-This app is built iteratively. **Phase 0 (scaffold)** and **Phase 1 (app shell
-+ design system)** are complete. Upcoming phases:
-
-- Phase 2 — Data models, Zod schemas, localStorage persistence, JSON import/export, seeds
-- Phase 3 — Full trip configuration form
-- Phase 4 — Prompt template engine (copy-paste, no API key required)
-- Phase 5 — Five portfolio image prompts
-- Phase 6 — Itinerary matrix
-- Phase 7 — Expanded itinerary builder
-- Phase 8 — Marketplace listing generator
-- Phase 9 — PDF preview & export
-- Phase 10 — CSV / spreadsheet export
-- Phase 11 — Template library & presets
-- Phase 12 — Optional AI integration (prompt-output mode remains the fallback)
 
 ## Principles
 
@@ -86,4 +111,3 @@ This app is built iteratively. **Phase 0 (scaffold)** and **Phase 1 (app shell
 - Never fabricate real-time prices, hours, or hotel availability — always remind
   the user to verify before delivery.
 - The app is fully usable without an AI API key.
-```
