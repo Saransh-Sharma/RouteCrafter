@@ -36,6 +36,8 @@ export function MobileNav() {
             <button
               type="button"
               id="mobile-user-menu-btn"
+              aria-label="Open user menu"
+              aria-expanded={menuOpen}
               onClick={() => setMenuOpen(!menuOpen)}
               className={cn(
                 "flex size-8 items-center justify-center rounded-full text-xs font-semibold transition-shadow",

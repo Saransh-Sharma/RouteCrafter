@@ -81,7 +81,18 @@ function formatRelativeTime(isoString: string): string {
 
 export function ActivityLog({ projectId }: { projectId: string }) {
   const mounted = useMounted();
-  const entries = useActivityStore((s) => s.getByProject(projectId));
+  const allEntries = useActivityStore((s) => s.entries);
+  const entries = React.useMemo(
+    () =>
+      allEntries
+        .filter((entry) => entry.projectId === projectId)
+        .sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() -
+            new Date(a.timestamp).getTime(),
+        ),
+    [allEntries, projectId],
+  );
   const [expanded, setExpanded] = React.useState(false);
 
   // Hydration guard — render nothing on the server / first client render

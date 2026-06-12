@@ -15,6 +15,7 @@ import { ExpandedItineraryPanel } from "./itinerary/ExpandedItineraryPanel";
 import { ListingPanel } from "./listing/ListingPanel";
 import { PdfBuilderPanel } from "./pdf/PdfBuilderPanel";
 import { ExportPanel } from "./export/ExportPanel";
+import type { ExpandHint } from "@/lib/store/projects-store";
 
 /** Module ids that have a real, implemented panel (no "locked" badge). */
 const IMPLEMENTED = new Set([
@@ -37,7 +38,16 @@ export function WorkspaceTabs({
   modules: WorkspaceModule[];
 }) {
   const [active, setActive] = React.useState(modules[0]?.id ?? "overview");
+  const [expandHint, setExpandHint] = React.useState<ExpandHint | null>(null);
   const current = modules.find((m) => m.id === active) ?? modules[0];
+
+  const navigate = React.useCallback(
+    (moduleId: string, hint?: ExpandHint) => {
+      setExpandHint(hint ?? null);
+      setActive(moduleId);
+    },
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -48,7 +58,7 @@ export function WorkspaceTabs({
             <button
               key={m.id}
               type="button"
-              onClick={() => setActive(m.id)}
+              onClick={() => navigate(m.id)}
               className={cn(
                 "flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
                 isActive
@@ -70,7 +80,12 @@ export function WorkspaceTabs({
         })}
       </div>
 
-      {renderPanel(current, project, setActive)}
+      {renderPanel(
+        current,
+        project,
+        navigate,
+        expandHint,
+      )}
     </div>
   );
 }
@@ -78,7 +93,8 @@ export function WorkspaceTabs({
 function renderPanel(
   current: WorkspaceModule | undefined,
   project: Project,
-  onNavigate: (moduleId: string) => void,
+  onNavigate: (moduleId: string, hint?: ExpandHint) => void,
+  expandHint: ExpandHint | null,
 ) {
   if (!current) return null;
   switch (current.id) {
@@ -93,7 +109,12 @@ function renderPanel(
     case "matrix":
       return <MatrixPanel project={project} onNavigate={onNavigate} />;
     case "expanded":
-      return <ExpandedItineraryPanel project={project} />;
+      return (
+        <ExpandedItineraryPanel
+          project={project}
+          expandHint={expandHint}
+        />
+      );
     case "listing":
       return <ListingPanel project={project} />;
     case "pdf":

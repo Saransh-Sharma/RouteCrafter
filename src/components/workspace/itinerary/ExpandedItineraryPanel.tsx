@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
 import { downloadItineraryMarkdown } from "./export-itinerary";
+import type { ExpandHint } from "@/lib/store/projects-store";
 
 const TOP_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -52,10 +53,14 @@ type ItineraryAiTarget =
   | { kind: "itinerary"; title: string; focus: string }
   | { kind: "day"; title: string; index: number; focus: string };
 
-export function ExpandedItineraryPanel({ project }: { project: Project }) {
+export function ExpandedItineraryPanel({
+  project,
+  expandHint = null,
+}: {
+  project: Project;
+  expandHint?: ExpandHint | null;
+}) {
   const update = useProjectsStore((s) => s.update);
-  const expandHint = useProjectsStore((s) => s.expandHint);
-  const setExpandHint = useProjectsStore((s) => s.setExpandHint);
 
   const itineraries = project.itineraries;
 
@@ -77,11 +82,6 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
     itineraries[0]?.id ?? null,
   );
   const [aiTarget, setAiTarget] = React.useState<ItineraryAiTarget | null>(null);
-
-  // Consume the cross-tab expand hint once.
-  React.useEffect(() => {
-    if (expandHint) setExpandHint(null);
-  }, [expandHint, setExpandHint]);
 
   const selected =
     itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;

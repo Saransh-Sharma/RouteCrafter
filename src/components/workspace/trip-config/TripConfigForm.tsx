@@ -82,7 +82,13 @@ export function TripConfigForm({ project }: { project: Project }) {
       }
 
       const snapshot = serializeConfig(result.data);
-      if (snapshot === lastSavedRef.current) return;
+      if (snapshot === lastSavedRef.current) {
+        if (reportStatus) {
+          setStatus("saved");
+          setSaveError(null);
+        }
+        return;
+      }
 
       const mutation = update(project.id, { tripConfigs: [result.data] });
       if (!mutation.ok) {

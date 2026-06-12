@@ -20,16 +20,16 @@ import {
   downloadMatrixCsv,
   downloadMatrixMarkdown,
 } from "./export-matrix";
+import type { ExpandHint } from "@/lib/store/projects-store";
 
 export function MatrixPanel({
   project,
   onNavigate,
 }: {
   project: Project;
-  onNavigate: (moduleId: string) => void;
+  onNavigate: (moduleId: string, hint?: ExpandHint) => void;
 }) {
   const update = useProjectsStore((s) => s.update);
-  const setExpandHint = useProjectsStore((s) => s.setExpandHint);
   const matrix = project.matrix;
   const [aiOpen, setAiOpen] = React.useState(false);
   const [aiFocus, setAiFocus] = React.useState<string | null>(null);
@@ -58,8 +58,10 @@ export function MatrixPanel({
   function expand(cellIndex: number) {
     const cell = matrix?.cells[cellIndex];
     if (!cell) return;
-    setExpandHint({ duration: cell.duration, travelerType: cell.travelerType });
-    onNavigate("expanded");
+    onNavigate("expanded", {
+      duration: cell.duration,
+      travelerType: cell.travelerType,
+    });
   }
 
   function normalizeMatrix(raw: unknown): ItineraryMatrix {
@@ -268,6 +270,7 @@ export function MatrixPanel({
                         <button
                           type="button"
                           onClick={() => expand(ci)}
+                          aria-label={`Expand ${cell.duration} ${cell.travelerType}`}
                           className="inline-flex items-center gap-1 text-xs font-medium text-forest hover:text-forest-deep"
                         >
                           Expand
