@@ -1,4 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { requireAuthSecret } from "./config";
 import { getRedis } from "./redis";
 
 const OTP_TTL_SECONDS = 5 * 60;
@@ -34,9 +35,7 @@ function cooldownKey(username: string): string {
 }
 
 function getOtpSecret(): string {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) throw new Error("NEXTAUTH_SECRET environment variable is not set");
-  return secret;
+  return requireAuthSecret();
 }
 
 export function generateOtp(): string {

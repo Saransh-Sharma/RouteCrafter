@@ -1,5 +1,6 @@
 import type { User } from "../schemas/auth";
 import { timingSafeEqual } from "node:crypto";
+import { readUserPassword } from "./config";
 
 /**
  * Hardcoded user registry for the 3 known users.
@@ -29,13 +30,6 @@ export const USERS: User[] = [
   },
 ];
 
-/** Map username → env-var key for passwords. */
-const PASSWORD_ENV_MAP: Record<string, string> = {
-  admin: "USER_ADMIN_PASSWORD",
-  saransh: "USER_SARANSH_PASSWORD",
-  saumya: "USER_SAUMYA_PASSWORD",
-};
-
 export function findUserByUsername(username: string): User | undefined {
   return USERS.find(
     (u) => u.username.toLowerCase() === username.toLowerCase(),
@@ -47,9 +41,7 @@ export function findUserById(id: string): User | undefined {
 }
 
 export function verifyPassword(username: string, password: string): boolean {
-  const envKey = PASSWORD_ENV_MAP[username.toLowerCase()];
-  if (!envKey) return false;
-  const expected = process.env[envKey];
+  const expected = readUserPassword(username);
   if (!expected) return false;
 
   const actualBuffer = Buffer.from(password);

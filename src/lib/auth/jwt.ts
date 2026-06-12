@@ -3,6 +3,7 @@ import {
   sessionPayloadSchema,
   type SessionPayload,
 } from "../schemas/auth";
+import { requireAuthSecret } from "./config";
 
 const ALGORITHM = "HS256";
 const SESSION_DURATION = "7d";
@@ -10,11 +11,7 @@ const ISSUER = "routecrafter";
 const AUDIENCE = "routecrafter-web";
 
 function getSecret(): Uint8Array {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) {
-    throw new Error("NEXTAUTH_SECRET environment variable is not set");
-  }
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(requireAuthSecret());
 }
 
 type SessionClaims = Omit<SessionPayload, "iat" | "exp">;

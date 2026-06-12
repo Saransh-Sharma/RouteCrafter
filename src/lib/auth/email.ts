@@ -1,21 +1,17 @@
 import { Resend } from "resend";
 import type { User } from "../schemas/auth";
+import { readOtpEmailConfig } from "./config";
 
 export async function sendOtpEmail(user: User, code: string): Promise<void> {
-  const resendKey = process.env.RESEND_API_KEY;
-  const from = process.env.AUTH_EMAIL_FROM;
-
-  if (!resendKey || !from) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("RESEND_API_KEY and AUTH_EMAIL_FROM are required");
-    }
+  const config = readOtpEmailConfig();
+  if (!config) {
     console.info(`RouteCrafter OTP for ${user.username}: ${code}`);
     return;
   }
 
-  const resend = new Resend(resendKey);
+  const resend = new Resend(config.apiKey);
   const result = await resend.emails.send({
-    from,
+    from: config.from,
     to: user.email,
     subject: "Your RouteCrafter login code",
     html: `
