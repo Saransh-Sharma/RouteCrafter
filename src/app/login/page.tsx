@@ -1,9 +1,27 @@
 "use client";
 
-import { useState, useCallback, useRef, Suspense } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  Suspense,
+  type KeyboardEvent,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Compass, Eye, EyeOff, AlertCircle, Loader2, Mail, Lock, User, ArrowRight, KeyRound } from "lucide-react";
+import {
+  Compass,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Loader2,
+  Mail,
+  Lock,
+  User,
+  ArrowRight,
+  KeyRound,
+} from "lucide-react";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { sanitizeRedirectPath } from "@/lib/auth/redirect";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -24,9 +42,9 @@ const TAB_ITEMS: { id: Tab; label: string; icon: typeof Lock }[] = [
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/";
+  const redirectTo = sanitizeRedirectPath(searchParams.get("redirect"));
 
-  const { login, sendOtp, verifyOtp, error, isLoading, clearError } =
+  const { login, sendOtp, verifyOtp, error, isSubmitting, clearError } =
     useAuthStore();
 
   const [activeTab, setActiveTab] = useState<Tab>("password");
@@ -37,11 +55,11 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
 
   /* ---- OTP state ---- */
-  const [email, setEmail] = useState("");
+  const [otpUsername, setOtpUsername] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   /* Clear errors on tab switch */
   const switchTab = useCallback(
@@ -51,6 +69,30 @@ function LoginContent() {
     },
     [clearError],
   );
+
+  const handleTabKeyDown = (
+    index: number,
+    event: KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    let nextIndex = index;
+    if (event.key === "ArrowLeft") {
+      nextIndex = (index - 1 + TAB_ITEMS.length) % TAB_ITEMS.length;
+    } else if (event.key === "ArrowRight") {
+      nextIndex = (index + 1) % TAB_ITEMS.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = TAB_ITEMS.length - 1;
+    }
+
+    switchTab(TAB_ITEMS[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   /* ---- Password submit ---- */
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -67,17 +109,13 @@ function LoginContent() {
   /* ---- OTP send ---- */
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
-    setIsSendingOtp(true);
+    if (!otpUsername.trim()) return;
     try {
-      await sendOtp(email.trim());
+      await sendOtp(otpUsername.trim());
       setOtpSent(true);
-      /* Focus first OTP input */
       setTimeout(() => otpInputRefs.current[0]?.focus(), 120);
     } catch {
       /* error handled by store */
-    } finally {
-      setIsSendingOtp(false);
     }
   };
 
@@ -87,7 +125,7 @@ function LoginContent() {
     const code = otpCode.join("");
     if (code.length < 6) return;
     try {
-      await verifyOtp(email.trim(), code);
+      await verifyOtp(otpUsername.trim(), code);
       router.push(redirectTo);
     } catch {
       /* error handled by store */
@@ -161,14 +199,20 @@ function LoginContent() {
           role="tablist"
           className="flex border-b border-border-soft"
         >
-          {TAB_ITEMS.map(({ id, label, icon: Icon }) => (
+          {TAB_ITEMS.map(({ id, label, icon: Icon }, index) => (
             <button
               key={id}
               id={`login-tab-${id}`}
+              ref={(element) => {
+                tabRefs.current[index] = element;
+              }}
               role="tab"
               type="button"
               aria-selected={activeTab === id}
+              aria-controls={`login-panel-${id}`}
+              tabIndex={activeTab === id ? 0 : -1}
               onClick={() => switchTab(id)}
+              onKeyDown={(event) => handleTabKeyDown(index, event)}
               className={cn(
                 "relative flex flex-1 items-center justify-center gap-2 px-4 py-3.5 text-sm font-medium transition-colors",
                 activeTab === id
@@ -203,7 +247,9 @@ function LoginContent() {
           {/* === Password tab === */}
           {activeTab === "password" && (
             <form
-              id="login-form-password"
+              id="login-panel-password"
+              role="tabpanel"
+              aria-labelledby="login-tab-password"
               onSubmit={handlePasswordLogin}
               className="space-y-4 animate-[fadeSlideUp_0.3s_ease-out]"
             >
@@ -256,7 +302,7 @@ function LoginContent() {
                     type="button"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted transition hover:text-ink-soft"
+                    className="absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center text-ink-muted transition hover:text-ink-soft"
                   >
                     {showPassword ? (
                       <EyeOff className="size-4" />
@@ -271,14 +317,14 @@ function LoginContent() {
               <button
                 id="login-submit-password"
                 type="submit"
-                disabled={!passwordValid || isLoading}
+                disabled={!passwordValid || isSubmitting}
                 className={cn(
                   "mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all",
                   "bg-forest text-paper shadow-[var(--shadow-soft)] hover:bg-forest-deep active:scale-[0.98]",
                   "disabled:pointer-events-none disabled:opacity-50",
                 )}
               >
-                {isLoading ? (
+                {isSubmitting ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <>
@@ -292,32 +338,36 @@ function LoginContent() {
 
           {/* === OTP tab === */}
           {activeTab === "otp" && (
-            <div className="animate-[fadeSlideUp_0.3s_ease-out]">
+            <div
+              id="login-panel-otp"
+              role="tabpanel"
+              aria-labelledby="login-tab-otp"
+              className="animate-[fadeSlideUp_0.3s_ease-out]"
+            >
               {!otpSent ? (
-                /* Email entry */
                 <form
-                  id="login-form-otp-email"
+                  id="login-form-otp-username"
                   onSubmit={handleSendOtp}
                   className="space-y-4"
                 >
                   <div className="space-y-1.5">
                     <label
-                      htmlFor="login-email"
+                      htmlFor="login-otp-username"
                       className="block text-xs font-semibold uppercase tracking-wider text-ink-muted"
                     >
-                      Email address
+                      Username
                     </label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+                      <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
                       <input
-                        id="login-email"
-                        type="email"
-                        autoComplete="email"
+                        id="login-otp-username"
+                        type="text"
+                        autoComplete="username"
                         autoFocus
                         required
-                        placeholder="you@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="your-username"
+                        value={otpUsername}
+                        onChange={(e) => setOtpUsername(e.target.value)}
                         className="h-11 w-full rounded-xl border border-border-soft bg-paper-2/50 pl-10 pr-4 text-sm text-ink placeholder:text-ink-muted/60 transition focus:border-forest/40 focus:outline-none focus:ring-2 focus:ring-sage/30"
                       />
                     </div>
@@ -326,14 +376,14 @@ function LoginContent() {
                   <button
                     id="login-send-otp"
                     type="submit"
-                    disabled={!email.trim() || isSendingOtp}
+                    disabled={!otpUsername.trim() || isSubmitting}
                     className={cn(
                       "mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all",
                       "bg-forest text-paper shadow-[var(--shadow-soft)] hover:bg-forest-deep active:scale-[0.98]",
                       "disabled:pointer-events-none disabled:opacity-50",
                     )}
                   >
-                    {isSendingOtp ? (
+                    {isSubmitting ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
                       <>
@@ -354,8 +404,8 @@ function LoginContent() {
                   <div className="rounded-xl bg-sage-soft/60 px-4 py-3 text-center">
                     <p className="text-sm text-forest">
                       <KeyRound className="mr-1.5 inline-block size-4 -translate-y-px" />
-                      Code sent to{" "}
-                      <span className="font-semibold">{email}</span>
+                      Code sent to the registered email for{" "}
+                      <span className="font-semibold">{otpUsername}</span>
                     </p>
                   </div>
 
@@ -372,7 +422,9 @@ function LoginContent() {
                         <input
                           key={i}
                           id={`login-otp-${i}`}
-                          ref={(el) => { otpInputRefs.current[i] = el; }}
+                          ref={(element) => {
+                            otpInputRefs.current[i] = element;
+                          }}
                           type="text"
                           inputMode="numeric"
                           maxLength={1}
@@ -395,14 +447,14 @@ function LoginContent() {
                   <button
                     id="login-verify-otp"
                     type="submit"
-                    disabled={!otpCodeComplete || isLoading}
+                    disabled={!otpCodeComplete || isSubmitting}
                     className={cn(
                       "flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all",
                       "bg-forest text-paper shadow-[var(--shadow-soft)] hover:bg-forest-deep active:scale-[0.98]",
                       "disabled:pointer-events-none disabled:opacity-50",
                     )}
                   >
-                    {isLoading ? (
+                    {isSubmitting ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
                       <>
@@ -412,10 +464,9 @@ function LoginContent() {
                     )}
                   </button>
 
-                  {/* Change email / resend */}
                   <div className="flex items-center justify-center gap-3 text-xs text-ink-muted">
                     <button
-                      id="login-change-email"
+                      id="login-change-username"
                       type="button"
                       onClick={() => {
                         setOtpSent(false);
@@ -424,19 +475,19 @@ function LoginContent() {
                       }}
                       className="font-medium text-forest hover:text-forest-deep transition"
                     >
-                      Change email
+                      Change username
                     </button>
                     <span className="text-border-strong">·</span>
                     <button
                       id="login-resend-otp"
                       type="button"
-                      disabled={isSendingOtp}
+                      disabled={isSubmitting}
                       onClick={async () => {
-                        setIsSendingOtp(true);
                         try {
-                          await sendOtp(email.trim());
-                        } catch { /* handled by store */ }
-                        finally { setIsSendingOtp(false); }
+                          await sendOtp(otpUsername.trim());
+                        } catch {
+                          /* error handled by store */
+                        }
                       }}
                       className="font-medium text-forest hover:text-forest-deep transition disabled:opacity-50"
                     >
@@ -466,7 +517,7 @@ export default function LoginPage() {
       </p>
 
       {/* Keyframes for animations */}
-      <style jsx global>{`
+      <style>{`
         @keyframes fadeSlideUp {
           from {
             opacity: 0;
