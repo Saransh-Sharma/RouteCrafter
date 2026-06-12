@@ -2,13 +2,18 @@
 
 import * as React from "react";
 
+const emptySubscribe = () => () => {};
+
 /**
- * Returns false during SSR and the first client paint, then true after mount.
- * Use to gate localStorage-backed UI so server and client first render match
- * (avoids hydration mismatches with the persisted projects store).
+ * Returns false during SSR and the first hydration render, then true on the
+ * client. Uses `useSyncExternalStore` so server and client first render agree
+ * (no hydration mismatch) without calling setState in an effect. Gate
+ * localStorage-backed UI on this.
  */
 export function useMounted(): boolean {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-  return mounted;
+  return React.useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 }

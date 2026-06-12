@@ -24,7 +24,15 @@ export const tripConfigurationSchema = z.object({
   // Basics
   cities: z.array(z.string()).default([]),
   duration: durationEnum.default("7 days"),
-  customDays: z.number().int().positive().optional(),
+  customDays: z.preprocess(
+    (value) => (value === "" || Number.isNaN(value) ? undefined : value),
+    z
+      .number()
+      .int("Custom days must be a whole number.")
+      .positive("Custom days must be at least 1.")
+      .max(60, "Custom days must be 60 or fewer.")
+      .optional(),
+  ),
 
   // Travelers & style
   travelerType: travelerTypeEnum.default("Couple"),

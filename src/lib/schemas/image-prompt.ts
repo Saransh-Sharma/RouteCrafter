@@ -24,6 +24,8 @@ export const portfolioImagePromptSchema = z.object({
   negativePrompt: z.string(),
   countryAccuracyNotes: z.string(),
   readabilityNotes: z.string(),
+  /** Accepted generated image for this prompt (data URL or remote URL). */
+  image: z.string().default(""),
   isFinal: z.boolean().default(false),
 });
 

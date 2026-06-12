@@ -32,6 +32,13 @@
   --rc-teal-soft: #dbe8e6;
   --rc-gold: #c19a4b;
   --rc-gold-soft: #f0e6cd;
+
+  /* Billable AI surfaces: warm, explicit, no generic purple/blue AI styling. */
+  --rc-ai-gold: #b88932;
+  --rc-ai-gold-soft: #f3e3bd;
+  --rc-ai-brown: #6b4d2e;
+  --rc-ai-border: #d6b66c;
+  --rc-ai-surface: #fff8e8;
 }
 
 @theme inline {
@@ -140,9 +147,232 @@
       transparent
     );
   }
+
+  /* Animation utilities */
+  .animate-in {
+    animation-duration: 150ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: rc-fade-in;
+  }
+
+  .slide-in-from-bottom-4 {
+    animation-name: rc-slide-in-from-bottom-4;
+  }
+
+  .slide-in-from-bottom-2 {
+    animation-name: rc-slide-in-from-bottom-2;
+  }
+
+  .duration-500 {
+    animation-duration: 500ms;
+  }
+
+  .duration-700 {
+    animation-duration: 700ms;
+  }
 }
 
-/* Print-friendly base (used heavily by the later PDF builder phase) */
+@keyframes rc-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rc-slide-in-from-bottom-4 {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rc-slide-in-from-bottom-2 {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+  The printable itinerary document surface (screen preview + PDF capture).
+  All colors come from --doc-* variables set inline from the selected theme,
+  so the document is themed independently of the app chrome and html2canvas
+  captures concrete colors.
+*/
+.rc-doc {
+  --doc-bg: #efe7d6;
+  --doc-paper: #fbf8f1;
+  --doc-ink: #3a3328;
+  --doc-ink-soft: #6a6051;
+  --doc-ink-muted: #9a8e78;
+  --doc-accent: #b5764f;
+  --doc-accent-soft: #f1ddcc;
+  --doc-border: #e2d6bf;
+  --doc-on-accent: #fbf8f1;
+
+  background: var(--doc-bg);
+  color: var(--doc-ink);
+  font-family: var(--font-sans);
+}
+
+.rc-doc h1,
+.rc-doc h2,
+.rc-doc h3,
+.rc-doc h4 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+  color: var(--doc-ink);
+}
+
+.rc-print-page {
+  position: relative;
+  width: 210mm;
+  min-width: 210mm;
+  min-height: 297mm;
+  margin-inline: auto;
+  background: var(--doc-paper);
+}
+
+/* --- Document building blocks --- */
+.rc-doc-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  color: var(--doc-accent);
+}
+
+.rc-doc-rule {
+  height: 2px;
+  width: 44px;
+  background: var(--doc-accent);
+  border-radius: 2px;
+}
+
+.rc-doc-hairline {
+  height: 1px;
+  width: 100%;
+  background: var(--doc-border);
+}
+
+.rc-doc-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--doc-border);
+  background: var(--doc-accent-soft);
+  color: var(--doc-ink-soft);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rc-doc-img {
+  width: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Cover */
+.rc-doc-cover {
+  position: relative;
+  overflow: hidden;
+  min-height: 297mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: var(--doc-accent-soft);
+}
+
+.rc-doc-cover-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rc-doc-cover-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0.18) 45%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+}
+
+.rc-doc-cover-inner {
+  position: relative;
+  padding: 3.5rem;
+}
+
+.rc-doc-cover.has-photo .rc-doc-cover-inner,
+.rc-doc-cover.has-photo .rc-doc-eyebrow {
+  color: #fff;
+}
+
+.rc-doc-cover.has-photo h1,
+.rc-doc-cover.has-photo .rc-doc-eyebrow {
+  color: #fff;
+}
+
+.rc-doc-cover.has-photo .rc-doc-rule {
+  background: #fff;
+}
+
+/* Day time-block row: label column + content */
+.rc-day-row {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--doc-border);
+}
+
+.rc-day-row-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--doc-accent);
+  padding-top: 0.15rem;
+}
+
+.rc-day-row-body {
+  color: var(--doc-ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.rc-day-num {
+  font-family: var(--font-serif);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--doc-accent);
+}
+
+.rc-doc-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Print-friendly base for the PDF builder */
 @media print {
   body {
     background: #ffffff;
@@ -150,5 +380,58 @@
 
   .rc-no-print {
     display: none !important;
+  }
+
+  /* Isolate the document: hide app chrome, show only the print root */
+  body * {
+    visibility: hidden;
+  }
+
+  .rc-print-root,
+  .rc-print-root * {
+    visibility: visible;
+  }
+
+  .rc-print-root {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  .rc-print-page {
+    width: 210mm;
+    min-width: 210mm;
+    min-height: 297mm;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .rc-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* Ensure themed backgrounds + photos render in print/PDF. */
+  .rc-doc,
+  .rc-print-page,
+  .rc-doc-cover,
+  .rc-doc-chip {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .rc-doc img {
+    max-width: 100%;
+  }
+
+  .rc-day-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

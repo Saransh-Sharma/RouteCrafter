@@ -10,10 +10,11 @@ import {
 } from "./enums";
 import { tripConfigurationSchema } from "./trip-config";
 import { portfolioImagePromptSchema } from "./image-prompt";
-import { itineraryOutputSchema } from "./itinerary";
+import { itineraryOutputSchema, itineraryMatrixSchema } from "./itinerary";
 import { marketplaceListingSchema } from "./listing";
+import { aiAcceptedRunSchema } from "./ai";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export const brandStyleSchema = z.object({
   businessName: z.string().default(""),
@@ -47,10 +48,13 @@ export const projectSchema = z.object({
   // Generated artifacts (filled in by later phases)
   tripConfigs: z.array(tripConfigurationSchema).default([]),
   imagePrompts: z.array(portfolioImagePromptSchema).default([]),
+  matrix: itineraryMatrixSchema.optional(),
   itineraries: z.array(itineraryOutputSchema).default([]),
   listing: marketplaceListingSchema.optional(),
   /** Raw generated prompt text keyed by template id. */
   generated: z.record(z.string(), z.string()).default({}),
+  /** Accepted billable AI outputs, without API keys or prompt payloads. */
+  aiRuns: z.array(aiAcceptedRunSchema).default([]),
 
   status: projectStatusEnum.default("Draft"),
   accent: accentEnum.default("sage"),

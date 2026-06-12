@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   FolderOpen,
   LibraryBig,
+  BookOpen,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -32,6 +33,12 @@ export const navItems: NavItem[] = [
     href: "/templates",
     icon: LibraryBig,
     match: (p) => p.startsWith("/templates"),
+  },
+  {
+    label: "Guide",
+    href: "/guide",
+    icon: BookOpen,
+    match: (p) => p.startsWith("/guide"),
   },
   {
     label: "Settings",

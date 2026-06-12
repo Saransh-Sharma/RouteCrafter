@@ -10,11 +10,15 @@ export type {
   TripConfiguration,
   DayPlan,
   ItineraryOutput,
+  ItineraryMatrix,
+  MatrixCell,
+  MatrixVariation,
   PortfolioImagePrompt,
   ImagePromptKind,
   MarketplaceListing,
   ListingPackage,
   FaqItem,
+  AiAcceptedRun,
   Duration,
   TravelerType,
   TravelStyle,
@@ -29,6 +33,7 @@ export type {
   ProjectStatus,
   Accent,
   BrandVoice,
+  PdfTheme,
 } from "./schemas";
 
 /** A module/section inside the project workspace (UI-only). */

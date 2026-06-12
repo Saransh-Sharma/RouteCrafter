@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
-import { AppShell } from "@/components/layout/AppShell";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -30,10 +29,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${fraunces.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="rc-paper-texture min-h-full text-ink">
-        <AppShell>{children}</AppShell>
+        {children}
       </body>
     </html>
   );

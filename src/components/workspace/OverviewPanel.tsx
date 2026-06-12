@@ -1,7 +1,11 @@
-import { Info } from "lucide-react";
+import Link from "next/link";
+import { Info, Sparkles } from "lucide-react";
 import type { Project } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { AiCostBadge } from "@/components/ai/AiCostButton";
+import { configuredProviders, useAiSettingsStore } from "@/lib/store/ai-settings-store";
+import { AI_PROVIDERS } from "@/lib/ai/providers";
 
 export function OverviewPanel({ project }: { project: Project }) {
   return (
@@ -45,6 +49,8 @@ export function OverviewPanel({ project }: { project: Project }) {
       </div>
 
       <div className="space-y-6">
+        <AiReadinessCard project={project} />
+
         <Card>
           <CardHeader>
             <CardTitle>Deliverables</CardTitle>
@@ -77,6 +83,58 @@ export function OverviewPanel({ project }: { project: Project }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+function AiReadinessCard({ project }: { project: Project }) {
+  const providers = useAiSettingsStore((state) => state.providers);
+  const textProvider = useAiSettingsStore((state) => state.text.provider);
+  const configured = configuredProviders(providers);
+  const ready = configured.length > 0;
+  const suggestion =
+    project.itineraries.length === 0
+      ? "AI Draft itinerary"
+      : project.listing
+        ? "AI Improve marketplace listing"
+        : project.itineraries.some((itinerary) => !itinerary.coverImage)
+          ? "AI Create cover image"
+          : "Run prompt with AI";
+
+  return (
+    <Card className="border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)]">
+      <CardContent className="space-y-4 p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--rc-ai-gold-soft)] text-[var(--rc-ai-brown)]">
+            <Sparkles className="size-5" />
+          </span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-ink">
+                AI assist mode
+              </p>
+              <AiCostBadge />
+            </div>
+            <p className="text-xs leading-relaxed text-ink-soft">
+              {ready
+                ? `${AI_PROVIDERS[textProvider].label} is ready for billable text requests.`
+                : "Add a provider key to unlock paid AI drafting and polish."}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-[var(--rc-ai-border)] bg-paper/60 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--rc-ai-brown)]">
+            Suggested next action
+          </p>
+          <p className="mt-1 text-sm font-medium text-ink">{suggestion}</p>
+        </div>
+        <Link
+          href="/settings"
+          className="inline-flex w-full items-center justify-center rounded-full border border-[var(--rc-ai-border)] bg-paper/70 px-4 py-2 text-sm font-medium text-[var(--rc-ai-brown)] hover:border-forest/40 hover:text-forest"
+        >
+          {ready ? "Review AI settings" : "Add AI provider key"}
+        </Link>
+      </CardContent>
+    </Card>
   );
 }
 
