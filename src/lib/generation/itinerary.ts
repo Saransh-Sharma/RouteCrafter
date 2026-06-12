@@ -8,13 +8,20 @@ import {
   type TravelerType,
 } from "../schemas";
 import type { GenerationContext } from "./types";
-import { durationLabel, list } from "./context";
+import { list } from "./context";
 
 export interface BuildItineraryOptions {
   duration?: Duration;
+  customDays?: number;
   travelerType?: TravelerType;
   style?: TravelStyle;
   budget?: Budget;
+}
+
+export interface ResolvedDuration {
+  duration: Duration;
+  label: string;
+  dayCount: number;
 }
 
 /** Parse a day count from a duration label ("7 days" -> 7). */
@@ -25,29 +32,40 @@ export function parseDays(duration: string, customDays?: number): number {
   return n > 0 ? n : 5;
 }
 
+export function resolveItineraryDuration(
+  ctx: GenerationContext,
+  opts: Pick<BuildItineraryOptions, "duration" | "customDays"> = {},
+): ResolvedDuration {
+  const duration = opts.duration ?? ctx.config.duration;
+  const customDays =
+    opts.customDays ?? (opts.duration ? undefined : ctx.config.customDays);
+  const dayCount = parseDays(duration, customDays);
+  return {
+    duration,
+    dayCount,
+    label: customDays ? `${dayCount} days` : duration,
+  };
+}
+
 /** Build a structured, editable itinerary scaffold from the project config. */
 export function buildItinerary(
   ctx: GenerationContext,
   opts: BuildItineraryOptions = {},
 ): ItineraryOutput {
   const { project, config } = ctx;
-  const duration = opts.duration ?? config.duration;
+  const resolvedDuration = resolveItineraryDuration(ctx, opts);
   const travelerType = opts.travelerType ?? config.travelerType;
   const style = opts.style ?? config.travelStyles[0];
   const budget = opts.budget ?? config.budget;
 
-  // customDays only applies to the config's own duration; an explicit
-  // duration override (e.g. from the matrix or creator) wins.
-  const customDays = opts.duration ? undefined : config.customDays;
-  const dayCount = parseDays(duration, customDays);
   const cities = config.cities.length ? config.cities : project.regions;
   const country = project.country || "the country";
 
-  const days = Array.from({ length: dayCount }, (_, i) => {
+  const days = Array.from({ length: resolvedDuration.dayCount }, (_, i) => {
     const dayNumber = i + 1;
     const base = cities.length ? cities[i % cities.length] : country;
     const isArrival = dayNumber === 1;
-    const isDeparture = dayNumber === dayCount;
+    const isDeparture = dayNumber === resolvedDuration.dayCount;
     const title = isArrival
       ? "Arrival & orientation"
       : isDeparture
@@ -68,20 +86,20 @@ export function buildItinerary(
 
   return itineraryOutputSchema.parse({
     id: crypto.randomUUID(),
-    title: `${durationLabel(ctx)} ${country} itinerary`,
+    title: `${resolvedDuration.label} ${country} itinerary`,
     subtitle: `${travelerType} - ${style ?? "Custom"} - ${budget}`,
     country: project.country,
-    duration,
+    duration: resolvedDuration.label,
     travelerType,
     style,
     budget,
-    overview: `A ${durationLabel(ctx)} ${config.pace.toLowerCase()}-paced itinerary across ${list(
+    overview: `A ${resolvedDuration.label} ${config.pace.toLowerCase()}-paced itinerary across ${list(
       cities,
     )} for ${travelerType.toLowerCase()} travelers.`,
-    whoFor: `Best for ${travelerType.toLowerCase()} travelers who want ${list(
-      config.travelStyles,
-      "a balanced trip",
-    )}.`,
+    whoFor: `Best for ${travelerType.toLowerCase()} travelers who want ${
+      style?.toLowerCase() ??
+      list(config.travelStyles, "a balanced trip").toLowerCase()
+    }.`,
     routeSummary: cities.length ? cities.join(" -> ") : country,
     bestStayAreas: list(config.accommodation, "central, well-connected areas"),
     days,

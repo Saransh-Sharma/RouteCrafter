@@ -24,6 +24,13 @@ export {
   IMAGE_PROMPT_KINDS,
 } from "./templates/image-prompts";
 export { buildMatrix } from "./matrix";
-export { buildItinerary, parseDays } from "./itinerary";
-export type { BuildItineraryOptions } from "./itinerary";
+export {
+  buildItinerary,
+  parseDays,
+  resolveItineraryDuration,
+} from "./itinerary";
+export type {
+  BuildItineraryOptions,
+  ResolvedDuration,
+} from "./itinerary";
 export { buildListing } from "./listing";

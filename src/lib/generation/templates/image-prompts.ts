@@ -33,6 +33,7 @@ export function buildImagePrompt(
     countryAccuracyNotes: `Depict recognizable, accurate ${country} scenery and motifs. Do not mix in landmarks or symbols from other countries. Keep architecture, signage, and landscape true to ${country}.`,
     readabilityNotes:
       "All overlay text must be crisp and legible at thumbnail size. Use short lines, high contrast, and correct spelling. Headline first, supporting line smaller.",
+    image: "",
     isFinal: false,
   };
 
