@@ -274,7 +274,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
     {
       name: "routecrafter:v1",
       version: CURRENT_SCHEMA_VERSION,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => window.localStorage),
       partialize: (state): PersistedSlice => ({
         projects: state.projects,
         initialized: state.initialized,

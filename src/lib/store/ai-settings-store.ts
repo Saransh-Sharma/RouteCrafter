@@ -167,7 +167,7 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
     {
       name: "routecrafter:ai-settings:v1",
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
         providers: state.providers,
         text: state.text,

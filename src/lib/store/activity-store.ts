@@ -55,7 +55,7 @@ export const useActivityStore = createZustand<ActivityState>()(
     }),
     {
       name: "routecrafter:activity:v1",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => window.localStorage),
     },
   ),
 );
