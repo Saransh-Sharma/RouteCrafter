@@ -14,7 +14,11 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { OutputBlock } from "@/components/ui/OutputBlock";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { cn } from "@/lib/utils";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { buildPromptRunPrompt } from "@/lib/ai/tasks";
 
 export function PromptStudioPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
@@ -24,6 +28,7 @@ export function PromptStudioPanel({ project }: { project: Project }) {
     [groups],
   );
   const [activeId, setActiveId] = React.useState(allTemplates[0]?.id ?? "");
+  const [aiOpen, setAiOpen] = React.useState(false);
   const active = allTemplates.find((t) => t.id === activeId);
 
   const generated = project.generated ?? {};
@@ -56,6 +61,32 @@ export function PromptStudioPanel({ project }: { project: Project }) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function applyAiText(
+    text: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
+  ) {
+    if (!active) return;
+    const nextText =
+      mode === "append" && value
+        ? `${value}\n\n---\n\n${text}`
+        : mode === "fill-empty" && value
+          ? value
+          : text;
+    update(project.id, {
+      generated: { ...project.generated, [active.id]: nextText },
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "prompt",
+          label: `Ran ${active.label} with AI`,
+          source: active.id,
+        }),
+      ),
+    });
   }
 
   return (
@@ -101,6 +132,15 @@ export function PromptStudioPanel({ project }: { project: Project }) {
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <AiCostButton
+                  size="sm"
+                  onClick={() => {
+                    if (!value && active) generate(active.id);
+                    setAiOpen(true);
+                  }}
+                >
+                  Run with AI
+                </AiCostButton>
                 {value ? (
                   <>
                     <Button
@@ -150,6 +190,26 @@ export function PromptStudioPanel({ project }: { project: Project }) {
                 </CardContent>
               </Card>
             )}
+            {active ? (
+              <AiRunSheet
+                open={aiOpen}
+                onOpenChange={setAiOpen}
+                mode="text"
+                title={`Run ${active.label} with AI`}
+                description="This sends the generated RouteCrafter prompt to your selected text provider and previews the response before saving."
+                taskType="prompt"
+                sourceLabel={active.label}
+                prompt={buildPromptRunPrompt(
+                  project,
+                  value || renderTemplate(active.id, buildContext(project)),
+                )}
+                currentText={value}
+                onApplyText={applyAiText}
+                fillEmptyLabel="Save if empty"
+                appendLabel="Append to output"
+                applyLabel="Save AI output"
+              />
+            ) : null}
           </div>
         ) : null}
       </div>

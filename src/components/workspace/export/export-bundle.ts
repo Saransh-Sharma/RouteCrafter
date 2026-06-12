@@ -30,7 +30,34 @@ export function promptsToMarkdown(project: Project): string {
 }
 
 /** A single Markdown document bundling every artifact present on the project. */
-export function buildMarkdownBundle(project: Project): string {
+export function buildAiUsageAppendix(project: Project): string {
+  const runs = project.aiRuns ?? [];
+  if (!runs.length) return "";
+  const rows = runs.map((run) => {
+    const usage = [
+      run.usage?.inputTokens ? `${run.usage.inputTokens} input tokens` : "",
+      run.usage?.outputTokens ? `${run.usage.outputTokens} output tokens` : "",
+      run.usage?.images ? `${run.usage.images} image` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return `- ${run.label} — ${run.provider} / ${run.model} (${new Date(
+      run.appliedAt,
+    ).toLocaleString()}${usage ? `; ${usage}` : ""})`;
+  });
+  return [
+    "## AI Usage Appendix",
+    "",
+    "The following accepted artifacts used the user's configured AI provider account. API keys and prompt payloads are not included.",
+    "",
+    ...rows,
+  ].join("\n");
+}
+
+export function buildMarkdownBundle(
+  project: Project,
+  options: { includeAiUsage?: boolean } = {},
+): string {
   const parts: string[] = [];
   parts.push(`# ${project.name}`);
   const meta = [
@@ -55,6 +82,10 @@ export function buildMarkdownBundle(project: Project): string {
   }
   const prompts = promptsToMarkdown(project);
   if (prompts) parts.push(prompts);
+  if (options.includeAiUsage) {
+    const appendix = buildAiUsageAppendix(project);
+    if (appendix) parts.push(appendix);
+  }
 
   return parts.join("\n\n---\n\n");
 }

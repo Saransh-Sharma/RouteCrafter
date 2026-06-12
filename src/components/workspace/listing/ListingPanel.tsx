@@ -1,12 +1,27 @@
 "use client";
 
-import { Megaphone, Wand2, RefreshCw, FileDown, Plus, Trash2, BadgeCheck } from "lucide-react";
+import * as React from "react";
+import {
+  BadgeCheck,
+  FileDown,
+  Megaphone,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 import type { ListingPackage, MarketplaceListing, Project } from "@/lib/types";
 import { buildContext, buildListing } from "@/lib/generation";
+import { marketplaceListingSchema } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { FormField, Input, Textarea } from "@/components/ui/field";
+import { FormField, Input, Select, Textarea } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
+import { buildListingPrompt } from "@/lib/ai/tasks";
+import { parseJsonObject } from "@/lib/ai/parse";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { Section } from "../trip-config/Section";
 import { TagInput } from "../trip-config/TagInput";
 import { PromptHelper } from "../PromptHelper";
@@ -15,6 +30,9 @@ import { downloadListingMarkdown } from "./export-listing";
 export function ListingPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
   const listing = project.listing;
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [aiFocus, setAiFocus] = React.useState("Improve the complete listing.");
+  const [marketplaceTone, setMarketplaceTone] = React.useState("Premium concierge");
 
   function generate() {
     update(project.id, { listing: buildListing(buildContext(project)) });
@@ -37,6 +55,101 @@ export function ListingPanel({ project }: { project: Project }) {
   function markReadyToSell() {
     update(project.id, { status: "Ready to sell" });
   }
+
+  function normalizeListing(text: string): MarketplaceListing {
+    return marketplaceListingSchema.parse(parseJsonObject(text));
+  }
+
+  function validateListing(text: string): string | null {
+    try {
+      normalizeListing(text);
+      return null;
+    } catch {
+      return "The model returned listing JSON RouteCrafter could not safely apply.";
+    }
+  }
+
+  function mergeListing(
+    current: MarketplaceListing | undefined,
+    incoming: MarketplaceListing,
+    mode: "replace" | "fill-empty" | "append",
+  ): MarketplaceListing {
+    if (!current || mode === "replace") return incoming;
+    if (mode === "append") {
+      return {
+        ...current,
+        titleOptions: [...current.titleOptions, ...incoming.titleOptions],
+        tags: [...new Set([...current.tags, ...incoming.tags])],
+        packages: [...current.packages, ...incoming.packages],
+        faqs: [...current.faqs, ...incoming.faqs],
+        buyerRequirements: [
+          ...current.buyerRequirements,
+          ...incoming.buyerRequirements,
+        ],
+        upsells: [...current.upsells, ...incoming.upsells],
+        deliveryNotes: [current.deliveryNotes, incoming.deliveryNotes]
+          .filter(Boolean)
+          .join("\n\n"),
+      };
+    }
+    return {
+      ...current,
+      titleOptions: current.titleOptions.length
+        ? current.titleOptions
+        : incoming.titleOptions,
+      tags: current.tags.length ? current.tags : incoming.tags,
+      shortDescription:
+        current.shortDescription || incoming.shortDescription,
+      longDescription: current.longDescription || incoming.longDescription,
+      packages: current.packages.length ? current.packages : incoming.packages,
+      faqs: current.faqs.length ? current.faqs : incoming.faqs,
+      buyerRequirements: current.buyerRequirements.length
+        ? current.buyerRequirements
+        : incoming.buyerRequirements,
+      upsells: current.upsells.length ? current.upsells : incoming.upsells,
+      deliveryNotes: current.deliveryNotes || incoming.deliveryNotes,
+    };
+  }
+
+  function applyAiListing(
+    text: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
+  ) {
+    const incoming = normalizeListing(text);
+    update(project.id, {
+      listing: mergeListing(listing, incoming, mode),
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "listing",
+          label: aiFocus,
+          source: "listing",
+        }),
+      ),
+    });
+  }
+
+  const aiSheet = (
+    <AiRunSheet
+      open={aiOpen}
+      onOpenChange={setAiOpen}
+      mode="text"
+      title="AI improve listing"
+      description="Creates structured marketplace listing copy and previews field-level JSON before applying."
+      taskType="listing"
+      sourceLabel="Listing copy"
+      prompt={buildListingPrompt(project, listing, aiFocus, marketplaceTone)}
+      currentText={listing ? JSON.stringify(listing, null, 2) : ""}
+      responseFormat="json"
+      validateText={validateListing}
+      onApplyText={applyAiListing}
+      applyLabel="Replace listing"
+      fillEmptyLabel="Fill empty sections"
+      appendLabel="Append new options"
+    />
+  );
 
   if (!listing) {
     return (
@@ -63,8 +176,17 @@ export function ListingPanel({ project }: { project: Project }) {
               <Wand2 className="size-4" />
               Generate listing
             </Button>
+            <AiCostButton
+              onClick={() => {
+                setAiFocus("Create a complete listing from the trip config.");
+                setAiOpen(true);
+              }}
+            >
+              AI improve listing
+            </AiCostButton>
           </CardContent>
         </Card>
+        {aiSheet}
       </div>
     );
   }
@@ -74,6 +196,25 @@ export function ListingPanel({ project }: { project: Project }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-lg font-semibold text-ink">Listing copy</h3>
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={marketplaceTone}
+            onChange={(event) => setMarketplaceTone(event.target.value)}
+            className="h-9 w-auto"
+          >
+            <option>Fiverr direct</option>
+            <option>Etsy polished</option>
+            <option>Gumroad editorial</option>
+            <option>Premium concierge</option>
+          </Select>
+          <AiCostButton
+            size="sm"
+            onClick={() => {
+              setAiFocus("Improve the complete listing.");
+              setAiOpen(true);
+            }}
+          >
+            AI improve listing
+          </AiCostButton>
           <Button variant="outline" size="sm" onClick={generate}>
             <RefreshCw className="size-4" />
             Regenerate
@@ -141,6 +282,15 @@ export function ListingPanel({ project }: { project: Project }) {
               <Plus className="size-4" />
               Add title
             </Button>
+            <AiCostButton
+              size="sm"
+              onClick={() => {
+                setAiFocus("Generate stronger marketplace title options.");
+                setAiOpen(true);
+              }}
+            >
+              AI stronger titles
+            </AiCostButton>
           </div>
         </FormField>
         <FormField label="Tags">
@@ -272,6 +422,15 @@ export function ListingPanel({ project }: { project: Project }) {
             <Plus className="size-4" />
             Add FAQ
           </Button>
+          <AiCostButton
+            size="sm"
+            onClick={() => {
+              setAiFocus("Improve FAQ answers and add useful buyer questions.");
+              setAiOpen(true);
+            }}
+          >
+            AI improve FAQ
+          </AiCostButton>
         </div>
       </Section>
 
@@ -298,6 +457,7 @@ export function ListingPanel({ project }: { project: Project }) {
           />
         </FormField>
       </Section>
+      {aiSheet}
     </div>
   );
 }

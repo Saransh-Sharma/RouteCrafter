@@ -5,6 +5,7 @@ import type { DayPlan } from "@/lib/types";
 import { enumValues } from "@/lib/schemas";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
 
 const TEXT_FIELDS: { key: keyof DayPlan; label: string }[] = [
   { key: "morning", label: "Morning" },
@@ -29,6 +30,7 @@ export function DayCard({
   onMoveDown,
   canMoveUp,
   canMoveDown,
+  onAiImprove,
 }: {
   day: DayPlan;
   onChange: (next: DayPlan) => void;
@@ -37,6 +39,7 @@ export function DayCard({
   onMoveDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  onAiImprove?: () => void;
 }) {
   function set<K extends keyof DayPlan>(key: K, value: DayPlan[K]) {
     onChange({ ...day, [key]: value });
@@ -62,6 +65,16 @@ export function DayCard({
             />
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {onAiImprove ? (
+              <AiCostButton
+                size="sm"
+                showBadge={false}
+                onClick={onAiImprove}
+                className="mr-1 h-8 px-2.5 text-xs"
+              >
+                AI improve
+              </AiCostButton>
+            ) : null}
             <button
               type="button"
               onClick={onMoveUp}

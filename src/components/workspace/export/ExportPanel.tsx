@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   FileJson,
   FileText,
@@ -25,6 +26,7 @@ import { downloadItineraryMarkdown } from "../itinerary/export-itinerary";
 import { downloadListingMarkdown } from "../listing/export-listing";
 import { downloadImagePromptsMarkdown } from "../image-prompts/export-image-prompts";
 import {
+  buildAiUsageAppendix,
   buildMarkdownBundle,
   hasAnyContent,
   itineraryToCsv,
@@ -35,9 +37,14 @@ import {
 
 export function ExportPanel({ project }: { project: Project }) {
   const slug = projectSlug(project);
+  const [includeAiUsage, setIncludeAiUsage] = React.useState(false);
 
   function exportBundle() {
-    downloadText(`${slug}-bundle.md`, buildMarkdownBundle(project), "text/markdown");
+    downloadText(
+      `${slug}-bundle.md`,
+      buildMarkdownBundle(project, { includeAiUsage }),
+      "text/markdown",
+    );
   }
 
   function exportPrompts() {
@@ -69,6 +76,18 @@ export function ExportPanel({ project }: { project: Project }) {
                 JSON re-imports anywhere; the Markdown bundle gathers every
                 artifact into one document.
               </p>
+              {(project.aiRuns ?? []).length ? (
+                <label className="mt-3 flex items-center gap-2 text-xs text-ink-soft">
+                  <input
+                    type="checkbox"
+                    checked={includeAiUsage}
+                    onChange={(event) =>
+                      setIncludeAiUsage(event.target.checked)
+                    }
+                  />
+                  Include AI usage appendix (no API keys or prompt payloads)
+                </label>
+              ) : null}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -187,6 +206,30 @@ export function ExportPanel({ project }: { project: Project }) {
           variant="outline"
           size="sm"
           onClick={() => downloadImagePromptsMarkdown(project)}
+        >
+          <FileText className="size-4" />
+          Markdown
+        </Button>
+      </ArtifactRow>
+
+      {/* Prompts */}
+      <ArtifactRow
+        icon={Sparkles}
+        title="AI usage appendix"
+        available={(project.aiRuns ?? []).length > 0}
+        badge={(project.aiRuns ?? []).length || undefined}
+        emptyHint="Accepted AI outputs will appear here."
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            downloadText(
+              `${slug}-ai-usage.md`,
+              buildAiUsageAppendix(project),
+              "text/markdown",
+            )
+          }
         >
           <FileText className="size-4" />
           Markdown

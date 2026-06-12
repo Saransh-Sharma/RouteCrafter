@@ -11,10 +11,9 @@ export function ConfigSummary({
   values: TripConfiguration;
   project: Project;
 }) {
-  const duration =
-    values.duration === "14 days" && values.customDays
-      ? `${values.customDays} days`
-      : values.duration;
+  const duration = values.customDays
+    ? `${values.customDays} days`
+    : values.duration;
 
   return (
     <Card className="lg:sticky lg:top-6">

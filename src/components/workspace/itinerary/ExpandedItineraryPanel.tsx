@@ -13,11 +13,19 @@ import {
   buildContext,
   buildItinerary,
 } from "@/lib/generation";
-import { dayPlanSchema, enumValues } from "@/lib/schemas";
+import { dayPlanSchema, enumValues, itineraryOutputSchema } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
+import {
+  buildDayPrompt,
+  buildItineraryPrompt,
+} from "@/lib/ai/tasks";
+import { parseJsonObject } from "@/lib/ai/parse";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { cn } from "@/lib/utils";
 import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
@@ -40,6 +48,10 @@ const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "verificationNotes", label: "Verification notes" },
 ];
 
+type ItineraryAiTarget =
+  | { kind: "itinerary"; title: string; focus: string }
+  | { kind: "day"; title: string; index: number; focus: string };
+
 export function ExpandedItineraryPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
   const expandHint = useProjectsStore((s) => s.expandHint);
@@ -50,11 +62,13 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
   const [creator, setCreator] = React.useState<{
     open: boolean;
     duration: string;
+    customDays?: number;
     travelerType: string;
     style: string;
   }>(() => ({
     open: itineraries.length === 0 || Boolean(expandHint),
     duration: expandHint?.duration ?? project.tripConfigs[0]?.duration ?? "7 days",
+    customDays: expandHint ? undefined : project.tripConfigs[0]?.customDays,
     travelerType:
       expandHint?.travelerType ?? project.travelerTypes[0] ?? "Couple",
     style: "",
@@ -62,6 +76,7 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(
     itineraries[0]?.id ?? null,
   );
+  const [aiTarget, setAiTarget] = React.useState<ItineraryAiTarget | null>(null);
 
   // Consume the cross-tab expand hint once.
   React.useEffect(() => {
@@ -88,6 +103,7 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
   function createItinerary() {
     const itinerary = buildItinerary(buildContext(project), {
       duration: creator.duration as Duration,
+      customDays: creator.customDays,
       travelerType: creator.travelerType as TravelerType,
       style: creator.style ? (creator.style as TravelStyle) : undefined,
     });
@@ -140,6 +156,161 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
     setSelectedId(remaining[0]?.id ?? null);
   }
 
+  function normalizeItinerary(raw: unknown): ItineraryOutput {
+    const candidate = raw as Partial<ItineraryOutput>;
+    return itineraryOutputSchema.parse({
+      ...candidate,
+      id: candidate.id || selected?.id || crypto.randomUUID(),
+      country: candidate.country || project.country,
+      duration: candidate.duration || selected?.duration || creator.duration,
+      travelerType:
+        candidate.travelerType ||
+        selected?.travelerType ||
+        creator.travelerType,
+      createdAt: candidate.createdAt || selected?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      days: (candidate.days ?? []).map((day, index) => ({
+        ...day,
+        day: day?.day || index + 1,
+      })),
+    });
+  }
+
+  function validateItineraryAi(text: string): string | null {
+    try {
+      if (aiTarget?.kind === "day") {
+        dayPlanSchema.parse(parseJsonObject(text));
+      } else {
+        normalizeItinerary(parseJsonObject(text));
+      }
+      return null;
+    } catch {
+      return "The model returned itinerary JSON RouteCrafter could not safely apply.";
+    }
+  }
+
+  function mergeText(current: string, incoming: string, mode: string): string {
+    if (mode === "replace") return incoming;
+    if (mode === "append") return [current, incoming].filter(Boolean).join("\n\n");
+    return current || incoming;
+  }
+
+  function mergeDay(
+    current: ItineraryOutput["days"][number],
+    incoming: ItineraryOutput["days"][number],
+    mode: "replace" | "fill-empty" | "append",
+  ) {
+    if (mode === "replace") return { ...incoming, day: current.day };
+    const next = { ...current };
+    for (const key of Object.keys(incoming) as (keyof typeof incoming)[]) {
+      if (key === "day") continue;
+      const currentValue = current[key];
+      const incomingValue = incoming[key];
+      if (typeof currentValue === "string" && typeof incomingValue === "string") {
+        (next as Record<string, unknown>)[key] = mergeText(
+          currentValue,
+          incomingValue,
+          mode,
+        );
+      } else if (!currentValue && incomingValue) {
+        (next as Record<string, unknown>)[key] = incomingValue;
+      }
+    }
+    return next;
+  }
+
+  function mergeItinerary(
+    current: ItineraryOutput | null,
+    incoming: ItineraryOutput,
+    mode: "replace" | "fill-empty" | "append",
+  ): ItineraryOutput {
+    if (!current || mode === "replace") return incoming;
+    return {
+      ...current,
+      title: mergeText(current.title, incoming.title, mode),
+      subtitle: mergeText(current.subtitle, incoming.subtitle, mode),
+      overview: mergeText(current.overview, incoming.overview, mode),
+      whoFor: mergeText(current.whoFor, incoming.whoFor, mode),
+      routeSummary: mergeText(current.routeSummary, incoming.routeSummary, mode),
+      bestStayAreas: mergeText(current.bestStayAreas, incoming.bestStayAreas, mode),
+      foodGuide: mergeText(current.foodGuide, incoming.foodGuide, mode),
+      transportGuide: mergeText(current.transportGuide, incoming.transportGuide, mode),
+      packingList: mergeText(current.packingList, incoming.packingList, mode),
+      etiquetteSafety: mergeText(
+        current.etiquetteSafety,
+        incoming.etiquetteSafety,
+        mode,
+      ),
+      bookingChecklist: mergeText(
+        current.bookingChecklist,
+        incoming.bookingChecklist,
+        mode,
+      ),
+      personalizationQuestions: mergeText(
+        current.personalizationQuestions,
+        incoming.personalizationQuestions,
+        mode,
+      ),
+      verificationNotes: mergeText(
+        current.verificationNotes,
+        incoming.verificationNotes,
+        mode,
+      ),
+      days: current.days.map((day, index) =>
+        incoming.days[index] ? mergeDay(day, incoming.days[index], mode) : day,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function applyItineraryAi(
+    text: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
+  ) {
+    if (!aiTarget) return;
+    if (aiTarget.kind === "day" && selected) {
+      const incoming = dayPlanSchema.parse(parseJsonObject(text));
+      const nextDays = selected.days.map((day, index) =>
+        index === aiTarget.index ? mergeDay(day, incoming, mode) : day,
+      );
+      updateItinerary({ ...selected, days: nextDays });
+    } else {
+      const incoming = normalizeItinerary(parseJsonObject(text));
+      const next = mergeItinerary(selected, incoming, mode);
+      const exists = itineraries.some((itinerary) => itinerary.id === next.id);
+      setItineraries(
+        exists
+          ? itineraries.map((itinerary) =>
+              itinerary.id === next.id ? next : itinerary,
+            )
+          : [...itineraries, next],
+      );
+      setSelectedId(next.id);
+    }
+    update(project.id, {
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: aiTarget.kind === "day" ? "rewrite" : "itinerary",
+          label: aiTarget.title,
+          source: "expanded-itinerary",
+        }),
+      ),
+    });
+  }
+
+  const aiPrompt =
+    aiTarget?.kind === "day" && selected
+      ? buildDayPrompt(
+          project,
+          selected,
+          selected.days[aiTarget.index],
+          aiTarget.focus,
+        )
+      : buildItineraryPrompt(project, selected, aiTarget?.focus);
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
       {/* Sidebar: itinerary list + creator */}
@@ -161,9 +332,17 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
               <FormField label="Duration">
                 <Select
                   value={creator.duration}
-                  onChange={(e) =>
-                    setCreator((c) => ({ ...c, duration: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const duration = e.target.value;
+                    setCreator((c) => ({
+                      ...c,
+                      duration,
+                      customDays:
+                        duration === project.tripConfigs[0]?.duration
+                          ? project.tripConfigs[0]?.customDays
+                          : undefined,
+                    }));
+                  }}
                 >
                   {enumValues.duration.map((d) => (
                     <option key={d} value={d}>
@@ -247,6 +426,18 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <AiCostButton
+                  size="sm"
+                  onClick={() =>
+                    setAiTarget({
+                      kind: "itinerary",
+                      title: "AI draft full itinerary",
+                      focus: "Build or improve the complete itinerary.",
+                    })
+                  }
+                >
+                  AI draft itinerary
+                </AiCostButton>
                 <Button
                   variant="outline"
                   size="sm"
@@ -275,6 +466,26 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
                 "packing-list",
               ]}
             />
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["AI fill empty sections", "Fill only weak or empty itinerary fields."],
+                ["AI add rainy-day alternatives", "Improve rainy-day alternatives for each day."],
+                ["AI add booking notes", "Add practical booking notes without inventing availability."],
+                ["AI add food & transport guides", "Improve food, cafe, and transport guide sections."],
+              ].map(([title, focus]) => (
+                <AiCostButton
+                  key={title}
+                  size="sm"
+                  showBadge={false}
+                  onClick={() =>
+                    setAiTarget({ kind: "itinerary", title, focus })
+                  }
+                >
+                  {title}
+                </AiCostButton>
+              ))}
+            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {TOP_FIELDS.map((f) => (
@@ -314,6 +525,15 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
                   onMoveDown={() => moveDay(i, 1)}
                   canMoveUp={i > 0}
                   canMoveDown={i < selected.days.length - 1}
+                  onAiImprove={() =>
+                    setAiTarget({
+                      kind: "day",
+                      title: `AI improve day ${day.day}`,
+                      index: i,
+                      focus:
+                        "Improve this day, fill weak fields, and preserve useful manual details.",
+                    })
+                  }
                 />
               ))}
             </div>
@@ -349,6 +569,35 @@ export function ExpandedItineraryPanel({ project }: { project: Project }) {
           </Card>
         )}
       </div>
+      <AiRunSheet
+        open={Boolean(aiTarget)}
+        onOpenChange={(open) => {
+          if (!open) setAiTarget(null);
+        }}
+        mode="text"
+        title={aiTarget?.title ?? "AI itinerary assist"}
+        description="Creates structured itinerary JSON and previews it before applying. Existing edits are preserved unless you choose replace."
+        taskType={aiTarget?.kind === "day" ? "rewrite" : "itinerary"}
+        sourceLabel={
+          aiTarget?.kind === "day"
+            ? `Day ${selected?.days[aiTarget.index]?.day ?? ""}`
+            : "Expanded itinerary"
+        }
+        prompt={aiPrompt}
+        currentText={
+          aiTarget?.kind === "day" && selected
+            ? JSON.stringify(selected.days[aiTarget.index], null, 2)
+            : selected
+              ? JSON.stringify(selected, null, 2)
+              : ""
+        }
+        responseFormat="json"
+        validateText={validateItineraryAi}
+        onApplyText={applyItineraryAi}
+        applyLabel={aiTarget?.kind === "day" ? "Replace day" : "Replace itinerary"}
+        fillEmptyLabel="Fill empty fields"
+        appendLabel="Append to fields"
+      />
     </div>
   );
 }

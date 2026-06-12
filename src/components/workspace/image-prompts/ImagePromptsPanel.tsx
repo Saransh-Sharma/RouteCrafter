@@ -1,17 +1,28 @@
 "use client";
 
+import * as React from "react";
 import { Images, Wand2, RefreshCw, FileDown } from "lucide-react";
 import type { PortfolioImagePrompt, Project } from "@/lib/types";
 import {
   buildContext,
   buildImagePrompt,
   buildImagePrompts,
+  imagePromptToText,
   type GenerationContext,
 } from "@/lib/generation";
+import { portfolioImagePromptSchema } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
+import {
+  buildImageGenerationPrompt,
+  buildImagePromptImprovementPrompt,
+} from "@/lib/ai/tasks";
+import { parseJsonObject } from "@/lib/ai/parse";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { ImagePromptCard } from "./ImagePromptCard";
 import { downloadImagePromptsMarkdown } from "./export-image-prompts";
 
@@ -19,6 +30,11 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
   const prompts = project.imagePrompts;
   const finalCount = prompts.filter((p) => p.isFinal).length;
+  const [aiTarget, setAiTarget] = React.useState<
+    | { mode: "improve"; prompt: PortfolioImagePrompt }
+    | { mode: "image"; prompt: PortfolioImagePrompt }
+    | null
+  >(null);
 
   function ctx(): GenerationContext {
     return buildContext(project);
@@ -45,6 +61,60 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     updateOne({ ...prompt, isFinal: !prompt.isFinal });
   }
 
+  function validatePrompt(text: string): string | null {
+    try {
+      portfolioImagePromptSchema.parse(parseJsonObject(text));
+      return null;
+    } catch {
+      return "The model returned image prompt JSON RouteCrafter could not safely apply.";
+    }
+  }
+
+  function applyImprovedPrompt(
+    text: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+  ) {
+    if (!aiTarget || aiTarget.mode !== "improve") return;
+    const incoming = portfolioImagePromptSchema.parse(parseJsonObject(text));
+    updateOne({
+      ...incoming,
+      id: aiTarget.prompt.id,
+      kind: aiTarget.prompt.kind,
+      isFinal: aiTarget.prompt.isFinal,
+      image: aiTarget.prompt.image,
+    });
+    update(project.id, {
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "imagePrompt",
+          label: `Improved ${aiTarget.prompt.title}`,
+          source: "image-prompts",
+        }),
+      ),
+    });
+  }
+
+  function applyGeneratedImage(
+    image: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+  ) {
+    if (!aiTarget || aiTarget.mode !== "image") return;
+    updateOne({ ...aiTarget.prompt, image });
+    update(project.id, {
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "imageGeneration",
+          label: `Created image for ${aiTarget.prompt.title}`,
+          source: "image-prompts",
+        }),
+      ),
+    });
+  }
+
   if (prompts.length === 0) {
     return (
       <Card>
@@ -66,6 +136,9 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
             <Wand2 className="size-4" />
             Generate all five
           </Button>
+          <AiCostButton onClick={generateAll} disabled>
+            AI actions unlock after prompts exist
+          </AiCostButton>
         </CardContent>
       </Card>
     );
@@ -93,6 +166,14 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
             <FileDown className="size-4" />
             Export Markdown
           </Button>
+          <AiCostButton
+            size="sm"
+            onClick={() =>
+              prompts[0] && setAiTarget({ mode: "image", prompt: prompts[0] })
+            }
+          >
+            AI create hero image
+          </AiCostButton>
         </div>
       </div>
 
@@ -105,9 +186,51 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
             onChange={updateOne}
             onRegenerate={() => regenerateOne(prompt)}
             onToggleFinal={() => toggleFinal(prompt)}
+            onAiImprove={() => setAiTarget({ mode: "improve", prompt })}
+            onAiCreateImage={() => setAiTarget({ mode: "image", prompt })}
           />
         ))}
       </div>
+      <AiRunSheet
+        open={Boolean(aiTarget)}
+        onOpenChange={(open) => {
+          if (!open) setAiTarget(null);
+        }}
+        mode={aiTarget?.mode === "image" ? "image" : "text"}
+        title={
+          aiTarget?.mode === "image"
+            ? "AI create portfolio image"
+            : "AI improve image prompt"
+        }
+        description={
+          aiTarget?.mode === "image"
+            ? "Image generation can be more expensive than text. Preview before applying to this prompt card."
+            : "Improves the structured image prompt while preserving the prompt slot."
+        }
+        taskType={
+          aiTarget?.mode === "image" ? "imageGeneration" : "imagePrompt"
+        }
+        sourceLabel={aiTarget?.prompt.title ?? "Image prompt"}
+        prompt={
+          aiTarget
+            ? aiTarget.mode === "image"
+              ? buildImageGenerationPrompt(
+                  project,
+                  imagePromptToText(aiTarget.prompt),
+                  aiTarget.prompt.title,
+                )
+              : buildImagePromptImprovementPrompt(project, aiTarget.prompt)
+            : ""
+        }
+        currentText={aiTarget ? JSON.stringify(aiTarget.prompt, null, 2) : ""}
+        responseFormat={aiTarget?.mode === "image" ? undefined : "json"}
+        validateText={aiTarget?.mode === "image" ? undefined : validatePrompt}
+        onApplyText={applyImprovedPrompt}
+        onApplyImage={applyGeneratedImage}
+        applyLabel="Replace prompt"
+        fillEmptyLabel="Fill empty fields"
+        appendLabel="Append to prompt fields"
+      />
     </div>
   );
 }

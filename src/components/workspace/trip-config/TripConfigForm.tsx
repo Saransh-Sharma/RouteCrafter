@@ -1,33 +1,40 @@
 "use client";
 
 import * as React from "react";
-import { useForm, Controller, useWatch, type Resolver } from "react-hook-form";
+import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Loader2 } from "lucide-react";
 import {
-  tripConfigurationSchema,
   createEmptyTripConfig,
   enumValues,
+  tripConfigurationSchema,
   type TripConfiguration,
 } from "@/lib/schemas";
 import type { Project } from "@/lib/types";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { FormField, Input, Select } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { buildBriefExtractionPrompt, tripConfigCurrentValue } from "@/lib/ai/tasks";
+import { parseJsonObject } from "@/lib/ai/parse";
 import { Section } from "./Section";
 import { ChipGroup } from "./ChipGroup";
-import { TagInput } from "./TagInput";
 import { ConfigSummary } from "./ConfigSummary";
+import { TagInput } from "./TagInput";
 
-type SaveStatus = "idle" | "saving" | "saved";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-/** Serialize form values for change detection, ignoring id/updatedAt. */
-function serializeConfig(v: TripConfiguration): string {
-  return JSON.stringify({ ...v, id: undefined, updatedAt: undefined });
+function serializeConfig(value: TripConfiguration): string {
+  return JSON.stringify({ ...value, id: undefined, updatedAt: undefined });
 }
 
 export function TripConfigForm({ project }: { project: Project }) {
-  const update = useProjectsStore((s) => s.update);
+  const update = useProjectsStore((state) => state.update);
   const [status, setStatus] = React.useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [brief, setBrief] = React.useState("");
+  const [briefAiOpen, setBriefAiOpen] = React.useState(false);
 
   const defaults = React.useMemo<TripConfiguration>(
     () =>
@@ -37,12 +44,16 @@ export function TripConfigForm({ project }: { project: Project }) {
   );
 
   const { register, control, reset } = useForm<TripConfiguration>({
-    resolver: zodResolver(tripConfigurationSchema) as Resolver<TripConfiguration>,
+    resolver: zodResolver(
+      tripConfigurationSchema,
+    ) as Resolver<TripConfiguration>,
     defaultValues: defaults,
   });
 
-  // Tracks the last persisted snapshot to break the save -> reset -> save loop.
-  const lastSavedRef = React.useRef<string>(serializeConfig(defaults));
+  const values = useWatch({ control }) as TripConfiguration;
+  const lastSavedRef = React.useRef(serializeConfig(defaults));
+  const latestValuesRef = React.useRef(values);
+  const timerRef = React.useRef<number | null>(null);
   const mountedRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -50,36 +61,135 @@ export function TripConfigForm({ project }: { project: Project }) {
     lastSavedRef.current = serializeConfig(defaults);
   }, [defaults, reset]);
 
-  const values = useWatch({ control }) as TripConfiguration;
+  React.useEffect(() => {
+    latestValuesRef.current = values;
+  }, [values]);
 
-  // Debounced auto-save: persist whenever the form differs from what's stored.
+  const persistValues = React.useCallback(
+    (raw: TripConfiguration, reportStatus: boolean) => {
+      const result = tripConfigurationSchema.safeParse({
+        ...raw,
+        id: defaults.id,
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (!result.success) {
+        if (reportStatus) {
+          setStatus("error");
+          setSaveError(result.error.issues[0]?.message ?? "Invalid configuration.");
+        }
+        return;
+      }
+
+      const snapshot = serializeConfig(result.data);
+      if (snapshot === lastSavedRef.current) return;
+
+      const mutation = update(project.id, { tripConfigs: [result.data] });
+      if (!mutation.ok) {
+        if (reportStatus) {
+          setStatus("error");
+          setSaveError(mutation.error);
+        }
+        return;
+      }
+
+      lastSavedRef.current = snapshot;
+      if (reportStatus) {
+        setStatus("saved");
+        setSaveError(null);
+      }
+    },
+    [defaults.id, project.id, update],
+  );
+
+  function validateBriefOutput(text: string): string | null {
+    try {
+      const parsed = tripConfigurationSchema.safeParse(parseJsonObject(text));
+      return parsed.success
+        ? null
+        : parsed.error.issues[0]?.message ??
+            "The model returned trip configuration JSON RouteCrafter could not apply.";
+    } catch {
+      return "The model returned content RouteCrafter could not parse as JSON.";
+    }
+  }
+
+  function mergeConfig(
+    current: TripConfiguration,
+    incoming: TripConfiguration,
+    mode: "replace" | "fill-empty" | "append",
+  ): TripConfiguration {
+    if (mode === "replace") return incoming;
+    const merged = { ...current };
+    for (const key of Object.keys(incoming) as (keyof TripConfiguration)[]) {
+      const currentValue = current[key];
+      const incomingValue = incoming[key];
+      const empty =
+        currentValue === "" ||
+        currentValue === undefined ||
+        (Array.isArray(currentValue) && currentValue.length === 0);
+      if (empty && incomingValue !== undefined) {
+        (merged as Record<string, unknown>)[key] = incomingValue;
+      }
+    }
+    return merged;
+  }
+
+  function applyBriefConfig(
+    text: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
+  ) {
+    const parsed = tripConfigurationSchema.parse(parseJsonObject(text));
+    const next = mergeConfig(values, parsed, mode);
+    reset(next);
+    persistValues(next, true);
+    update(project.id, {
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "brief",
+          label: "Extracted trip configuration from brief",
+          source: "trip-config",
+        }),
+      ),
+    });
+  }
+
   React.useEffect(() => {
     if (!values) return;
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
     }
-    const snapshot = serializeConfig(values);
-    if (snapshot === lastSavedRef.current) return;
 
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     setStatus("saving");
-    const timer = window.setTimeout(() => {
-      const config: TripConfiguration = {
-        ...values,
-        id: defaults.id,
-        updatedAt: new Date().toISOString(),
-      };
-      update(project.id, { tripConfigs: [config] });
-      lastSavedRef.current = snapshot;
-      setStatus("saved");
+    setSaveError(null);
+    timerRef.current = window.setTimeout(() => {
+      persistValues(values, true);
+      timerRef.current = null;
     }, 600);
 
-    return () => window.clearTimeout(timer);
-  }, [values, defaults.id, project.id, update]);
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, [persistValues, values]);
+
+  React.useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      if (latestValuesRef.current) {
+        persistValues(latestValuesRef.current, false);
+      }
+    },
+    [persistValues],
+  );
 
   return (
     <form
-      onSubmit={(e) => e.preventDefault()}
+      onSubmit={(event) => event.preventDefault()}
       className="grid grid-cols-1 gap-6 lg:grid-cols-3"
     >
       <div className="space-y-6 lg:col-span-2">
@@ -100,9 +210,9 @@ export function TripConfigForm({ project }: { project: Project }) {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <FormField label="Trip duration" htmlFor="duration">
               <Select id="duration" {...register("duration")}>
-                {enumValues.duration.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
+                {enumValues.duration.map((duration) => (
+                  <option key={duration} value={duration}>
+                    {duration}
                   </option>
                 ))}
               </Select>
@@ -110,13 +220,17 @@ export function TripConfigForm({ project }: { project: Project }) {
             <FormField
               label="Custom days (optional)"
               htmlFor="customDays"
-              hint="Overrides the duration label when set."
+              hint="Overrides the duration label. Maximum 60 days."
             >
               <Input
                 id="customDays"
                 type="number"
                 min={1}
-                {...register("customDays", { valueAsNumber: true })}
+                max={60}
+                {...register("customDays", {
+                  setValueAs: (value) =>
+                    value === "" ? undefined : Number(value),
+                })}
               />
             </FormField>
           </div>
@@ -128,9 +242,9 @@ export function TripConfigForm({ project }: { project: Project }) {
         >
           <FormField label="Traveler type" htmlFor="travelerType">
             <Select id="travelerType" {...register("travelerType")}>
-              {enumValues.travelerType.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {enumValues.travelerType.map((traveler) => (
+                <option key={traveler} value={traveler}>
+                  {traveler}
                 </option>
               ))}
             </Select>
@@ -154,18 +268,18 @@ export function TripConfigForm({ project }: { project: Project }) {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <FormField label="Pace" htmlFor="pace">
               <Select id="pace" {...register("pace")}>
-                {enumValues.pace.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
+                {enumValues.pace.map((pace) => (
+                  <option key={pace} value={pace}>
+                    {pace}
                   </option>
                 ))}
               </Select>
             </FormField>
             <FormField label="Budget level" htmlFor="budget">
               <Select id="budget" {...register("budget")}>
-                {enumValues.budget.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
+                {enumValues.budget.map((budget) => (
+                  <option key={budget} value={budget}>
+                    {budget}
                   </option>
                 ))}
               </Select>
@@ -346,15 +460,58 @@ export function TripConfigForm({ project }: { project: Project }) {
               <Check className="size-4" />
               All changes saved
             </span>
+          ) : status === "error" ? (
+            <span className="inline-flex items-center gap-1.5 text-terracotta">
+              <AlertCircle className="size-4" />
+              {saveError || "Could not save this configuration."}
+            </span>
           ) : (
             <span className="text-ink-muted">Changes save automatically</span>
           )}
         </div>
       </div>
 
-      <div className="lg:col-span-1">
+      <div className="space-y-6 lg:col-span-1">
+        <Section
+          title="AI fill from brief"
+          description="Paste a buyer message, then preview extracted trip fields before applying."
+        >
+          <FormField label="Buyer/client brief">
+            <textarea
+              value={brief}
+              rows={7}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder="Paste the buyer's message, destination notes, dates, preferences, constraints, or marketplace request."
+              className="w-full resize-y rounded-xl border border-border-soft bg-paper px-4 py-3 text-sm leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-forest/50"
+            />
+          </FormField>
+          <AiCostButton
+            className="w-full"
+            onClick={() => setBriefAiOpen(true)}
+            disabled={!brief.trim()}
+          >
+            AI extract fields
+          </AiCostButton>
+        </Section>
         <ConfigSummary values={values} project={project} />
       </div>
+      <AiRunSheet
+        open={briefAiOpen}
+        onOpenChange={setBriefAiOpen}
+        mode="text"
+        title="AI fill trip configuration"
+        description="Extracts structured trip fields from a buyer brief. Preview before applying to the form."
+        taskType="brief"
+        sourceLabel="Buyer/client brief"
+        prompt={buildBriefExtractionPrompt(project, brief)}
+        currentText={tripConfigCurrentValue(values)}
+        responseFormat="json"
+        validateText={validateBriefOutput}
+        onApplyText={applyBriefConfig}
+        applyLabel="Replace configuration"
+        fillEmptyLabel="Fill empty fields"
+        appendLabel="Keep existing fields"
+      />
     </form>
   );
 }

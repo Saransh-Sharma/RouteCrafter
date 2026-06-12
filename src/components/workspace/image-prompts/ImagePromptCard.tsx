@@ -1,12 +1,13 @@
 "use client";
 
-import { RefreshCw, Star } from "lucide-react";
+import { ImageIcon, RefreshCw, Star } from "lucide-react";
 import type { PortfolioImagePrompt } from "@/lib/types";
 import { imagePromptToText } from "@/lib/generation";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Textarea } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
 import { cn } from "@/lib/utils";
 
 const FIELDS: { label: string; key: keyof PortfolioImagePrompt; rows?: number }[] = [
@@ -27,12 +28,16 @@ export function ImagePromptCard({
   onChange,
   onRegenerate,
   onToggleFinal,
+  onAiImprove,
+  onAiCreateImage,
 }: {
   prompt: PortfolioImagePrompt;
   index: number;
   onChange: (next: PortfolioImagePrompt) => void;
   onRegenerate: () => void;
   onToggleFinal: () => void;
+  onAiImprove?: () => void;
+  onAiCreateImage?: () => void;
 }) {
   function setField(key: keyof PortfolioImagePrompt, value: string) {
     onChange({ ...prompt, [key]: value });
@@ -56,6 +61,21 @@ export function ImagePromptCard({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {onAiImprove ? (
+              <AiCostButton size="sm" showBadge={false} onClick={onAiImprove}>
+                AI improve prompt
+              </AiCostButton>
+            ) : null}
+            {onAiCreateImage ? (
+              <AiCostButton
+                size="sm"
+                showBadge={false}
+                icon="cost"
+                onClick={onAiCreateImage}
+              >
+                AI create image
+              </AiCostButton>
+            ) : null}
             <button
               type="button"
               onClick={onToggleFinal}
@@ -82,6 +102,21 @@ export function ImagePromptCard({
             <CopyButton value={imagePromptToText(prompt)} label="Copy all" />
           </div>
         </div>
+
+        {prompt.image ? (
+          <div className="overflow-hidden rounded-xl border border-border-soft bg-paper-2/40">
+            <div className="flex items-center gap-2 border-b border-border-soft px-3 py-2 text-xs font-semibold text-ink-soft">
+              <ImageIcon className="size-3.5" />
+              Accepted AI image
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={prompt.image}
+              alt={`${prompt.title} generated visual`}
+              className="max-h-80 w-full object-contain"
+            />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {FIELDS.map((f) => (
