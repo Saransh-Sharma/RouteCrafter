@@ -27,7 +27,9 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
 };
 
 function actionLabel(action: ActivityAction, detail: string): string {
-  if (action === "status_changed" && detail) return detail;
+  if ((action === "status_changed" || action === "updated") && detail) {
+    return detail;
+  }
   return ACTION_LABELS[action] || detail || action;
 }
 
