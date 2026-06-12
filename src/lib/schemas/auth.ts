@@ -14,21 +14,21 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 export const loginCredentialsSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  username: z.string().trim().min(1, "Username is required").max(64),
   password: z.string().min(1, "Password is required"),
 });
 
 export type LoginCredentials = z.infer<typeof loginCredentialsSchema>;
 
 export const otpRequestSchema = z.object({
-  email: z.string().email("Valid email is required"),
+  username: z.string().trim().min(1, "Username is required").max(64),
 });
 
 export type OtpRequest = z.infer<typeof otpRequestSchema>;
 
 export const otpVerifySchema = z.object({
-  email: z.string().email(),
-  code: z.string().length(6, "OTP must be 6 digits"),
+  username: z.string().trim().min(1, "Username is required").max(64),
+  code: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 
 export type OtpVerify = z.infer<typeof otpVerifySchema>;
@@ -38,8 +38,8 @@ export const sessionPayloadSchema = z.object({
   username: z.string(),
   displayName: z.string(),
   role: userRoleEnum,
-  iat: z.number().optional(),
-  exp: z.number().optional(),
+  iat: z.number(),
+  exp: z.number(),
 });
 
 export type SessionPayload = z.infer<typeof sessionPayloadSchema>;

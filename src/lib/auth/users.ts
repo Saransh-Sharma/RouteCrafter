@@ -1,4 +1,5 @@
 import type { User } from "../schemas/auth";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Hardcoded user registry for the 3 known users.
@@ -41,10 +42,6 @@ export function findUserByUsername(username: string): User | undefined {
   );
 }
 
-export function findUserByEmail(email: string): User | undefined {
-  return USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
-}
-
 export function findUserById(id: string): User | undefined {
   return USERS.find((u) => u.id === id);
 }
@@ -54,5 +51,9 @@ export function verifyPassword(username: string, password: string): boolean {
   if (!envKey) return false;
   const expected = process.env[envKey];
   if (!expected) return false;
-  return password === expected;
+
+  const actualBuffer = Buffer.from(password);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
