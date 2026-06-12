@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { aiImageRequestSchema } from "@/lib/ai/schemas";
 import { generateImage, normalizeProviderError } from "@/lib/ai/provider-adapters";
+import { getRequestUser } from "@/lib/auth/session";
+import { unauthorizedResponse } from "@/lib/auth/http";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    if (!(await getRequestUser(request))) return unauthorizedResponse();
+
     const json = await request.json();
     const parsed = aiImageRequestSchema.safeParse(json);
     if (!parsed.success) {
