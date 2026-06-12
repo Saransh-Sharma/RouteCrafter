@@ -4,15 +4,61 @@ import {
   MAX_PERSISTED_STATE_CHARS,
   useProjectsStore,
 } from "./projects-store";
+import { useActivityStore } from "./activity-store";
+import { useAuthStore } from "./auth-store";
 
 describe("projects store mutations", () => {
   beforeEach(() => {
+    localStorage.clear();
+    useActivityStore.setState({ entries: [] });
+    useAuthStore.setState({
+      user: {
+        id: "user_test",
+        username: "test",
+        displayName: "Test User",
+        email: "test@example.com",
+        role: "editor",
+      },
+      isHydrating: false,
+      isSubmitting: false,
+      error: null,
+    });
     useProjectsStore.setState({
       projects: [structuredClone(seedProjects[0])],
       initialized: true,
       hasHydrated: true,
       persistenceError: null,
     });
+  });
+
+  it("logs the specific project fields changed by an update", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const result = useProjectsStore.getState().update(project.id, {
+      name: "Japan Premium Itinerary Product",
+      country: "Japan and South Korea",
+    });
+
+    expect(result.ok).toBe(true);
+    const entry = useActivityStore.getState().entries[0];
+    expect(entry).toMatchObject({
+      projectId: project.id,
+      userId: "user_test",
+      action: "updated",
+      detail: "updated name and country",
+    });
+  });
+
+  it("keeps a generic update detail when only noisy fields changed", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const result = useProjectsStore.getState().updateProject(project.id, (p) => ({
+      ...p,
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(useActivityStore.getState().entries[0]?.detail).toBe(
+      "updated project details",
+    );
   });
 
   it("applies nested itinerary patches against the latest project state", () => {
