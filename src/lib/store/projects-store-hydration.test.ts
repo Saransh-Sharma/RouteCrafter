@@ -11,5 +11,8 @@ it("finishes hydration with a recoverable error for corrupt storage", async () =
   expect(state.hasHydrated).toBe(true);
   expect(state.initialized).toBe(true);
   expect(state.projects.length).toBeGreaterThan(0);
-  expect(state.persistenceError).toContain("could not save");
+  expect(state.persistenceError).toContain("reset your local project cache");
+  const recoveredStorage = localStorage.getItem("routecrafter:v1");
+  expect(recoveredStorage).not.toBe("{not-json");
+  expect(() => JSON.parse(recoveredStorage ?? "")).not.toThrow();
 });

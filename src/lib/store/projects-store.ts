@@ -17,6 +17,9 @@ import { logActivity } from "./activity-store";
 import { useAuthStore } from "./auth-store";
 
 export const MAX_PERSISTED_STATE_CHARS = 4_000_000;
+const PROJECTS_STORAGE_KEY = "routecrafter:v1";
+const HYDRATION_ERROR_MESSAGE =
+  "RouteCrafter reset your local project cache because the saved browser data could not be loaded.";
 
 export type MutationResult =
   | { ok: true }
@@ -104,6 +107,26 @@ function storageErrorMessage(error?: unknown): string {
     return "Browser storage is full. Remove an uploaded image or export and delete an older project before trying again.";
   }
   return "RouteCrafter could not save to browser storage. Your last change was rolled back.";
+}
+
+function hydrationErrorMessage(error?: unknown): string {
+  if (
+    typeof DOMException !== "undefined" &&
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" ||
+      error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  ) {
+    return "Browser storage is full. RouteCrafter loaded seed projects, but your local project cache could not be saved.";
+  }
+  return HYDRATION_ERROR_MESSAGE;
+}
+
+function clearPersistedProjectsStorage(): void {
+  try {
+    window.localStorage.removeItem(PROJECTS_STORAGE_KEY);
+  } catch {
+    // If browser storage is blocked, keep the in-memory recovery state.
+  }
 }
 
 export const useProjectsStore = createZustand<ProjectsState>()(
@@ -272,7 +295,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
       };
     },
     {
-      name: "routecrafter:v1",
+      name: PROJECTS_STORAGE_KEY,
       version: CURRENT_SCHEMA_VERSION,
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state): PersistedSlice => ({
@@ -288,9 +311,10 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         if (state) {
           state.hydrateSeeds();
           if (error) {
+            clearPersistedProjectsStorage();
             queueMicrotask(() =>
               useProjectsStore.setState({
-                persistenceError: storageErrorMessage(error),
+                persistenceError: hydrationErrorMessage(error),
               }),
             );
           }
@@ -298,12 +322,13 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           return;
         }
 
+        clearPersistedProjectsStorage();
         queueMicrotask(() =>
           useProjectsStore.setState({
             projects: seedProjects,
             initialized: true,
             hasHydrated: true,
-            persistenceError: storageErrorMessage(error),
+            persistenceError: hydrationErrorMessage(error),
           }),
         );
       },
