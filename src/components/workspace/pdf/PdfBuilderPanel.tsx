@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/field";
 import { ItineraryDocument } from "./ItineraryDocument";
 import { PdfThemeControls } from "./PdfThemeControls";
+import { prepareDocumentForPdf } from "./pdf-assets";
 
 export function PdfBuilderPanel({
   project,
@@ -21,20 +22,39 @@ export function PdfBuilderPanel({
     itineraries[0]?.id ?? "",
   );
   const [downloading, setDownloading] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const docRef = React.useRef<HTMLDivElement>(null);
 
   const selected =
     itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;
+  const assetKey = selected
+    ? [selected.coverImage, ...selected.days.map((day) => day.image)].join("|")
+    : "";
+  const expectedAssets = selected
+    ? Number(Boolean(selected.coverImage)) +
+      selected.days.filter((day) => Boolean(day.image)).length
+    : 0;
+  const [assetState, setAssetState] = React.useState({
+    key: assetKey,
+    settled: 0,
+  });
+  if (assetState.key !== assetKey) {
+    setAssetState({ key: assetKey, settled: 0 });
+  }
+  const assetsReady =
+    expectedAssets === 0 || assetState.settled >= expectedAssets;
 
   async function downloadPdf() {
     if (!docRef.current || !selected) return;
     setDownloading(true);
+    setDownloadError(null);
     try {
+      await prepareDocumentForPdf(docRef.current);
       const html2pdf = (await import("html2pdf.js")).default;
       const slug = (project.country || "project").toLowerCase();
       await html2pdf()
         .set({
-          margin: 10,
+          margin: 0,
           filename: `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`,
           image: { type: "jpeg", quality: 0.96 },
           html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
@@ -43,6 +63,10 @@ export function PdfBuilderPanel({
         })
         .from(docRef.current)
         .save();
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error ? error.message : "Could not generate the PDF.",
+      );
     } finally {
       setDownloading(false);
     }
@@ -93,26 +117,55 @@ export function PdfBuilderPanel({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            disabled={!assetsReady || downloading}
+          >
             <Printer className="size-4" />
             Print / Save as PDF
           </Button>
-          <Button size="sm" onClick={downloadPdf} disabled={downloading}>
+          <Button
+            size="sm"
+            onClick={downloadPdf}
+            disabled={!assetsReady || downloading}
+          >
             <Download className="size-4" />
             {downloading ? "Preparing..." : "Download PDF"}
           </Button>
         </div>
       </div>
+      {downloadError ? (
+        <p className="rc-no-print text-sm text-terracotta">{downloadError}</p>
+      ) : !assetsReady ? (
+        <p className="rc-no-print text-sm text-ink-muted">
+          Waiting for document images to load...
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
         <div className="rc-no-print lg:sticky lg:top-6 lg:self-start">
           <PdfThemeControls project={project} itinerary={selected} />
         </div>
-        <div className="overflow-hidden rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6">
+        <div className="overflow-auto rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6">
           <ItineraryDocument
             ref={docRef}
             itinerary={selected}
             project={project}
+            onAssetSettled={() =>
+              setAssetState((current) =>
+                current.key === assetKey
+                  ? {
+                      ...current,
+                      settled: Math.min(
+                        expectedAssets,
+                        current.settled + 1,
+                      ),
+                    }
+                  : { key: assetKey, settled: 1 },
+              )
+            }
           />
         </div>
       </div>

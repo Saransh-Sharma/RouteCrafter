@@ -33,8 +33,15 @@ const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
 /** Premium, print-optimized itinerary document (screen preview + PDF source). */
 export const ItineraryDocument = React.forwardRef<
   HTMLDivElement,
-  { itinerary: ItineraryOutput; project: Project }
->(function ItineraryDocument({ itinerary, project }, ref) {
+  {
+    itinerary: ItineraryOutput;
+    project: Project;
+    onAssetSettled?: () => void;
+  }
+>(function ItineraryDocument(
+  { itinerary, project, onAssetSettled },
+  ref,
+) {
   const country = itinerary.country || project.country || "Your trip";
   const guides = GUIDE_FIELDS.filter((g) => itinerary[g.key]);
   const theme = getTheme(itinerary.pdfTheme);
@@ -58,7 +65,8 @@ export const ItineraryDocument = React.forwardRef<
               className="rc-doc-cover-photo"
               src={itinerary.coverImage}
               alt={`${country} cover`}
-              crossOrigin="anonymous"
+              onLoad={onAssetSettled}
+              onError={onAssetSettled}
             />
             <div className="rc-doc-cover-scrim" />
           </>
@@ -156,10 +164,11 @@ export const ItineraryDocument = React.forwardRef<
               >
                 <img
                   className="rc-doc-img"
-                  src={day.image}
+                  src={day.image ?? ""}
                   alt={`Day ${day.day}`}
                   style={{ height: "260px" }}
-                  crossOrigin="anonymous"
+                  onLoad={onAssetSettled}
+                  onError={onAssetSettled}
                 />
               </div>
             ) : null}
@@ -175,7 +184,7 @@ export const ItineraryDocument = React.forwardRef<
 
             {notes.length ? (
               <div
-                className="mt-6 rounded-2xl p-5"
+                className="rc-doc-section mt-6 rounded-2xl p-5"
                 style={{
                   background: "var(--doc-accent-soft)",
                 }}
@@ -210,7 +219,7 @@ export const ItineraryDocument = React.forwardRef<
           <h2 className="mt-5 text-3xl font-semibold">Guides & checklists</h2>
           <div className="mt-6 space-y-6">
             {guides.map((g) => (
-              <div key={g.key}>
+              <div key={g.key} className="rc-doc-section">
                 <h3 className="text-lg font-semibold">{g.label}</h3>
                 <div className="rc-doc-hairline mt-2" />
                 <p

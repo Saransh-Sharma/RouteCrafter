@@ -1,14 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Upload, Trash2, ImageIcon, Palette, ChevronDown } from "lucide-react";
+import { ChevronDown, ImageIcon, Palette, Trash2, Upload } from "lucide-react";
 import type { ItineraryOutput, PdfTheme, Project } from "@/lib/types";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/field";
+import { AiCostButton } from "@/components/ai/AiCostButton";
+import { AiRunSheet } from "@/components/ai/AiRunSheet";
+import { buildImageGenerationPrompt } from "@/lib/ai/tasks";
+import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { cn } from "@/lib/utils";
-import { DOC_THEMES } from "./themes";
 import { compressImageFile } from "./image-utils";
+import { DOC_THEMES } from "./themes";
 
 export function PdfThemeControls({
   project,
@@ -17,24 +21,56 @@ export function PdfThemeControls({
   project: Project;
   itinerary: ItineraryOutput;
 }) {
-  const update = useProjectsStore((s) => s.update);
+  const patchItinerary = useProjectsStore((state) => state.patchItinerary);
   const [error, setError] = React.useState<string | null>(null);
   const [daysOpen, setDaysOpen] = React.useState(false);
+  const [aiImageTarget, setAiImageTarget] = React.useState<
+    | { kind: "cover"; title: string; prompt: string }
+    | { kind: "day"; title: string; index: number; prompt: string }
+    | null
+  >(null);
 
-  function patchItinerary(patch: Partial<ItineraryOutput>) {
-    update(project.id, {
-      itineraries: project.itineraries.map((it) =>
-        it.id === itinerary.id
-          ? { ...it, ...patch, updatedAt: new Date().toISOString() }
-          : it,
-      ),
-    });
+  function applyPatch(
+    patch:
+      | Partial<ItineraryOutput>
+      | ((current: ItineraryOutput) => ItineraryOutput),
+  ): boolean {
+    const result = patchItinerary(project.id, itinerary.id, patch);
+    setError(result.ok ? null : result.error);
+    return result.ok;
   }
 
   function patchDay(index: number, image: string) {
-    patchItinerary({
-      days: itinerary.days.map((d, i) => (i === index ? { ...d, image } : d)),
+    applyPatch((current) => ({
+      ...current,
+      days: current.days.map((day, dayIndex) =>
+        dayIndex === index ? { ...day, image } : day,
+      ),
+    }));
+  }
+
+  function recordImageRun(
+    image: string,
+    result: Parameters<typeof createAiRunMetadata>[0]["result"],
+  ) {
+    if (!aiImageTarget) return;
+    if (aiImageTarget.kind === "cover") {
+      applyPatch({ coverImage: image });
+    } else {
+      patchDay(aiImageTarget.index, image);
+    }
+    const mutation = useProjectsStore.getState().update(project.id, {
+      aiRuns: appendAiRun(
+        project,
+        createAiRunMetadata({
+          result,
+          taskType: "imageGeneration",
+          label: aiImageTarget.title,
+          source: "pdf-builder",
+        }),
+      ),
     });
+    if (!mutation.ok) setError(mutation.error);
   }
 
   async function handleUpload(
@@ -45,30 +81,35 @@ export function PdfThemeControls({
     setError(null);
     try {
       apply(await compressImageFile(file));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not process the image.");
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not process the image.",
+      );
     }
   }
 
   return (
     <Card>
       <CardContent className="space-y-6 p-5">
-        {/* Theme */}
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Palette className="size-4 text-terracotta" />
             Color theme
           </div>
           <div className="grid grid-cols-5 gap-2">
-            {DOC_THEMES.map((t) => {
-              const active = (itinerary.pdfTheme ?? "beige") === t.id;
+            {DOC_THEMES.map((theme) => {
+              const active = (itinerary.pdfTheme ?? "beige") === theme.id;
               return (
                 <button
-                  key={t.id}
+                  key={theme.id}
                   type="button"
-                  onClick={() => patchItinerary({ pdfTheme: t.id as PdfTheme })}
-                  aria-label={t.label}
-                  title={t.label}
+                  onClick={() =>
+                    applyPatch({ pdfTheme: theme.id as PdfTheme })
+                  }
+                  aria-label={theme.label}
+                  title={theme.label}
                   className={cn(
                     "group flex flex-col items-center gap-1 rounded-xl border p-1.5 transition-colors",
                     active
@@ -78,19 +119,19 @@ export function PdfThemeControls({
                 >
                   <span
                     className="flex h-8 w-full overflow-hidden rounded-md"
-                    style={{ background: t.paper }}
+                    style={{ background: theme.paper }}
                   >
                     <span
                       className="h-full w-1/3"
-                      style={{ background: t.accent }}
+                      style={{ background: theme.accent }}
                     />
                     <span
                       className="h-full w-1/3"
-                      style={{ background: t.accentSoft }}
+                      style={{ background: theme.accentSoft }}
                     />
                   </span>
                   <span className="text-[10px] font-medium text-ink-soft">
-                    {t.label}
+                    {theme.label}
                   </span>
                 </button>
               );
@@ -98,32 +139,58 @@ export function PdfThemeControls({
           </div>
         </div>
 
-        {/* Cover image */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <ImageIcon className="size-4 text-terracotta" />
             Cover image
           </div>
-          <ImageField
-            value={itinerary.coverImage}
-            onUpload={(file) =>
-              handleUpload(file, (url) => patchItinerary({ coverImage: url }))
+          <AiCostButton
+            size="sm"
+            icon="cost"
+            className="w-full"
+            onClick={() =>
+              setAiImageTarget({
+                kind: "cover",
+                title: "AI create cover image",
+                prompt: buildImageGenerationPrompt(
+                  project,
+                  JSON.stringify(
+                    {
+                      title: itinerary.title,
+                      country: itinerary.country,
+                      overview: itinerary.overview,
+                      routeSummary: itinerary.routeSummary,
+                    },
+                    null,
+                    2,
+                  ),
+                  "Premium itinerary PDF cover image",
+                ),
+              })
             }
-            onUrl={(url) => patchItinerary({ coverImage: url })}
-            onClear={() => patchItinerary({ coverImage: "" })}
+          >
+            AI create cover image
+          </AiCostButton>
+          <ImageField
+            value={itinerary.coverImage ?? ""}
+            onUpload={(file) =>
+              handleUpload(file, (url) => applyPatch({ coverImage: url }))
+            }
+            onUrl={(url) => applyPatch({ coverImage: url })}
+            onClear={() => applyPatch({ coverImage: "" })}
           />
         </div>
 
-        {/* Per-day images */}
         <div className="space-y-2">
           <button
             type="button"
-            onClick={() => setDaysOpen((v) => !v)}
+            onClick={() => setDaysOpen((value) => !value)}
             className="flex w-full items-center justify-between text-sm font-semibold text-ink"
           >
             <span className="flex items-center gap-2">
               <ImageIcon className="size-4 text-terracotta" />
-              Day images ({itinerary.days.filter((d) => d.image).length}/
+              Day images (
+              {itinerary.days.filter((day) => Boolean(day.image)).length}/
               {itinerary.days.length})
             </span>
             <ChevronDown
@@ -135,22 +202,42 @@ export function PdfThemeControls({
           </button>
           {daysOpen ? (
             <div className="space-y-3 pt-1">
-              {itinerary.days.map((day, i) => (
+              {itinerary.days.map((day, index) => (
                 <div
-                  key={`${itinerary.id}-${i}`}
+                  key={`${itinerary.id}-${index}`}
                   className="rounded-xl border border-border-soft bg-paper-2/30 p-3"
                 >
                   <p className="mb-2 text-xs font-semibold text-ink-soft">
                     Day {day.day} - {day.title || "Untitled"}
                   </p>
+                  <AiCostButton
+                    size="sm"
+                    icon="cost"
+                    showBadge={false}
+                    className="mb-2 w-full"
+                    onClick={() =>
+                      setAiImageTarget({
+                        kind: "day",
+                        title: `AI create day ${day.day} image`,
+                        index,
+                        prompt: buildImageGenerationPrompt(
+                          project,
+                          JSON.stringify(day, null, 2),
+                          `Day ${day.day} itinerary illustration`,
+                        ),
+                      })
+                    }
+                  >
+                    AI create day image
+                  </AiCostButton>
                   <ImageField
-                    value={day.image}
+                    value={day.image ?? ""}
                     compact
                     onUpload={(file) =>
-                      handleUpload(file, (url) => patchDay(i, url))
+                      handleUpload(file, (url) => patchDay(index, url))
                     }
-                    onUrl={(url) => patchDay(i, url)}
-                    onClear={() => patchDay(i, "")}
+                    onUrl={(url) => patchDay(index, url)}
+                    onClear={() => patchDay(index, "")}
                   />
                 </div>
               ))}
@@ -160,16 +247,29 @@ export function PdfThemeControls({
 
         {error ? <p className="text-xs text-terracotta">{error}</p> : null}
         <p className="text-[11px] leading-relaxed text-ink-muted">
-          Uploaded images are compressed and stored in your browser, and always
-          embed in the downloaded PDF. Pasted URLs work in the preview and
-          print, but may appear blank in the downloaded PDF (cross-origin).
+          Uploaded images are compressed and stored in your browser. Remote URLs
+          work in preview and native printing, but must allow cross-origin canvas
+          access to appear in a downloaded PDF.
         </p>
+        <AiRunSheet
+          open={Boolean(aiImageTarget)}
+          onOpenChange={(open) => {
+            if (!open) setAiImageTarget(null);
+          }}
+          mode="image"
+          title={aiImageTarget?.title ?? "AI create itinerary image"}
+          description="Image models may be more expensive than text. Preview the generated visual before applying it to the PDF."
+          taskType="imageGeneration"
+          sourceLabel={aiImageTarget?.kind === "cover" ? "PDF cover" : "Day image"}
+          prompt={aiImageTarget?.prompt ?? ""}
+          onApplyImage={recordImageRun}
+        />
       </CardContent>
     </Card>
   );
 }
 
-function ImageField({
+export function ImageField({
   value,
   onUpload,
   onUrl,
@@ -184,6 +284,13 @@ function ImageField({
 }) {
   const inputId = React.useId();
   const isUpload = value.startsWith("data:");
+  const incomingDraft = isUpload ? "" : value;
+  const [draft, setDraft] = React.useState(incomingDraft);
+  const [previousDraft, setPreviousDraft] = React.useState(incomingDraft);
+  if (incomingDraft !== previousDraft) {
+    setPreviousDraft(incomingDraft);
+    setDraft(incomingDraft);
+  }
 
   return (
     <div className="space-y-2">
@@ -218,19 +325,20 @@ function ImageField({
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => {
-              onUpload(e.target.files?.[0]);
-              e.target.value = "";
+            onChange={(event) => {
+              onUpload(event.target.files?.[0]);
+              event.target.value = "";
             }}
           />
         </label>
         <Input
           type="url"
           placeholder="or paste image URL"
-          defaultValue={isUpload ? "" : value}
-          onBlur={(e) => {
-            const v = e.target.value.trim();
-            if (v && v !== value) onUrl(v);
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            const next = draft.trim();
+            if (next !== value) onUrl(next);
           }}
           className="h-9"
         />
