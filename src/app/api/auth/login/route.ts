@@ -2,23 +2,39 @@ import { NextResponse } from "next/server";
 import { loginCredentialsSchema } from "@/lib/schemas/auth";
 import { findUserByUsername, verifyPassword } from "@/lib/auth/users";
 import { signToken } from "@/lib/auth/jwt";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import {
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+} from "@/lib/auth/session";
+import { authIdentifier, parseJsonBody } from "@/lib/auth/http";
+import {
+  checkRateLimit,
+  rateLimitHeaders,
+} from "@/lib/auth/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const parsed = loginCredentialsSchema.safeParse(body);
+    const parsed = await parseJsonBody(
+      request,
+      loginCredentialsSchema,
+      "Invalid credentials format",
+    );
+    if (!parsed.ok) return parsed.response;
 
-    if (!parsed.success) {
+    const { username, password } = parsed.data;
+    const rateLimit = await checkRateLimit(
+      "password",
+      authIdentifier(request, username),
+    );
+    if (!rateLimit.success) {
       return NextResponse.json(
-        { error: "Invalid credentials format" },
-        { status: 400 },
+        { error: "Too many login attempts. Please try again later." },
+        { status: 429, headers: rateLimitHeaders(rateLimit.reset) },
       );
     }
 
-    const { username, password } = parsed.data;
     const user = findUserByUsername(username);
 
     if (!user || !verifyPassword(username, password)) {
@@ -45,16 +61,11 @@ export async function POST(request: Request) {
       },
     });
 
-    response.cookies.set(SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
+    response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions);
 
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Password login error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
