@@ -25,9 +25,15 @@ flowchart TB
   subgraph Server["Next.js server (route handlers)"]
     TextRoute["/api/ai/text"]
     ImageRoute["/api/ai/image"]
+    Auth["/api/auth + Proxy\nJWT sessions / OTP"]
     Adapters["provider-adapters.ts (server-only)"]
     TextRoute --> Adapters
     ImageRoute --> Adapters
+  end
+
+  subgraph AuthServices["Authentication services"]
+    Redis["Upstash Redis"]
+    Resend["Resend"]
   end
 
   subgraph Providers["External LLM providers"]
@@ -38,13 +44,17 @@ flowchart TB
 
   AiClient --> TextRoute
   AiClient --> ImageRoute
+  UI --> Auth
+  Auth --> Redis
+  Auth --> Resend
   Adapters --> OpenAI
   Adapters --> Anthropic
   Adapters --> Gemini
 ```
 
-The only server-side code paths are the two AI route handlers and the server-only
-provider adapters. Everything else runs in the browser.
+Server-side code is limited to authentication, the two AI route handlers, and
+the server-only provider adapters. Project content and provider settings remain
+browser-local.
 
 ## Layers
 
@@ -55,6 +65,7 @@ provider adapters. Everything else runs in the browser.
 | **Generation engine** | [`src/lib/generation`](../../src/lib/generation) | Pure, UI-free prompt templates + structured scaffold builders + realism rules. See [Generation engine](generation-engine.md). |
 | **AI layer** | [`src/lib/ai`](../../src/lib/ai), [`src/app/api/ai`](../../src/app/api/ai) | BYOK provider registry, prompt builders, server adapters, client, parsing. See [AI integration](ai-integration.md). |
 | **State** | [`src/lib/store`](../../src/lib/store) | Zustand stores with `localStorage` persistence. See [State & persistence](state-and-persistence.md). |
+| **Authentication** | [`src/lib/auth`](../../src/lib/auth), [`src/app/api/auth`](../../src/app/api/auth) | Signed HttpOnly sessions, password/OTP login, Redis-backed OTP challenges, and rate limiting. |
 | **UI** | [`src/app`](../../src/app), [`src/components`](../../src/components) | App Router pages, AppShell, design-system primitives, workspace panels. See [UI & design system](ui-and-design-system.md). |
 
 ## Directory structure
@@ -128,6 +139,9 @@ load, persisted data is re-validated and migrated through the schema.
    reviews and confirms it.
 7. **Local-first persistence.** All user data is in the browser; portability is via
    JSON import/export.
+8. **Shared browser workspace.** Authenticated accounts using the same browser
+   profile intentionally share projects, activity, and AI settings. Roles are
+   labels and do not currently enforce permissions.
 
 ## Where to go next
 

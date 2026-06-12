@@ -370,7 +370,7 @@ See [State & persistence](state-and-persistence.md) for the persistence mechanic
 | Key storage | Plaintext in `localStorage` | XSS / shared-device exposure |
 | Key transit | Browser -> Next.js route -> provider, same request | Visible in DevTools network tab |
 | Server persistence | None (proxy only) | No server key store (good) |
-| Route auth | None — open proxy; needs a valid key to be useful | Abuse possible if a key leaks |
+| Route auth | Valid RouteCrafter JWT session required in Proxy and the route handler | Provider keys remain browser-owned and are never persisted by the server |
 | Export | AI-usage appendix excludes keys and prompts | Safe to share exports |
 
 The Settings page states explicitly that keys are only in the browser's local

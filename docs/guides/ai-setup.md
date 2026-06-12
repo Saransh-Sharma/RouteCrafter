@@ -123,7 +123,7 @@ Be aware of how keys are handled in this version:
 | Transit | Keys are sent in the request body from your browser to the app's own `/api/ai/*` route, which forwards them to the provider for that single request. |
 | Server persistence | The server **does not store** your key — it only proxies the request. |
 | Export | Project exports and the AI-usage appendix **exclude** keys and prompt payloads. |
-| Route protection | The `/api/ai/*` routes are open proxies (no auth); they require a valid key in the request to do anything useful. |
+| Route protection | The `/api/ai/*` routes require a valid RouteCrafter session in addition to a provider key. |
 
 Practical advice (also shown in the Settings UI):
 

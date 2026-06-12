@@ -43,8 +43,8 @@ npx vitest
 
 ## Where your data lives
 
-RouteCrafter has **no backend and no account system**. Everything is stored in your
-browser:
+RouteCrafter uses server-side authentication, while project and AI settings stay
+in the browser:
 
 | Data | Storage key | Notes |
 | --- | --- | --- |
@@ -53,6 +53,11 @@ browser:
 
 Implications:
 
+- The three configured accounts share the same browser-local projects, activity,
+  and AI settings when they use the same browser profile. Accounts provide access
+  control and activity attribution, not private per-user workspaces.
+- The displayed `admin` and `editor` roles are descriptive labels only; they do
+  not currently grant different permissions.
 - Clearing site data, using a different browser, or a private window will lose or
   hide your projects.
 - To back up or transfer work, use **JSON export/import** in the workspace
@@ -61,6 +66,18 @@ Implications:
   exceeding browser quotas. Large embedded images (PDF cover/day images) are
   compressed before saving. See
   [State & persistence](../architecture/state-and-persistence.md).
+
+## Authentication configuration
+
+Copy `.env.example` to `.env.local` and configure the JWT secret and account
+passwords. Production deployments must also configure:
+
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for durable OTP
+  challenges and sliding-window rate limits across Vercel instances.
+- `RESEND_API_KEY` and `AUTH_EMAIL_FROM` for OTP delivery.
+
+Development without Upstash uses process-local storage and logs OTP codes to the
+server console. Production fails closed when Redis or email delivery is missing.
 
 ## First steps
 

@@ -8,9 +8,10 @@ custom travel-planning services. It helps you repeatedly produce premium,
 editorial, configurable itinerary products for any country, traveler type, trip
 length, budget, and deliverable format — without hardcoding any single country.
 
-It runs **fully offline-capable in the browser**: every artifact can be produced
-through copy-paste prompts (no API key required). Optional, opt-in AI assist lets
-you bring your own provider key (OpenAI, Anthropic, or Gemini) to draft content
+Project content remains local-first in the browser: every artifact can be
+produced through copy-paste prompts without an AI API key. Access to the app is
+protected by password or email-OTP authentication. Optional AI assist lets you
+bring your own provider key (OpenAI, Anthropic, or Gemini) to draft content
 directly inside the app.
 
 ## Tech stack
@@ -20,6 +21,7 @@ directly inside the app.
 - Tailwind CSS v4
 - [Zod](https://zod.dev) schemas as the single source of truth for the data model
 - [Zustand](https://zustand.docs.pmnd.rs) + `localStorage` for persistence
+- Signed HttpOnly JWT sessions, Resend email OTP, and Upstash Redis rate limits
 - Hand-built UI component system (`src/components/ui`)
 - `lucide-react` icons, `clsx` + `tailwind-merge` for class composition
 - `html2pdf.js` for client-side PDF export
@@ -38,6 +40,7 @@ first run.
 ```bash
 npm run lint     # ESLint
 npm run test     # Vitest (unit tests)
+npm run test:e2e # Playwright authentication flows
 npm run build    # Production build
 ```
 

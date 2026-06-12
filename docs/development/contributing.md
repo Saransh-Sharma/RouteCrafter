@@ -45,7 +45,8 @@ consult the bundled docs in `node_modules/next/dist/docs/`.
 
 ## Testing
 
-Tests use **Vitest** with Testing Library in a jsdom environment.
+Unit and route tests use **Vitest** with Testing Library. Authentication browser
+flows use **Playwright** with Chromium.
 
 Config ([`vitest.config.mts`](../../vitest.config.mts)):
 
@@ -71,11 +72,14 @@ Run them:
 ```bash
 npm run test     # one-shot (used in CI)
 npx vitest       # watch mode
+npm run test:e2e # Playwright authentication flows
 ```
 
-Existing tests cover the highest-risk logic — schemas, normalization, the store,
-generation, and key components. Examples in the repo include:
+Existing tests cover the highest-risk logic — authentication, schemas,
+normalization, the store, generation, and key components. Examples include:
 
+- `src/lib/auth/*.test.ts`, `src/app/api/auth/auth-routes.test.ts`
+- `src/proxy.test.ts`, `src/app/login/page.test.tsx`, `e2e/auth.spec.ts`
 - `src/lib/schemas/trip-config.test.ts`, `src/lib/schemas/ai-integration.test.ts`
 - `src/lib/project-normalization.test.ts`
 - `src/lib/store/projects-store.test.ts`,
@@ -107,13 +111,18 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run build
 ```
 
 Before opening a PR, run the same sequence locally:
 
 ```bash
-npm run lint && npm run test && npm run build
+npm run lint
+npm run test
+npm run test:e2e
+npm run build
 ```
 
 ## How to add a prompt template
