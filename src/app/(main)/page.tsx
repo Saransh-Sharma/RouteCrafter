@@ -8,11 +8,13 @@ import {
   Megaphone,
   FileType,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PreviewCard } from "@/components/ui/PreviewCard";
 import { ImportProjectButton } from "@/components/dashboard/ImportProjectButton";
 import { useProjectsStore } from "@/lib/store/projects-store";
+import { useAuthStore } from "@/lib/store/auth-store";
 import { useMounted } from "@/lib/hooks";
 
 const quickActions = [
@@ -42,13 +44,56 @@ const quickActions = [
   },
 ];
 
+function getGreeting(): { text: string; emoji: string } {
+  const hour = new Date().getHours();
+  if (hour < 12) return { text: "Good morning", emoji: "☀️" };
+  if (hour < 17) return { text: "Good afternoon", emoji: "🌤️" };
+  if (hour < 21) return { text: "Good evening", emoji: "🌅" };
+  return { text: "Good night", emoji: "🌙" };
+}
+
+const SUBTITLES = [
+  "Ready to craft your next itinerary?",
+  "What travel magic shall we create today?",
+  "Let's build something wanderlust-worthy.",
+  "Your itinerary studio awaits.",
+];
+
+function getDailySubtitle(): string {
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) /
+      86400000,
+  );
+  return SUBTITLES[dayOfYear % SUBTITLES.length];
+}
+
 export default function DashboardPage() {
   const mounted = useMounted();
   const projects = useProjectsStore((s) => s.projects);
+  const user = useAuthStore((s) => s.user);
   const recent = mounted ? projects.slice(0, 5) : [];
+  const greeting = getGreeting();
 
   return (
     <div className="space-y-12">
+      {/* Personalized greeting */}
+      <div
+        className="animate-in fade-in slide-in-from-bottom-4 space-y-3 duration-700"
+        style={{ animationFillMode: "both" }}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">{greeting.emoji}</span>
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+            {greeting.text}
+            {user ? `, ${user.displayName}` : ""}
+          </h1>
+        </div>
+        <p className="flex items-center gap-2 text-base text-ink-soft">
+          <Sparkles className="size-4 text-gold" />
+          {getDailySubtitle()}
+        </p>
+      </div>
+
       <SectionHeader
         eyebrow="Boutique Itinerary Studio"
         title="Your itinerary products"

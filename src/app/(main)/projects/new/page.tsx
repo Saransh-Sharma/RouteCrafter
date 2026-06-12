@@ -31,6 +31,7 @@ export default function NewProjectPage() {
   const [styles, setStyles] = React.useState<TravelStyle[]>([]);
   const [travelers, setTravelers] = React.useState<TravelerType[]>([]);
   const [voice, setVoice] = React.useState<BrandVoice>("editorial");
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   function toggle<T>(list: T[], value: T): T[] {
     return list.includes(value)
@@ -40,24 +41,32 @@ export default function NewProjectPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const project = create({
-      name: name.trim(),
-      country: country.trim(),
-      regions: regions
-        .split(",")
-        .map((r) => r.trim())
-        .filter(Boolean),
-      positioning: positioning.trim(),
-      targetAudience: audience.trim(),
-      travelStyles: styles,
-      travelerTypes: travelers,
-    });
-    if (voice !== "editorial") {
-      update(project.id, {
-        brandStyle: { ...project.brandStyle, voice },
+    setSubmitError(null);
+    try {
+      const project = create({
+        name: name.trim(),
+        country: country.trim(),
+        regions: regions
+          .split(",")
+          .map((r) => r.trim())
+          .filter(Boolean),
+        positioning: positioning.trim(),
+        targetAudience: audience.trim(),
+        travelStyles: styles,
+        travelerTypes: travelers,
       });
+      if (voice !== "editorial") {
+        const result = update(project.id, {
+          brandStyle: { ...project.brandStyle, voice },
+        });
+        if (!result.ok) throw new Error(result.error);
+      }
+      router.push(`/projects/${project.id}`);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Could not create the project.",
+      );
     }
-    router.push(`/projects/${project.id}`);
   }
 
   const canSubmit = name.trim() && country.trim();
@@ -191,6 +200,9 @@ export default function NewProjectPage() {
         </Card>
 
         <div className="flex items-center justify-end gap-3">
+          {submitError ? (
+            <p className="mr-auto text-sm text-terracotta">{submitError}</p>
+          ) : null}
           <Link
             href="/"
             className="inline-flex h-11 items-center rounded-full px-5 text-sm font-medium text-ink-soft hover:text-ink"

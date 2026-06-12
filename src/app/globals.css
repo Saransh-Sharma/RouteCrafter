@@ -32,6 +32,13 @@
   --rc-teal-soft: #dbe8e6;
   --rc-gold: #c19a4b;
   --rc-gold-soft: #f0e6cd;
+
+  /* Billable AI surfaces: warm, explicit, no generic purple/blue AI styling. */
+  --rc-ai-gold: #b88932;
+  --rc-ai-gold-soft: #f3e3bd;
+  --rc-ai-brown: #6b4d2e;
+  --rc-ai-border: #d6b66c;
+  --rc-ai-surface: #fff8e8;
 }
 
 @theme inline {
@@ -140,6 +147,64 @@
       transparent
     );
   }
+
+  /* Animation utilities */
+  .animate-in {
+    animation-duration: 150ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: rc-fade-in;
+  }
+
+  .slide-in-from-bottom-4 {
+    animation-name: rc-slide-in-from-bottom-4;
+  }
+
+  .slide-in-from-bottom-2 {
+    animation-name: rc-slide-in-from-bottom-2;
+  }
+
+  .duration-500 {
+    animation-duration: 500ms;
+  }
+
+  .duration-700 {
+    animation-duration: 700ms;
+  }
+}
+
+@keyframes rc-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rc-slide-in-from-bottom-4 {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rc-slide-in-from-bottom-2 {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /*
@@ -174,10 +239,10 @@
 }
 
 .rc-print-page {
-  /* A4-ish proportions for on-screen preview */
   position: relative;
-  width: 100%;
-  max-width: 794px;
+  width: 210mm;
+  min-width: 210mm;
+  min-height: 297mm;
   margin-inline: auto;
   background: var(--doc-paper);
 }
@@ -226,7 +291,7 @@
 .rc-doc-cover {
   position: relative;
   overflow: hidden;
-  min-height: 1040px;
+  min-height: 297mm;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -262,6 +327,7 @@
   color: #fff;
 }
 
+.rc-doc-cover.has-photo h1,
 .rc-doc-cover.has-photo .rc-doc-eyebrow {
   color: #fff;
 }
@@ -301,6 +367,11 @@
   color: var(--doc-accent);
 }
 
+.rc-doc-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 /* Print-friendly base for the PDF builder */
 @media print {
   body {
@@ -330,11 +401,13 @@
 
   @page {
     size: A4;
-    margin: 16mm;
+    margin: 0;
   }
 
   .rc-print-page {
-    max-width: none;
+    width: 210mm;
+    min-width: 210mm;
+    min-height: 297mm;
     break-after: page;
     page-break-after: always;
   }

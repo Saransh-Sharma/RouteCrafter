@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { Card, CardContent } from "@/components/ui/Card";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
+import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { useMounted } from "@/lib/hooks";
 
@@ -127,6 +128,10 @@ export default function ProjectWorkspacePage() {
       </div>
 
       <WorkspaceTabs project={project} modules={workspaceModules} />
+      
+      <div className="mt-12 pt-8 border-t border-border-soft">
+        <ActivityLog projectId={project.id} />
+      </div>
     </div>
   );
 }
