@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken } from "@/lib/auth/jwt";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 const PUBLIC_PATHS = ["/login", "/api/auth"];
 
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  return PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 }
 
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export async function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
 
-  // Allow public paths, static files, and assets
   if (
     isPublicPath(pathname) ||
     pathname.startsWith("/_next") ||
@@ -20,18 +22,19 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("rc-session")?.value;
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = token ? await verifyToken(token) : null;
 
-  if (!token) {
+  if (!session) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("redirect", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Verify token asynchronously isn't possible in sync proxy,
-  // so we do a fast check that token exists. Full JWT verification
-  // happens in the API routes / session helper. The proxy acts as
-  // a first-line guard.
   return NextResponse.next();
 }
 
