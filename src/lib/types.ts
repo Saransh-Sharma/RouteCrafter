@@ -34,6 +34,12 @@ export type {
   Accent,
   BrandVoice,
   PdfTheme,
+  OfferModel,
+  SalesChannel,
+  OutputRequirement,
+  PlannedEdition,
+  PublishReview,
+  ProductionPlan,
 } from "./schemas";
 
 /** A module/section inside the project workspace (UI-only). */

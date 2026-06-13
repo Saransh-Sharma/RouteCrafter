@@ -13,8 +13,9 @@ import { portfolioImagePromptSchema } from "./image-prompt";
 import { itineraryOutputSchema, itineraryMatrixSchema } from "./itinerary";
 import { marketplaceListingSchema } from "./listing";
 import { aiAcceptedRunSchema } from "./ai";
+import { productionPlanSchema } from "./production-plan";
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export const brandStyleSchema = z.object({
   businessName: z.string().default(""),
@@ -44,6 +45,7 @@ export const projectSchema = z.object({
   deliverables: z.array(deliverableEnum).default([]),
 
   brandStyle: brandStyleSchema.default(brandStyleSchema.parse({})),
+  productionPlan: productionPlanSchema.default(productionPlanSchema.parse({})),
 
   // Generated artifacts (filled in by later phases)
   tripConfigs: z.array(tripConfigurationSchema).default([]),

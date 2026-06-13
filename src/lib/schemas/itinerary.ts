@@ -38,6 +38,7 @@ export type DayPlan = z.infer<typeof dayPlanSchema>;
 
 export const itineraryOutputSchema = z.object({
   id: z.string(),
+  plannedEditionId: z.string().optional(),
   title: z.string(),
   subtitle: z.string().default(""),
   country: z.string(),
