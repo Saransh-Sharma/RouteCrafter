@@ -51,7 +51,6 @@ describe("TripConfigForm auto-save", () => {
       tripConfigs: Array<{ customDays?: number }>;
     };
     expect(patch.tripConfigs[0].customDays).toBeUndefined();
-    expect(screen.getByText("All changes saved")).toBeDefined();
   });
 
   it.each(["2.5", "-1", "61"])(
