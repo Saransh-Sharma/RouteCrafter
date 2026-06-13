@@ -72,28 +72,36 @@ that supports generation.
 
 See the [AI setup guide](../guides/ai-setup.md) for details.
 
-## Feature catalog
+## Guided production route
 
-RouteCrafter is organized as a per-project **workspace** with nine modules
-(documented step-by-step in the [user guide](../guides/user-guide.md)):
+Every project is organized around five flexible stages. The route line shows
+progress, launch blockers, and the most useful next action without preventing the
+seller from exploring another stage.
 
-| Module | What it produces |
+| Stage | Outcome |
 | --- | --- |
-| **Overview** | Read-only product summary and an AI-readiness checklist. |
-| **Trip Configuration** | The structured input form (cities, duration, traveler type, pace, budget, interests, constraints, logistics, must-see/avoid). Auto-saves; can be extracted from a buyer brief with AI. |
-| **Prompt Studio** | All 13 generation templates, grouped, as copy-paste prompts. Optionally run any prompt with AI. |
-| **Image Prompts** | Five portfolio image briefs (hero, what-you'll-get, sample itinerary, beyond-the-brochure, built-around-style) with optional AI image generation. |
-| **Itinerary Matrix** | A duration x traveler-type grid of route "spines" / variations. Expand any cell into a full itinerary. |
-| **Expanded Itinerary** | Full sellable day-by-day itineraries with time blocks, notes, guides, and per-day backup options. Supports multiple itineraries per project. |
-| **Listing Copy** | Marketplace listing: titles, tags, descriptions, tiered packages, FAQs, buyer requirements, upsells. |
-| **PDF Builder** | A themed, print-ready A4 itinerary document with cover/day images. Export via download or native print. |
-| **Export** | Central hub for exporting JSON, Markdown bundles, and CSV for every artifact. |
+| **Define the Product** | Choose Digital download, Custom service, or Hybrid; select channels, product positioning, trip brief, and output package. |
+| **Plan the Editions** | Commit to the exact duration and traveler combinations that will ship. Route concepts are inspiration, not required selections. |
+| **Build the Itineraries** | Complete one linked itinerary per planned edition across overview, days, included guides, and quality notes. |
+| **Package the Offer** | Create the adaptive marketplace listing, service packages/intake, portfolio visuals, PDF, spreadsheet, and production prompts. |
+| **Review and Publish** | Resolve blockers, review recommendations, confirm live-data and backup checks, then mark the project Ready to sell. |
+
+The workspace supports three offer models:
+
+- **Digital download:** a prebuilt itinerary sold through Etsy, Gumroad, or direct.
+- **Custom service:** personalized planning sold through Fiverr or direct.
+- **Hybrid:** a downloadable base product with paid personalization.
+
+The offer model changes listing and package requirements. Selected outputs are
+commitments: optional assets do not become launch blockers until they are added to
+the output package.
 
 ## Design philosophy
 
 - **Editorial, not generic SaaS.** Warm ivory paper, sage/forest/terracotta/teal/gold
   accents, serif display headings (Fraunces) and a clean sans body (Inter).
-- **Boutique studio feel** — rounded cards, soft shadows, generous whitespace.
+- **Boutique editorial feel** — document-like sections, restrained cards, fine
+  rules, and a route-map progression.
 - See [UI & design system](../architecture/ui-and-design-system.md) for the tokens.
 
 ## Core principles
@@ -117,5 +125,5 @@ These principles are enforced throughout the product and codebase:
 RouteCrafter is a client-side app. Your projects are stored in the browser's
 `localStorage` (key `routecrafter:v1`), and AI settings under a separate key. There
 is no server-side database and no account system. You can move work between browsers
-or back it up using the JSON import/export in the [Export](../guides/user-guide.md#export)
-tab. See [State & persistence](../architecture/state-and-persistence.md).
+or back it up using JSON from Project actions or Review and Publish. See
+[State & persistence](../architecture/state-and-persistence.md).

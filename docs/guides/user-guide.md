@@ -1,276 +1,127 @@
 # User Guide
 
-This guide walks through using RouteCrafter end-to-end, from the dashboard to a
-finished, exportable itinerary product. Each workspace tab is covered with its
-purpose, the actions available, how the free copy-paste workflow and optional AI
-workflow differ, and what it exports.
+RouteCrafter turns a destination idea into a reviewed itinerary offer. Every
+generation feature works without an API key; optional AI results are previewed
+before application.
 
-> Every generation feature works without an API key. Where a tab also supports
-> direct AI, that is called out explicitly. For AI configuration, see the
-> [AI setup guide](ai-setup.md).
+## Start a project
 
-> A polished, interactive version of this guide is also embedded in the app at the
-> **Guide** tab (`/guide`).
+From **New project**, enter the product name, destination, buyer, positioning, and
+initial travel styles. Choose the offer model:
 
-## Navigation overview
+- **Digital download** for a prebuilt Etsy, Gumroad, or direct-sale product.
+- **Custom service** for Fiverr or direct personalized planning.
+- **Hybrid** for a downloadable base with paid personalization.
 
-The app shell has a left sidebar (desktop) / top bar (mobile) with four
-destinations:
+Choose only the output files and sales assets you intend to finish. Marketplace
+listing is required for every offer.
 
-| Destination | Route | Purpose |
-| --- | --- | --- |
-| Dashboard | `/` | Recent projects, quick actions, import. |
-| Projects | `/projects` | Full grid of all your projects. |
-| Templates | `/templates` | Roadmap placeholder. |
-| Settings | `/settings` | AI provider keys and defaults. |
+## Follow the production route
 
-## Dashboard
+The workspace has five clickable stages. They are not locked, but RouteCrafter
+explains when an action is missing useful prerequisites. The route line and project
+header show derived progress and the recommended next action.
 
-The dashboard (`/`) shows:
+Navigation is shareable and restorable through query parameters, for example:
 
-- **Quick-action cards** that all lead to **New project**.
-- An **Import project** button (accepts a previously exported `.json` file).
-- Up to five **recent projects** as preview cards.
-
-Click any project card to open its workspace, or **New project** to start fresh.
-
-## Creating a project
-
-The create form (`/projects/new`) collects the product's high-level identity:
-
-- **Name** (required) — the project/product name.
-- **Country** and **regions/cities** — the destination scope.
-- **Positioning** — the one-line product angle (e.g. "Human-paced, family-friendly
-  Japan with built-in rest days").
-- **Target audience** — who the product is for.
-- **Brand voice** — editorial, premium, friendly, or adventurous.
-
-On submit, the project is created (with a `Draft` status and a rotating accent
-color) and you are taken to its workspace.
-
-## The project workspace
-
-The workspace header shows the country, name, and status, plus actions to
-**duplicate**, **export**, or **delete** the project. Below it is a row of nine
-tabs. Tabs are switched in-place (the active tab is local UI state, not a URL).
-
-```mermaid
-flowchart LR
-  Overview --> TripConfig[Trip Configuration]
-  TripConfig --> Prompts[Prompt Studio]
-  TripConfig --> Matrix[Itinerary Matrix]
-  Matrix -->|expand cell| Itinerary[Expanded Itinerary]
-  TripConfig --> Itinerary
-  Itinerary --> PDF[PDF Builder]
-  TripConfig --> Listing[Listing Copy]
-  TripConfig --> Images[Image Prompts]
-  Overview --> Export
-  PDF --> Export
-  Listing --> Export
-  Itinerary --> Export
+```text
+/projects/<id>?stage=build&edition=<edition-id>&tool=days
 ```
 
-A typical flow is: **Trip Configuration -> (Matrix) -> Expanded Itinerary -> PDF**,
-with **Listing Copy** and **Image Prompts** produced alongside, and everything
-collected in **Export**.
+### 1. Define the Product
 
----
+Confirm the offer model and sales channels first because they change later publish
+requirements. Complete the destination, target buyer, product promise, brand voice,
+and primary trip configuration.
 
-### Overview
+The trip form auto-saves. Logistics, preferences, constraints, and advanced brand
+details are available as deeper sections after the essentials.
 
-A read-only summary of the project: positioning, audience, regions, durations,
-traveler types, travel styles, and deliverables.
+The output package is grouped into:
 
-It also includes an **AI Readiness** card that checks whether you have configured
-any AI provider, suggests a next AI action, and links to Settings. A gold
-**"Verify before delivery"** disclaimer reminds you to confirm live data (hours,
-prices, availability) before shipping a product to a buyer.
+- **Core files:** PDF and spreadsheet.
+- **Included guides:** food, packing, and booking checklist.
+- **Sales assets:** marketplace listing and portfolio visuals.
 
-### Trip Configuration
+Legacy Map Pins selections remain visible after import but are not offered for new
+projects because RouteCrafter does not yet generate a map-pin artifact.
 
-This is the structured input that drives every other tab. It is a form backed by
-validation ([`tripConfigurationSchema`](../../src/lib/schemas/trip-config.ts)) and
-**auto-saves** (debounced) into the project's first trip config.
+### 2. Plan the Editions
 
-Sections include:
+Project durations and traveler types describe possible coverage. Planned editions
+are the exact combinations you commit to shipping.
 
-- **Basics** — cities, duration (with optional custom day count, 1-60), traveler
-  type, arrival/departure cities and times, season/month.
-- **Pace & budget** — pace (relaxed -> very active), budget tier, accommodation
-  preferences.
-- **Interests & constraints** — interests, food preferences, transport preferences,
-  and constraints (mobility, kids, dietary, "avoid tourist traps", etc.).
-- **Must-see & avoid** — free-text lists and any special occasion.
+Add at least one edition. RouteCrafter prevents duplicate duration/traveler
+combinations and shows the workload created by each addition. Each edition includes
+two to four route concepts as inspiration. Selecting a concept is optional.
 
-A sticky **Config Summary** mirrors your selections as you edit. Save status is
-shown as idle / saving / saved / error.
+Additional editions become publish blockers until their itineraries are completed
+or the editions are removed.
 
-**AI option:** you can paste a buyer's freeform brief and have AI extract a
-structured trip configuration from it (the result is previewed and merged into the
-form). See [AI integration](../architecture/ai-integration.md).
+### 3. Build the Itineraries
 
-### Prompt Studio
+Use the persistent edition switcher to create or continue one itinerary per planned
+edition. Itineraries are linked by edition id, not inferred from text labels.
 
-Prompt Studio exposes all **13 generation templates**, grouped by category
-(Positioning, Visuals, Itinerary, Listing, Guides). Each template turns your
-project configuration into a ready-to-use, copy-paste prompt.
+The editor is organized into:
 
-Actions:
+- **Overview:** title, audience, overview, and route summary.
+- **Days:** the exact number of day plans, each with title, base, and meaningful
+  activity content.
+- **Included guides:** guide fields selected in the output package.
+- **Quality notes:** verification notes and optional depth.
 
-- **Generate** a single template, or **Generate all**.
-- Edit the generated prompt in place (it is stored on the project).
-- **Copy** the prompt and run it in any external LLM, then paste the result into the
-  relevant tab's fields.
-- **Export** the generated prompts as a `.txt` bundle.
+The contextual checklist separates blockers from recommendations. Images, upgrades,
+rainy-day alternatives, and richer booking notes improve quality but do not block
+launch universally.
 
-**AI option:** run any generated prompt directly with your provider key; the result
-can be applied with replace / fill-empty / append modes.
+### 4. Package the Offer
 
-The full template catalog is documented in
-[Generation engine](../architecture/generation-engine.md).
+Package uses internal tools instead of adding more global workspace stages:
 
-### Image Prompts
+- **Marketplace listing:** titles, tags, descriptions, and delivery notes.
+- **Packages and intake:** service pricing, buyer requirements, and personalization
+  questions for Custom service and Hybrid.
+- **Portfolio visuals:** five image briefs; all five must be marked final when this
+  output is selected. Generated images are optional.
+- **PDF presentation:** themed, print-ready itinerary output when selected.
+- **Files and spreadsheet:** JSON, Markdown, CSV, and available delivery artifacts.
+- **Production tools:** copy-paste prompt templates and optional AI drafting.
 
-Generates **five portfolio image briefs** for the product's marketing visuals:
+Listing requirements adapt to the offer model. Digital products require delivery
+and export information. Services require at least one priced package and buyer
+intake. Hybrid offers require both.
 
-1. **Hero**
-2. **What you'll get**
-3. **Sample itinerary**
-4. **Beyond the brochure**
-5. **Built around your style**
+### 5. Review and Publish
 
-Each brief specifies the goal, canvas size, layout, visual elements, text overlay,
-shared style and negative prompts, and country-accuracy / readability notes — ready
-to paste into an image model (e.g. Midjourney) or to brief a designer.
+Review is divided into **Blockers**, **Recommended improvements**, and completed
+checks. Every issue links back to its exact stage, edition, or package tool.
 
-Per card you can **regenerate**, **mark final**, **AI-improve** the brief, or
-**AI-generate the image** itself (with a provider that supports images). Export all
-five as Markdown.
+Before marking a project **Ready to sell**, confirm:
 
-### Itinerary Matrix
+1. Live prices, hours, tickets, and availability are not represented as guaranteed.
+2. Final files and listing presentation were reviewed.
+3. The project is browser-local and a JSON backup was created.
 
-The matrix is a planning grid: **durations x traveler types**, where each cell holds
-2-4 route **variations** (e.g. "Classic First-Timer", "Local-First Slow Travel",
-and conditionally "Nature/Adventure" or "Premium Comfort"). Each variation has a
-one-line route **spine** (e.g. "Tokyo -> Hakone -> Kyoto - food & culture").
+Readiness-sensitive edits clear these confirmations and return a ready project to
+In progress. AI settings, activity history, and export preferences do not invalidate
+readiness. Duplicated projects always start with fresh confirmations.
 
-Actions:
+## Project actions
 
-- **Generate** the matrix from your configuration (variation labels adapt to your
-  travel styles, interests, and budget).
-- Edit each variation's spine inline.
-- **Expand** a cell: this sets a hint (duration + traveler type) and jumps you to
-  the Expanded Itinerary tab, pre-filling the itinerary creator.
-- **Export** the matrix as CSV or Markdown.
+Duplicate, JSON backup/export, delete, and activity history are grouped under
+**Project actions** in the workspace header. Auto-save state is shown once in that
+header rather than repeated as competing panel-level status.
 
-**AI option:** draft a richer matrix; merge with replace / fill-empty / append.
-A `PromptHelper` provides the copy-paste prompt for the no-key workflow.
+## Local data and backup
 
-### Expanded Itinerary
+Projects are stored in browser `localStorage` under `routecrafter:v1`. API keys use
+a separate settings store and are never included in project exports. Download JSON
+regularly from Project actions or Review and Publish, then use **Import project** on
+the dashboard to restore or move a project.
 
-This is the "Itinerary" tab — the full, sellable day-by-day plan. A project can hold
-**multiple itineraries** (e.g. a 5-day couple version and a 10-day family version).
+## AI usage
 
-To create one, choose a duration, traveler type, and style, then **Create
-itinerary**. The app scaffolds the days (arrival/orientation on day 1, departure on
-the last day, base cities rotating across your regions) so you start from structure,
-not a blank page. If you arrived via the matrix **Expand** button, those values are
-pre-filled.
-
-Each itinerary has editable top-level fields (overview, who it's for, route summary,
-best stay areas, food/transport guides, packing list, etiquette & safety, booking
-checklist, personalization questions, verification notes) and a **Day card** per day
-with:
-
-- Time blocks: morning, lunch, afternoon, evening, dinner.
-- Transport and booking notes.
-- Pace, walking intensity, optional upgrade.
-- **Low-energy** and **rainy-day** alternatives.
-- "Why this works" routing rationale.
-- An optional day image.
-
-**AI options:** draft an entire itinerary, improve a single day, or focus on
-specific guide sections. All AI output is previewed before it is applied.
-
-Export each itinerary as Markdown.
-
-### Listing Copy
-
-Produces the marketplace listing for the product (one listing per project):
-
-- Up to five **title options**.
-- **Tags** (8-12).
-- **Short** and **long descriptions**.
-- Tiered **packages** (e.g. Basic / Standard / Premium) with features and a price
-  field you fill in.
-- **FAQs**, **buyer requirements** (intake questions), and **upsells**.
-- **Delivery notes**.
-
-Choose a marketplace tone, **Generate** from templates (the scaffold ships with
-substantive starter copy — prices left blank for you to set), and edit freely.
-**Mark ready to sell** updates the project status. Export as Markdown.
-
-**AI option:** AI-improve the listing; merge into existing fields.
-
-### PDF Builder
-
-Turns an itinerary into a themed, print-ready **A4 document**.
-
-- Select which itinerary to render (empty state links you to the Expanded Itinerary
-  tab to create one first).
-- See a **live preview** of the multi-page document (cover, overview, day pages,
-  guides, disclaimer).
-- Use **theme controls** to pick a color theme (beige, sage, terracotta, teal,
-  noir) and to set a cover image and per-day images. Uploaded images are compressed
-  for local storage; you can also AI-generate cover/day images.
-
-Two export paths:
-
-- **Print / Save as PDF** — uses the browser print dialog with print styles that
-  hide the app chrome.
-- **Download PDF** — renders the document with `html2pdf.js`. The app waits for
-  fonts and images to finish loading and verifies remote images can be embedded; if
-  a remote image can't be captured (CORS), upload it or use the native print path
-  instead.
-
-Details in [UI & design system](../architecture/ui-and-design-system.md#pdf-builder).
-
-### Export
-
-The central export hub. From here you can export:
-
-- **Full project**: JSON (re-importable) and a **Markdown bundle** (optionally with
-  an AI-usage appendix).
-- **Per-artifact**: matrix (CSV / Markdown), itineraries (Markdown / CSV), listing
-  (Markdown), image prompts (Markdown), generated prompts (Markdown), and AI usage
-  (Markdown).
-
-The header **Export** button offers JSON + the Markdown bundle as a quick action;
-the full set of per-artifact exports lives in this tab.
-
----
-
-## Importing and backing up projects {#export}
-
-Because all data is local to your browser, JSON export/import is how you back up and
-move work:
-
-- **Export JSON** (Export tab or header) downloads a single `Project` as
-  pretty-printed JSON. The filename is a slug of the project name.
-- **Import project** (Dashboard) reads a `.json` file, validates it against the
-  project schema, fills any missing fields with current defaults, and adds it to your
-  list. If the imported project's id collides with an existing one, it is given a new
-  id so nothing is overwritten.
-
-Invalid files produce a clear message (e.g. "File is not valid JSON." or a specific
-field error). The exact format and validation are documented in
-[Data model -> Import / export](../architecture/data-model.md#import--export).
-
-## Tips
-
-- **Configure once, generate everywhere.** Most tabs read from your Trip
-  Configuration, so invest in that first.
-- **Stay editable.** Treat generated content (prompt or AI) as a draft — edit before
-  you ship.
-- **Always verify live data.** RouteCrafter never invents real prices, hours, or
-  availability; confirm them before delivering to a buyer.
+Prompt-output mode is always available. Direct AI requires a provider key in
+Settings, shows a billable-action confirmation, and requires preview before apply.
+See [AI setup](ai-setup.md) for provider configuration.

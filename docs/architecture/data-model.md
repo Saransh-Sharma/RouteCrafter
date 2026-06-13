@@ -12,6 +12,7 @@ Schemas live in [`src/lib/schemas`](../../src/lib/schemas):
 | --- | --- |
 | [`enums.ts`](../../src/lib/schemas/enums.ts) | All canonical option sets (durations, traveler types, styles, etc.). |
 | [`project.ts`](../../src/lib/schemas/project.ts) | The `Project` aggregate, `BrandStyle`, schema version. |
+| [`production-plan.ts`](../../src/lib/schemas/production-plan.ts) | Offer model, channels, output commitments, planned editions, and publish review. |
 | [`trip-config.ts`](../../src/lib/schemas/trip-config.ts) | `TripConfiguration` + `createEmptyTripConfig`. |
 | [`itinerary.ts`](../../src/lib/schemas/itinerary.ts) | `DayPlan`, `ItineraryOutput`, matrix schemas. |
 | [`listing.ts`](../../src/lib/schemas/listing.ts) | `MarketplaceListing`, packages, FAQs. |
@@ -32,6 +33,9 @@ erDiagram
   Project ||--o{ ItineraryOutput : "itineraries[]"
   Project ||--o| MarketplaceListing : "listing?"
   Project ||--o{ AiAcceptedRun : "aiRuns[]"
+  Project ||--|| ProductionPlan : "productionPlan"
+  ProductionPlan ||--o{ PlannedEdition : "editions[]"
+  PlannedEdition o|--o| ItineraryOutput : "itineraryId"
   Project ||--|| BrandStyle : "brandStyle"
   ItineraryOutput ||--o{ DayPlan : "days[]"
   ItineraryMatrix ||--o{ MatrixCell : "cells[]"
@@ -40,10 +44,9 @@ erDiagram
   MarketplaceListing ||--o{ FaqItem : "faqs[]"
 ```
 
-Relationships are **hierarchical, not relational**: a project may have many trip
-configs and itineraries, an optional single matrix and listing, and a flat map of
-generated prompt text. The matrix and the itineraries are not linked by id; the
-matrix is a planning grid and itineraries are independent documents.
+Relationships remain contained within the project aggregate. Planned editions link
+to itineraries by stable id so duplicate duration/traveler labels cannot attach the
+wrong document. The legacy matrix remains optional inspiration data.
 
 ## `Project`
 
@@ -56,7 +59,7 @@ The root entity, defined by `projectSchema`.
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `schemaVersion` | `number` (int) | `2` | Stamped on normalization. |
+| `schemaVersion` | `number` (int) | `3` | Stamped on normalization. |
 | `country` | `string` | `""` | |
 | `regions` | `string[]` | `[]` | Cities/regions. |
 | `positioning` | `string` | `""` | Product angle. |
@@ -65,6 +68,7 @@ The root entity, defined by `projectSchema`.
 | `travelerTypes` | `TravelerType[]` | `[]` | |
 | `durations` | `Duration[]` | `[]` | |
 | `deliverables` | `Deliverable[]` | `[]` | |
+| `productionPlan` | `ProductionPlan` | parsed defaults | Authoritative production and readiness model. |
 | `brandStyle` | `BrandStyle` | parsed empty object | Nested defaults. |
 | `tripConfigs` | `TripConfiguration[]` | `[]` | |
 | `imagePrompts` | `PortfolioImagePrompt[]` | `[]` | |
@@ -79,8 +83,27 @@ The root entity, defined by `projectSchema`.
 The current schema version is defined as:
 
 ```17:17:src/lib/schemas/project.ts
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 ```
+
+## `ProductionPlan`
+
+`productionPlan.outputs` is authoritative. Legacy project and trip-config
+deliverable arrays are accepted during import, normalized to output requirements,
+and mirrored only for backward-compatible export.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `offerModel` | `"digital" \| "service" \| "hybrid"` | Selects adaptive package and listing requirements. |
+| `channels` | `("fiverr" \| "etsy" \| "gumroad" \| "direct")[]` | Intended sales channels. |
+| `outputs` | `OutputRequirement[]` | Files, guides, and sales assets committed for launch. |
+| `editions` | `PlannedEdition[]` | Exact duration/traveler combinations committed for production. |
+| `review` | `PublishReview` | Manual live-data, presentation, and backup confirmations. |
+
+Each `PlannedEdition` has a unique `id`, duration, optional custom day count,
+traveler type, optional `itineraryId`, and creation timestamp. Each itinerary also
+stores `plannedEditionId`. `getProjectWorkflow(project)` derives stage state,
+blockers, warnings, completed checks, progress, and the recommended next action.
 
 ## `BrandStyle`
 
@@ -157,7 +180,7 @@ Defaulted fields include `subtitle`, `overview`, `whoFor`, `routeSummary`,
 `bestStayAreas`, `days: DayPlan[]` (`[]`), `foodGuide`, `transportGuide`,
 `packingList`, `etiquetteSafety`, `bookingChecklist`, `personalizationQuestions`,
 `verificationNotes`, `pdfTheme: PdfTheme` (`"beige"`), and `coverImage` (`""`).
-Optional: `style: TravelStyle`, `budget: Budget`.
+Optional: `style: TravelStyle`, `budget: Budget`, `plannedEditionId: string`.
 
 ### Matrix entities
 
@@ -250,25 +273,11 @@ commit. It exists to:
 2. **Stamp the current schema version** on every project.
 3. **Provide one validation path** so all entry points behave identically.
 
-```13:24:src/lib/project-normalization.ts
-/** Apply current nested defaults and stamp the current project schema version. */
-export function normalizeProject(raw: unknown): Project {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Project data must be an object.");
-  }
-
-  return projectSchema.parse({
-    ...raw,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-  });
-}
-```
-
-Migration is **default-driven**, not branch-based: there are no per-version `if`
-blocks. Re-parsing a v1 project through `projectSchema` fills fields added in v2
-(e.g. `pdfTheme`, `coverImage`, per-day `image`, `aiRuns`) with their defaults and
-stamps `schemaVersion: 2`. `normalizePersistedProjects` does the same for the whole
-persisted Zustand slice (`{ projects, initialized }`).
+Normalization parses current defaults, detects whether a production plan existed,
+maps legacy deliverables into authoritative output requirements, creates unique
+planned editions for legacy itineraries, and links both sides by id. It then stamps
+`schemaVersion: 3`. `normalizePersistedProjects` applies the same migration to the
+whole Zustand slice (`{ projects, initialized }`).
 
 ## Import / export {#import--export}
 

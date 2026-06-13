@@ -84,7 +84,7 @@ src/
   components/
     layout/                   # AppShell, Sidebar, MobileNav, nav, notices
     ui/                        # design-system primitives + field controls
-    workspace/                # WorkspaceTabs + the 9 panels (+ PromptHelper)
+    workspace/                # GuidedWorkspace stages + production tools
     ai/                        # AiRunSheet, AiCostButton
     dashboard/                # ImportProjectButton, etc.
   lib/
