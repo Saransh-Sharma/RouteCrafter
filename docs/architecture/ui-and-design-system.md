@@ -1,7 +1,7 @@
 # UI & Design System
 
 RouteCrafter's UI is a **Next.js 16 App Router** app with a single root layout, a
-hand-built design system (no Radix/shadcn), a tabbed project workspace, and a
+hand-built design system (no Radix/shadcn), a guided production workspace, and a
 client-side PDF builder. Most interactive pages are `"use client"` components; the
 root layout is a server component that loads fonts and wraps everything in
 `AppShell`.
@@ -15,7 +15,7 @@ There is no nested layout — every page shares the root layout only.
 | `/` | [`src/app/page.tsx`](../../src/app/page.tsx) | client | Dashboard: recent projects, quick actions, import. |
 | `/projects` | [`src/app/projects/page.tsx`](../../src/app/projects/page.tsx) | client | Full project grid. |
 | `/projects/new` | [`src/app/projects/new/page.tsx`](../../src/app/projects/new/page.tsx) | client | Create-project form -> workspace. |
-| `/projects/[id]` | [`src/app/projects/[id]/page.tsx`](../../src/app/projects/%5Bid%5D/page.tsx) | client | Project workspace (header + `WorkspaceTabs`). |
+| `/projects/[id]` | [`src/app/projects/[id]/page.tsx`](../../src/app/projects/%5Bid%5D/page.tsx) | client | Project workspace (header + `GuidedWorkspace`). |
 | `/templates` | [`src/app/templates/page.tsx`](../../src/app/templates/page.tsx) | server | Roadmap placeholder (`ComingSoon`). |
 | `/settings` | [`src/app/settings/page.tsx`](../../src/app/settings/page.tsx) | client | AI provider keys + defaults. |
 | `/api/ai/text`, `/api/ai/image` | [`src/app/api/ai`](../../src/app/api/ai) | route handlers | Server-side AI proxy (see [AI integration](ai-integration.md)). |
@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileNav />
         <main className="flex-1 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
-          <div className="mx-auto w-full max-w-6xl">
+          <div className="mx-auto w-full max-w-7xl">
             <PersistenceNotice />
             {children}
           </div>
@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- **Desktop (lg+):** fixed 256px `Sidebar` + scrollable main column (`max-w-6xl`).
+- **Desktop (lg+):** fixed 256px `Sidebar` + scrollable main column (`max-w-7xl`).
 - **Mobile:** sticky `MobileNav` top bar; sidebar hidden.
 - **`PersistenceNotice`** surfaces storage errors from the projects store
   (quota/save failures) with a dismiss action.
@@ -93,54 +93,23 @@ component library.
 Conventions: pill-shaped buttons/chips, `rounded-xl` inputs, forest/sage focus
 rings, paper backgrounds, soft inset shadows.
 
-## Workspace tabs
+## Guided workspace
 
-The workspace shell, [`WorkspaceTabs`](../../src/components/workspace/WorkspaceTabs.tsx),
-holds the active tab in **local React state** (not the URL). The module list comes
-from `workspaceModules` in [`src/lib/mock-data.ts`](../../src/lib/mock-data.ts).
+[`GuidedWorkspace`](../../src/components/workspace/guided/GuidedWorkspace.tsx)
+renders five clickable route stops and persists navigation in query parameters:
+`?stage=build&edition=<id>&tool=days`. Desktop uses a route line; mobile uses a
+compact Stage X of 5 selector and sticky Back/Next action bar.
 
-```19:30:src/components/workspace/WorkspaceTabs.tsx
-const IMPLEMENTED = new Set([
-  "overview",
-  "trip-config",
-  "prompts",
-  "image-prompts",
-  "matrix",
-  "expanded",
-  "listing",
-  "pdf",
-  "export",
-]);
-```
+Stage state and recommended actions come from the pure
+[`getProjectWorkflow`](../../src/lib/workflow.ts) helper. Stages never require a
+manual completion toggle and remain accessible even when prerequisites are
+missing. The active stage explains what is missing and links to the exact edition
+or package tool.
 
-All nine modules are implemented; an unimplemented id would render a locked
-placeholder. The panel switch maps each id to its component:
-
-```84:105:src/components/workspace/WorkspaceTabs.tsx
-  switch (current.id) {
-    case "overview":
-      return <OverviewPanel project={project} />;
-    case "trip-config":
-      return <TripConfigForm project={project} />;
-    case "prompts":
-      return <PromptStudioPanel project={project} />;
-    case "image-prompts":
-      return <ImagePromptsPanel project={project} />;
-    case "matrix":
-      return <MatrixPanel project={project} onNavigate={onNavigate} />;
-    case "expanded":
-      return <ExpandedItineraryPanel project={project} />;
-    case "listing":
-      return <ListingPanel project={project} />;
-    case "pdf":
-      return <PdfBuilderPanel project={project} onNavigate={onNavigate} />;
-    case "export":
-      return <ExportPanel project={project} />;
-```
-
-**Cross-tab navigation** uses the `onNavigate` callback: the matrix panel sets
-`expandHint` in the store and jumps to the itinerary tab; the PDF panel can jump to
-the itinerary tab when no itinerary exists yet.
+Package tools use internal navigation for marketplace listing, packages and intake,
+portfolio visuals, PDF presentation, exports, and Production tools. Prompt Studio
+is therefore secondary to the sellable workflow rather than a top-level project
+destination.
 
 Each panel is described in the [user guide](../guides/user-guide.md). Notable
 implementation details:
@@ -240,8 +209,7 @@ Beyond PDF, the [Export panel](../guides/user-guide.md) and the header
 [`export-bundle.ts`](../../src/components/workspace/export/export-bundle.ts)
 (`buildMarkdownBundle`, `itineraryToCsv`, `promptsToMarkdown`,
 `buildAiUsageAppendix`) and [`project-io.ts`](../../src/lib/io/project-io.ts) for JSON.
-PDF export is intentionally **not** in the header dropdown — it lives only in the PDF
-Builder tab.
+PDF export remains in the Package stage's PDF presentation tool.
 
 ## High-level UI map
 
@@ -251,11 +219,11 @@ flowchart TB
   subgraph Shell[AppShell]
     Nav["Sidebar / MobileNav"]
     Notice[PersistenceNotice]
-    Main["max-w-6xl main"]
+    Main["max-w-7xl main"]
   end
   Main --> Pages["Dashboard / Projects / New / Workspace / Settings"]
   Pages --> Store["Zustand stores (localStorage)"]
-  Workspace["/projects/[id]"] --> Tabs[WorkspaceTabs]
-  Tabs --> Panels["9 panels"]
-  Panels --> PDF["PDF Builder -> html2pdf.js + ItineraryDocument"]
+  Workspace["/projects/[id]"] --> Route["GuidedWorkspace: 5 stages"]
+  Route --> Tools["Edition editor + package tools"]
+  Tools --> PDF["PDF presentation -> html2pdf.js + ItineraryDocument"]
 ```

@@ -49,8 +49,9 @@ test("persists provider settings, tests a mocked connection, and removes the key
 
 test("blocks AI execution without a configured key", async ({ page }) => {
   await prepareApp(page, { projects: [fullProject] });
-  await page.goto(`/projects/${FULL_PROJECT_ID}`);
-  await page.getByRole("button", { name: "Prompt Studio" }).click();
+  await page.goto(
+    `/projects/${FULL_PROJECT_ID}?stage=package&tool=prompts`,
+  );
   await page.getByRole("button", { name: "Run with AI" }).click();
 
   await expect(page.getByText("Billable request")).toBeVisible();
@@ -72,8 +73,9 @@ test("previews and applies a mocked structured listing while recording usage", a
       "Mocked AI proposal for a rail-first Portugal culinary escape.",
   };
   await mockAiText(page, JSON.stringify(proposedListing));
-  await page.goto(`/projects/${FULL_PROJECT_ID}`);
-  await page.getByRole("button", { name: "Listing Copy" }).click();
+  await page.goto(
+    `/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`,
+  );
 
   const shortDescription = page
     .getByText("Short description", { exact: true })
@@ -89,7 +91,9 @@ test("previews and applies a mocked structured listing while recording usage", a
   await page.getByRole("button", { name: "Replace listing" }).click();
   await expect(shortDescription).toHaveValue(/Mocked AI proposal/);
 
-  await page.getByRole("button", { name: "Export", exact: true }).last().click();
+  await page.goto(
+    `/projects/${FULL_PROJECT_ID}?stage=package&tool=exports`,
+  );
   const usageRow = page
     .getByText("AI usage appendix", { exact: true })
     .locator("xpath=ancestor::div[contains(@class, 'rc-card')]");
@@ -101,8 +105,9 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
 }) => {
   await prepareApp(page, { projects: [fullProject], withAiKey: true });
   await mockAiText(page, '{"packages":"not-an-array"}');
-  await page.goto(`/projects/${FULL_PROJECT_ID}`);
-  await page.getByRole("button", { name: "Listing Copy" }).click();
+  await page.goto(
+    `/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`,
+  );
   await page.getByRole("button", { name: "AI improve listing" }).first().click();
   await page.getByRole("button", { name: "Confirm billable run" }).click();
   await expect(
@@ -117,7 +122,9 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
 
   await page.unroute("**/api/ai/text");
   await mockAiImage(page, mockImageDataUrl);
-  await page.getByRole("button", { name: "Image Prompts" }).click();
+  await page.goto(
+    `/projects/${FULL_PROJECT_ID}?stage=package&tool=visuals`,
+  );
   await page.getByRole("button", { name: "AI create image" }).first().click();
   await expect(page.getByText("Billable request")).toBeVisible();
   await page.getByRole("button", { name: "Confirm billable run" }).click();

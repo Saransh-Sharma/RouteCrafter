@@ -27,7 +27,13 @@ import { TagInput } from "../trip-config/TagInput";
 import { PromptHelper } from "../PromptHelper";
 import { downloadListingMarkdown } from "./export-listing";
 
-export function ListingPanel({ project }: { project: Project }) {
+export function ListingPanel({
+  project,
+  showReadyAction = true,
+}: {
+  project: Project;
+  showReadyAction?: boolean;
+}) {
   const update = useProjectsStore((s) => s.update);
   const listing = project.listing;
   const [aiOpen, setAiOpen] = React.useState(false);
@@ -227,7 +233,7 @@ export function ListingPanel({ project }: { project: Project }) {
             <FileDown className="size-4" />
             Markdown
           </Button>
-          {project.status !== "Ready to sell" ? (
+          {showReadyAction && project.status !== "Ready to sell" ? (
             <Button variant="secondary" size="sm" onClick={markReadyToSell}>
               <BadgeCheck className="size-4" />
               Mark ready to sell

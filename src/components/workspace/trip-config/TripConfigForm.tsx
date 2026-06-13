@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Check, Loader2 } from "lucide-react";
 import {
   createEmptyTripConfig,
   enumValues,
@@ -29,7 +28,13 @@ function serializeConfig(value: TripConfiguration): string {
   return JSON.stringify({ ...value, id: undefined, updatedAt: undefined });
 }
 
-export function TripConfigForm({ project }: { project: Project }) {
+export function TripConfigForm({
+  project,
+  showDeliverables = true,
+}: {
+  project: Project;
+  showDeliverables?: boolean;
+}) {
   const update = useProjectsStore((state) => state.update);
   const [status, setStatus] = React.useState<SaveStatus>("idle");
   const [saveError, setSaveError] = React.useState<string | null>(null);
@@ -55,6 +60,14 @@ export function TripConfigForm({ project }: { project: Project }) {
   const latestValuesRef = React.useRef(values);
   const timerRef = React.useRef<number | null>(null);
   const mountedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("routecrafter:save-state", {
+        detail: { status, error: saveError },
+      }),
+    );
+  }, [saveError, status]);
 
   React.useEffect(() => {
     reset(defaults);
@@ -438,43 +451,25 @@ export function TripConfigForm({ project }: { project: Project }) {
           </FormField>
         </Section>
 
-        <Section
-          title="Deliverables"
-          description="What this configuration should produce."
-        >
-          <Controller
-            control={control}
-            name="deliverables"
-            render={({ field }) => (
-              <ChipGroup
-                options={enumValues.deliverable}
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )}
-          />
-        </Section>
+        {showDeliverables ? (
+          <Section
+            title="Deliverables"
+            description="What this configuration should produce."
+          >
+            <Controller
+              control={control}
+              name="deliverables"
+              render={({ field }) => (
+                <ChipGroup
+                  options={enumValues.deliverable}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </Section>
+        ) : null}
 
-        <div className="flex items-center justify-end gap-2 text-sm">
-          {status === "saving" ? (
-            <span className="inline-flex items-center gap-1.5 text-ink-muted">
-              <Loader2 className="size-4 animate-spin" />
-              Saving...
-            </span>
-          ) : status === "saved" ? (
-            <span className="inline-flex items-center gap-1.5 font-medium text-forest">
-              <Check className="size-4" />
-              All changes saved
-            </span>
-          ) : status === "error" ? (
-            <span className="inline-flex items-center gap-1.5 text-terracotta">
-              <AlertCircle className="size-4" />
-              {saveError || "Could not save this configuration."}
-            </span>
-          ) : (
-            <span className="text-ink-muted">Changes save automatically</span>
-          )}
-        </div>
       </div>
 
       <div className="space-y-6 lg:col-span-1">

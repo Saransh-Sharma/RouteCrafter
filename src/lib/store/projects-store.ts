@@ -5,7 +5,10 @@ import {
   projectSchema,
   type Duration,
   type ItineraryOutput,
+  type OfferModel,
+  type OutputRequirement,
   type Project,
+  type SalesChannel,
   type TravelerType,
 } from "../schemas";
 import {
@@ -15,6 +18,7 @@ import {
 import { seedProjects } from "../seed-projects";
 import { logActivity } from "./activity-store";
 import { useAuthStore } from "./auth-store";
+import { readinessFingerprint } from "../workflow";
 
 export const MAX_PERSISTED_STATE_CHARS = 4_000_000;
 const PROJECTS_STORAGE_KEY = "routecrafter:v1";
@@ -43,6 +47,9 @@ export interface CreateProjectInput {
   travelerTypes?: Project["travelerTypes"];
   durations?: Project["durations"];
   deliverables?: Project["deliverables"];
+  offerModel?: OfferModel;
+  channels?: SalesChannel[];
+  outputs?: OutputRequirement[];
   accent?: Project["accent"];
 }
 
@@ -65,6 +72,7 @@ const PROJECT_UPDATE_FIELD_LABELS = {
   durations: "durations",
   deliverables: "deliverables",
   brandStyle: "brand style",
+  productionPlan: "production plan",
   tripConfigs: "trip configuration",
   imagePrompts: "image prompts",
   matrix: "itinerary matrix",
@@ -249,6 +257,17 @@ export const useProjectsStore = createZustand<ProjectsState>()(
             travelerTypes: input.travelerTypes ?? [],
             durations: input.durations ?? [],
             deliverables: input.deliverables ?? [],
+            productionPlan: {
+              offerModel: input.offerModel ?? "digital",
+              channels: input.channels ?? ["etsy"],
+              outputs: input.outputs ?? ["marketplace-listing", "pdf"],
+              editions: [],
+              review: {
+                liveDataVerified: false,
+                presentationReviewed: false,
+                backupConfirmed: false,
+              },
+            },
             accent,
             status: "Draft",
             createdAt: timestamp,
@@ -268,11 +287,31 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           const previousProject = get().projects.find((project) => project.id === id);
           const projects = get().projects.map((project) =>
             project.id === id
-              ? {
-                  ...updater(project),
-                  id: project.id,
-                  updatedAt: now(),
-                }
+              ? (() => {
+                  const updated = updater(project);
+                  const readinessChanged =
+                    readinessFingerprint(project) !==
+                    readinessFingerprint(updated);
+                  return {
+                    ...updated,
+                    productionPlan: readinessChanged
+                      ? {
+                          ...updated.productionPlan,
+                          review: {
+                            liveDataVerified: false,
+                            presentationReviewed: false,
+                            backupConfirmed: false,
+                          },
+                        }
+                      : updated.productionPlan,
+                    status:
+                      readinessChanged && project.status === "Ready to sell"
+                        ? "In progress"
+                        : updated.status,
+                    id: project.id,
+                    updatedAt: now(),
+                  };
+                })()
               : project,
           );
           const result = commitProjects(projects);
@@ -316,6 +355,14 @@ export const useProjectsStore = createZustand<ProjectsState>()(
             id: crypto.randomUUID(),
             name: `${original.name} (Copy)`,
             status: "Draft",
+            productionPlan: {
+              ...original.productionPlan,
+              review: {
+                liveDataVerified: false,
+                presentationReviewed: false,
+                backupConfirmed: false,
+              },
+            },
             createdAt: timestamp,
             updatedAt: timestamp,
           };

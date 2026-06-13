@@ -13,6 +13,7 @@ export * from "./image-prompt";
 export * from "./itinerary";
 export * from "./listing";
 export * from "./ai";
+export * from "./production-plan";
 export * from "./project";
 export * from "./auth";
 export * from "./activity";

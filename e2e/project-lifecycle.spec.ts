@@ -64,7 +64,7 @@ test("creates, persists, duplicates, and deletes a project", async ({
   await expect(
     page.getByRole("heading", { name: "Iceland Winter Weekend" }),
   ).toBeVisible();
-  await expect(page.getByText("Iceland", { exact: true })).toBeVisible();
+  await expect(page.getByText("Iceland", { exact: true }).first()).toBeVisible();
 
   const createdUrl = page.url();
   await page.reload();
@@ -73,14 +73,17 @@ test("creates, persists, duplicates, and deletes a project", async ({
     page.getByRole("heading", { name: "Iceland Winter Weekend" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Duplicate" }).click();
+  await page.getByLabel("Project actions").click();
+  await page.getByRole("button", { name: "Duplicate project" }).click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/);
   await expect(
     page.getByRole("heading", { name: "Iceland Winter Weekend (Copy)" }),
   ).toBeVisible();
+  await page.getByText("Project activity").click();
   await expect(page.getByText("Admin duplicated this project")).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());
+  await page.getByLabel("Project actions").click();
   await page.getByRole("button", { name: "Delete project" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByText("Iceland Winter Weekend")).toBeVisible();
@@ -111,6 +114,7 @@ test("validates imports, resolves id collisions, and exports portable JSON", asy
     page.getByRole("heading", { name: "Portugal Editorial Escape" }),
   ).toBeVisible();
 
+  await page.getByLabel("Project actions").click();
   await page.getByRole("button", { name: "Export" }).first().click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: /Export JSON/ }).click();
@@ -119,7 +123,7 @@ test("validates imports, resolves id collisions, and exports portable JSON", asy
   const exported = JSON.parse(await readFile(await download.path(), "utf8"));
   expect(exported.id).not.toBe(FULL_PROJECT_ID);
   expect(exported.name).toBe("Portugal Editorial Escape");
-  expect(exported.schemaVersion).toBe(2);
+  expect(exported.schemaVersion).toBe(3);
 });
 
 test("shows a recoverable not-found state for missing local projects", async ({

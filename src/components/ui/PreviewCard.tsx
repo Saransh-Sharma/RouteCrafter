@@ -3,6 +3,7 @@ import { ArrowUpRight, MapPin } from "lucide-react";
 import type { Project } from "@/lib/types";
 import { Badge } from "./Badge";
 import { cn } from "@/lib/utils";
+import { getProjectWorkflow } from "@/lib/workflow";
 
 const accentBands: Record<Project["accent"], string> = {
   sage: "from-sage/35 to-sage-soft",
@@ -19,6 +20,7 @@ const statusTone = {
 } as const;
 
 export function PreviewCard({ project }: { project: Project }) {
+  const workflow = getProjectWorkflow(project);
   return (
     <Link
       href={`/projects/${project.id}`}
@@ -54,10 +56,25 @@ export function PreviewCard({ project }: { project: Project }) {
           {project.positioning}
         </p>
 
-        <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2">
+        <div className="mt-auto space-y-3 pt-2">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-ink-muted">
+              <span>{workflow.recommendedAction}</span>
+              <span>{workflow.progress}%</span>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-paper-2">
+              <div
+                className="h-full rounded-full bg-forest transition-[width]"
+                style={{ width: `${workflow.progress}%` }}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={statusTone[project.status]}>{project.status}</Badge>
-          <Badge tone="neutral">{project.durations.length} durations</Badge>
-          <Badge tone="neutral">{project.deliverables.length} deliverables</Badge>
+            <Badge tone="neutral">
+              {project.productionPlan.editions.length} planned editions
+            </Badge>
+          </div>
         </div>
       </div>
     </Link>

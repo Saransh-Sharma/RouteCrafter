@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2, FileDown, Map, CalendarPlus } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  FileDown,
+  Map,
+  CalendarPlus,
+  Check,
+  CircleAlert,
+} from "lucide-react";
 import type {
   Duration,
   ItineraryOutput,
@@ -31,6 +39,11 @@ import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
 import { downloadItineraryMarkdown } from "./export-itinerary";
 import type { ExpandHint } from "@/lib/store/projects-store";
+import {
+  editionLabel,
+  itineraryBlockers,
+  itineraryForEdition,
+} from "@/lib/workflow";
 
 const TOP_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -56,13 +69,25 @@ type ItineraryAiTarget =
 export function ExpandedItineraryPanel({
   project,
   expandHint = null,
+  selectedEditionId,
+  activeSection = "overview",
+  onSectionChange,
 }: {
   project: Project;
   expandHint?: ExpandHint | null;
+  selectedEditionId?: string;
+  activeSection?: string;
+  onSectionChange?: (section: string) => void;
 }) {
   const update = useProjectsStore((s) => s.update);
 
   const itineraries = project.itineraries;
+  const selectedEdition = project.productionPlan.editions.find(
+    (edition) => edition.id === selectedEditionId,
+  );
+  const editionItinerary = selectedEdition
+    ? itineraryForEdition(project, selectedEdition)
+    : undefined;
 
   const [creator, setCreator] = React.useState<{
     open: boolean;
@@ -79,12 +104,15 @@ export function ExpandedItineraryPanel({
     style: "",
   }));
   const [selectedId, setSelectedId] = React.useState<string | null>(
-    itineraries[0]?.id ?? null,
+    editionItinerary?.id ?? itineraries[0]?.id ?? null,
   );
   const [aiTarget, setAiTarget] = React.useState<ItineraryAiTarget | null>(null);
 
   const selected =
-    itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;
+    editionItinerary ??
+    itineraries.find((it) => it.id === selectedId) ??
+    itineraries[0] ??
+    null;
 
   function setItineraries(next: ItineraryOutput[]) {
     update(project.id, { itineraries: next });
@@ -102,12 +130,27 @@ export function ExpandedItineraryPanel({
 
   function createItinerary() {
     const itinerary = buildItinerary(buildContext(project), {
-      duration: creator.duration as Duration,
-      customDays: creator.customDays,
-      travelerType: creator.travelerType as TravelerType,
+      duration: selectedEdition?.duration ?? (creator.duration as Duration),
+      customDays: selectedEdition?.customDays ?? creator.customDays,
+      travelerType:
+        selectedEdition?.travelerType ??
+        (creator.travelerType as TravelerType),
       style: creator.style ? (creator.style as TravelStyle) : undefined,
     });
-    setItineraries([...itineraries, itinerary]);
+    itinerary.plannedEditionId = selectedEdition?.id;
+    update(project.id, {
+      itineraries: [...itineraries, itinerary],
+      productionPlan: selectedEdition
+        ? {
+            ...project.productionPlan,
+            editions: project.productionPlan.editions.map((edition) =>
+              edition.id === selectedEdition.id
+                ? { ...edition, itineraryId: itinerary.id }
+                : edition,
+            ),
+          }
+        : project.productionPlan,
+    });
     setSelectedId(itinerary.id);
     setCreator((c) => ({ ...c, open: false }));
   }
@@ -315,18 +358,80 @@ export function ExpandedItineraryPanel({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
       {/* Sidebar: itinerary list + creator */}
       <aside className="space-y-3 lg:col-span-1">
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() =>
-            setCreator((c) => ({ ...c, open: !c.open }))
-          }
-        >
-          <Plus className="size-4" />
-          New itinerary
-        </Button>
+        {selectedEdition ? (
+          <>
+            <div className="border-b border-border-strong pb-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-terracotta">
+                Current edition
+              </p>
+              <p className="mt-1 text-sm font-semibold text-ink">
+                {editionLabel(selectedEdition)}
+              </p>
+            </div>
+            <nav className="space-y-1" aria-label="Itinerary sections">
+              {[
+                ["overview", "Overview"],
+                ["days", "Daily plan"],
+                ["guides", "Included guides"],
+                ["quality", "Quality notes"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSectionChange?.(id)}
+                  className={cn(
+                    "flex w-full items-center justify-between border-b border-border-soft px-2 py-3 text-left text-sm font-medium",
+                    activeSection === id
+                      ? "bg-sage-soft/70 text-forest"
+                      : "text-ink-soft hover:text-ink",
+                  )}
+                >
+                  {label}
+                  {id === "quality" &&
+                  itineraryBlockers(project, selectedEdition).length ? (
+                    <CircleAlert className="size-3.5 text-terracotta" />
+                  ) : null}
+                </button>
+              ))}
+            </nav>
+            <div className="mt-5 border border-border-soft bg-paper/45 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                Launch checklist
+              </p>
+              <div className="mt-3 space-y-2">
+                {itineraryBlockers(project, selectedEdition).length ? (
+                  itineraryBlockers(project, selectedEdition)
+                    .slice(0, 5)
+                    .map((blocker) => (
+                      <p
+                        key={blocker}
+                        className="flex items-start gap-2 text-xs leading-5 text-ink-soft"
+                      >
+                        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-terracotta" />
+                        {blocker}
+                      </p>
+                    ))
+                ) : (
+                  <p className="flex items-center gap-2 text-xs text-forest">
+                    <Check className="size-3.5" />
+                    Edition is complete
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => setCreator((c) => ({ ...c, open: !c.open }))}
+          >
+            <Plus className="size-4" />
+            New itinerary
+          </Button>
+        )}
 
-        {creator.open ? (
+        {!selectedEdition && creator.open ? (
           <Card>
             <CardContent className="space-y-3 p-4">
               <FormField label="Duration">
@@ -388,7 +493,7 @@ export function ExpandedItineraryPanel({
           </Card>
         ) : null}
 
-        <div className="space-y-1.5">
+        {!selectedEdition ? <div className="space-y-1.5">
           {itineraries.map((it) => (
             <button
               key={it.id}
@@ -405,7 +510,7 @@ export function ExpandedItineraryPanel({
               <span className="text-xs text-ink-muted">{it.travelerType}</span>
             </button>
           ))}
-        </div>
+        </div> : null}
       </aside>
 
       {/* Editor */}
@@ -457,17 +562,14 @@ export function ExpandedItineraryPanel({
               </div>
             </div>
 
-            <PromptHelper
-              project={project}
-              templateIds={[
-                "expanded-itinerary",
-                "food-guide",
-                "transport-guide",
-                "packing-list",
-              ]}
-            />
+            {activeSection === "overview" ? (
+              <PromptHelper
+                project={project}
+                templateIds={["expanded-itinerary"]}
+              />
+            ) : null}
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {activeSection === "overview" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ["AI fill empty sections", "Fill only weak or empty itinerary fields."],
                 ["AI add rainy-day alternatives", "Improve rainy-day alternatives for each day."],
@@ -485,9 +587,9 @@ export function ExpandedItineraryPanel({
                   {title}
                 </AiCostButton>
               ))}
-            </div>
+            </div> : null}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {activeSection === "overview" ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {TOP_FIELDS.map((f) => (
                 <FormField key={f.key} label={f.label}>
                   <Textarea
@@ -497,8 +599,9 @@ export function ExpandedItineraryPanel({
                   />
                 </FormField>
               ))}
-            </div>
+            </div> : null}
 
+            {activeSection === "days" ? <>
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
                 Days ({selected.days.length})
@@ -537,9 +640,24 @@ export function ExpandedItineraryPanel({
                 />
               ))}
             </div>
+            </> : null}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {GUIDE_FIELDS.map((f) => (
+            {activeSection === "guides" || activeSection === "quality" ? (
+            <div className="space-y-5">
+              <PromptHelper
+                project={project}
+                templateIds={
+                  activeSection === "guides"
+                    ? ["food-guide", "transport-guide", "packing-list"]
+                    : ["expanded-itinerary"]
+                }
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {GUIDE_FIELDS.filter((field) =>
+                activeSection === "quality"
+                  ? ["etiquetteSafety", "verificationNotes"].includes(field.key)
+                  : !["etiquetteSafety", "verificationNotes"].includes(field.key),
+              ).map((f) => (
                 <FormField key={f.key} label={f.label}>
                   <Textarea
                     value={selected[f.key] as string}
@@ -548,7 +666,9 @@ export function ExpandedItineraryPanel({
                   />
                 </FormField>
               ))}
+              </div>
             </div>
+            ) : null}
           </div>
         ) : (
           <Card>

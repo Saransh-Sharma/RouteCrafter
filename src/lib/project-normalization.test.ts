@@ -35,4 +35,48 @@ describe("project normalization", () => {
       normalizePersistedProjects({ projects: [], initialized: true }),
     ).toEqual({ projects: [], initialized: true });
   });
+
+  it("migrates legacy deliverables and itineraries into a production plan", () => {
+    const legacy = structuredClone(seedProjects[0]) as Record<string, unknown>;
+    delete legacy.productionPlan;
+    legacy.schemaVersion = 2;
+    legacy.deliverables = [
+      "PDF",
+      "Food guide",
+      "Portfolio image prompts",
+      "Map pins",
+    ];
+    legacy.itineraries = [
+      {
+        id: "legacy-itinerary",
+        title: "Legacy",
+        country: "Japan",
+        duration: "6 days",
+        travelerType: "Couple",
+        days: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const normalized = normalizeProject(legacy);
+
+    expect(normalized.productionPlan.outputs).toEqual([
+      "marketplace-listing",
+      "pdf",
+      "food-guide",
+      "portfolio-visuals",
+      "map-pins-legacy",
+    ]);
+    expect(normalized.productionPlan.editions[0]).toMatchObject({
+      duration: "5 days",
+      customDays: 6,
+      travelerType: "Couple",
+      itineraryId: "legacy-itinerary",
+    });
+    expect(normalized.itineraries[0].plannedEditionId).toBe(
+      normalized.productionPlan.editions[0].id,
+    );
+    expect(normalized.productionPlan.review.liveDataVerified).toBe(false);
+  });
 });
