@@ -44,7 +44,7 @@ describe("projects store mutations", () => {
       projectId: project.id,
       userId: "user_test",
       action: "updated",
-      detail: "updated name and country",
+      detail: "updated name, country, and status",
     });
   });
 
@@ -151,5 +151,68 @@ describe("projects store mutations", () => {
 
     expect(useProjectsStore.getState().initialized).toBe(true);
     expect(useProjectsStore.getState().projects).toEqual([]);
+  });
+
+  it("invalidates publish confirmation after a readiness-sensitive edit", () => {
+    const project = useProjectsStore.getState().projects[0];
+    useProjectsStore.setState({
+      projects: [
+        {
+          ...project,
+          status: "Ready to sell",
+          productionPlan: {
+            ...project.productionPlan,
+            review: {
+              liveDataVerified: true,
+              presentationReviewed: true,
+              backupConfirmed: true,
+              confirmedAt: "2026-06-13T10:00:00.000Z",
+            },
+          },
+        },
+      ],
+    });
+
+    useProjectsStore.getState().update(project.id, {
+      positioning: "A newly revised product promise.",
+    });
+
+    const updated = useProjectsStore.getState().projects[0];
+    expect(updated.status).toBe("In progress");
+    expect(updated.productionPlan.review).toEqual({
+      liveDataVerified: false,
+      presentationReviewed: false,
+      backupConfirmed: false,
+    });
+  });
+
+  it("resets publish confirmation when duplicating a ready project", () => {
+    const project = useProjectsStore.getState().projects[0];
+    useProjectsStore.setState({
+      projects: [
+        {
+          ...project,
+          status: "Ready to sell",
+          productionPlan: {
+            ...project.productionPlan,
+            review: {
+              liveDataVerified: true,
+              presentationReviewed: true,
+              backupConfirmed: true,
+              confirmedAt: "2026-06-13T10:00:00.000Z",
+            },
+          },
+        },
+      ],
+    });
+
+    const copy = useProjectsStore.getState().duplicate(project.id);
+
+    expect(copy?.status).toBe("Draft");
+    expect(copy?.productionPlan.review).toEqual({
+      liveDataVerified: false,
+      presentationReviewed: false,
+      backupConfirmed: false,
+    });
   });
 });

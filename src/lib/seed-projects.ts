@@ -1,4 +1,5 @@
-import { projectSchema, type Project } from "./schemas";
+import type { Project } from "./schemas";
+import { normalizeProject } from "./project-normalization";
 
 /**
  * Example projects seeded into the store on first run. Each is parsed through
@@ -21,7 +22,7 @@ function makeSeed(input: {
   createdAt: string;
   updatedAt: string;
 }): Project {
-  return projectSchema.parse(input);
+  return normalizeProject(input);
 }
 
 export const seedProjects: Project[] = [
