@@ -16,7 +16,53 @@ import {
 } from "@/components/ui/field";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { enumValues } from "@/lib/schemas";
-import type { BrandVoice, TravelStyle, TravelerType } from "@/lib/types";
+import type {
+  BrandVoice,
+  OfferModel,
+  OutputRequirement,
+  SalesChannel,
+  TravelStyle,
+  TravelerType,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const OFFER_OPTIONS: {
+  id: OfferModel;
+  label: string;
+  description: string;
+  channels: SalesChannel[];
+}[] = [
+  {
+    id: "digital",
+    label: "Digital download",
+    description: "A prebuilt itinerary sold on Etsy, Gumroad, or your shop.",
+    channels: ["etsy"],
+  },
+  {
+    id: "service",
+    label: "Custom service",
+    description: "A personalized itinerary created from a buyer brief.",
+    channels: ["fiverr"],
+  },
+  {
+    id: "hybrid",
+    label: "Hybrid",
+    description: "A ready-made product with an optional customization service.",
+    channels: ["etsy", "direct"],
+  },
+];
+
+const STARTER_OUTPUTS: {
+  id: OutputRequirement;
+  label: string;
+}[] = [
+  { id: "pdf", label: "PDF" },
+  { id: "spreadsheet", label: "Spreadsheet" },
+  { id: "food-guide", label: "Food guide" },
+  { id: "packing-list", label: "Packing list" },
+  { id: "booking-checklist", label: "Booking checklist" },
+  { id: "portfolio-visuals", label: "Portfolio visuals" },
+];
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -31,6 +77,11 @@ export default function NewProjectPage() {
   const [styles, setStyles] = React.useState<TravelStyle[]>([]);
   const [travelers, setTravelers] = React.useState<TravelerType[]>([]);
   const [voice, setVoice] = React.useState<BrandVoice>("editorial");
+  const [offerModel, setOfferModel] = React.useState<OfferModel>("digital");
+  const [outputs, setOutputs] = React.useState<OutputRequirement[]>([
+    "marketplace-listing",
+    "pdf",
+  ]);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   function toggle<T>(list: T[], value: T): T[] {
@@ -54,6 +105,11 @@ export default function NewProjectPage() {
         targetAudience: audience.trim(),
         travelStyles: styles,
         travelerTypes: travelers,
+        offerModel,
+        channels:
+          OFFER_OPTIONS.find((option) => option.id === offerModel)?.channels ??
+          ["etsy"],
+        outputs,
       });
       if (voice !== "editorial") {
         const result = update(project.id, {
@@ -83,11 +139,36 @@ export default function NewProjectPage() {
 
       <SectionHeader
         eyebrow="New country project"
-        title="Create an itinerary product"
-        subtitle="Set the foundations for a country listing. You'll configure deep trip parameters, generate prompts, and build deliverables inside the workspace."
+        title="Choose what you want to sell"
+        subtitle="Start with the offer model and product promise. RouteCrafter will turn those choices into a guided route from brief to launch."
       />
 
       <form onSubmit={handleSubmit} className="space-y-8">
+        <section className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {OFFER_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setOfferModel(option.id)}
+                className={cn(
+                  "border px-5 py-5 text-left transition-colors",
+                  offerModel === option.id
+                    ? "border-forest bg-sage-soft/70"
+                    : "border-border-soft bg-paper/45 hover:border-forest/35",
+                )}
+              >
+                <span className="text-base font-semibold text-ink">
+                  {option.label}
+                </span>
+                <span className="mt-2 block text-sm leading-6 text-ink-soft">
+                  {option.description}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <Card>
           <CardContent className="space-y-6 p-6 sm:p-8">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -195,6 +276,28 @@ export default function NewProjectPage() {
                 <option value="friendly">Friendly &amp; practical</option>
                 <option value="adventurous">Adventurous &amp; energetic</option>
               </Select>
+            </FormField>
+
+            <FormField
+              label="Starter output package"
+              hint="Marketplace listing is always included. Add only the files and assets you intend to finish."
+            >
+              <div className="flex flex-wrap gap-2">
+                {STARTER_OUTPUTS.map((output) => (
+                  <CheckboxChip
+                    key={output.id}
+                    label={output.label}
+                    selected={outputs.includes(output.id)}
+                    onToggle={() =>
+                      setOutputs((current) =>
+                        current.includes(output.id)
+                          ? current.filter((item) => item !== output.id)
+                          : [...current, output.id],
+                      )
+                    }
+                  />
+                ))}
+              </div>
             </FormField>
           </CardContent>
         </Card>
