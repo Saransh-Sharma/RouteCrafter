@@ -3,17 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  LayoutDashboard,
   SlidersHorizontal,
-  Wand2,
-  Images,
   Grid3x3,
   Map,
   BadgeDollarSign,
-  FileType,
   Download,
   BookOpen,
   Sparkles,
+  Wand2,
   Lightbulb,
   Info,
   AlertTriangle,
@@ -37,109 +34,57 @@ const SECTIONS: TocItem[] = [
   { id: "principles", label: "Principles & tips" },
 ];
 
-interface TabInfo {
+interface StageInfo {
   icon: LucideIcon;
   name: string;
   summary: string;
   actions: string[];
-  free?: string;
-  ai?: string;
-  exports?: string;
 }
 
-const TABS: TabInfo[] = [
-  {
-    icon: LayoutDashboard,
-    name: "Overview",
-    summary: "A read-only snapshot of your product, plus an AI-readiness check.",
-    actions: [
-      "Review positioning, audience, regions, durations and deliverables",
-      "See whether an AI provider is connected and what to do next",
-    ],
-  },
+const STAGES: StageInfo[] = [
   {
     icon: SlidersHorizontal,
-    name: "Trip Configuration",
-    summary:
-      "The structured inputs that drive every other tab. Auto-saves as you type.",
+    name: "1. Define the Product",
+    summary: "Decide what you are selling and who it is for.",
     actions: [
-      "Set cities, duration, traveler type, pace and budget",
-      "Pick interests, food, transport and constraints",
-      "List must-see and must-avoid, plus any special occasion",
+      "Choose Digital download, Custom service, or Hybrid",
+      "Set channels, destination, buyer, positioning, trip brief, and output package",
     ],
-    ai: "Paste a buyer's freeform brief and extract a configuration automatically.",
-  },
-  {
-    icon: Wand2,
-    name: "Prompt Studio",
-    summary: "All 13 generation templates as copy-paste prompts, grouped by purpose.",
-    actions: [
-      "Generate one template or all of them at once",
-      "Edit and copy any prompt to run in your LLM of choice",
-    ],
-    free: "Works with no key; export the prompts as a .txt bundle.",
-    ai: "Run a prompt directly and apply with replace, fill-empty or append.",
-  },
-  {
-    icon: Images,
-    name: "Image Prompts",
-    summary: "Five portfolio image briefs for your listing visuals.",
-    actions: [
-      "Hero, what-you'll-get, sample itinerary, beyond-the-brochure, built-around-style",
-      "Regenerate a brief or mark it final",
-    ],
-    ai: "Improve a brief, or generate the image itself.",
-    exports: "All five as Markdown.",
   },
   {
     icon: Grid3x3,
-    name: "Itinerary Matrix",
-    summary: "A durations x traveler-types grid of route variations.",
+    name: "2. Plan the Editions",
+    summary: "Commit to the exact products you intend to ship.",
     actions: [
-      "Edit each variation's one-line route spine",
-      "Expand a cell to pre-fill and start a full itinerary",
+      "Add duration and traveler combinations without duplicates",
+      "Review route concepts and the workload created by each edition",
     ],
-    exports: "CSV or Markdown.",
   },
   {
     icon: Map,
-    name: "Expanded Itinerary",
-    summary: "Full, sellable day-by-day itineraries (you can keep several per project).",
+    name: "3. Build the Itineraries",
+    summary: "Complete one itinerary linked to every planned edition.",
     actions: [
-      "Scaffold days from a duration, traveler type and style",
-      "Edit time blocks, notes, guides and per-day backup options",
+      "Work through Overview, Days, Included guides, and Quality notes",
+      "Use the contextual checklist to distinguish blockers from improvements",
     ],
-    ai: "Draft an entire itinerary or improve a single day.",
-    exports: "Per-itinerary Markdown.",
   },
   {
     icon: BadgeDollarSign,
-    name: "Listing Copy",
-    summary: "The marketplace listing: titles, tags, descriptions, packages and FAQs.",
+    name: "4. Package the Offer",
+    summary: "Prepare the sales story and selected delivery assets.",
     actions: [
-      "Generate starter copy, then set your own prices",
-      "Mark ready to sell to update the project status",
+      "Finish the adaptive marketplace listing and service intake",
+      "Build selected visuals, PDF, spreadsheet, guides, and production prompts",
     ],
-    ai: "AI-improve the listing and merge into your fields.",
-    exports: "Listing Markdown.",
-  },
-  {
-    icon: FileType,
-    name: "PDF Builder",
-    summary: "A themed, print-ready A4 itinerary document.",
-    actions: [
-      "Pick a color theme and add a cover and per-day images",
-      "Preview the multi-page document live before exporting",
-    ],
-    exports: "Download a PDF, or use the browser's Print / Save as PDF.",
   },
   {
     icon: Download,
-    name: "Export",
-    summary: "The hub for getting everything out of RouteCrafter.",
+    name: "5. Review and Publish",
+    summary: "Resolve launch blockers and make the final confirmations.",
     actions: [
-      "Full project as JSON (re-importable) or a Markdown bundle",
-      "Per-artifact matrix CSV, itinerary, listing and prompt exports",
+      "Follow direct links from each issue to the exact field or edition",
+      "Verify live-data language, review files, download a backup, and mark ready",
     ],
   },
 ];
@@ -221,17 +166,6 @@ function Bullets({ items }: { items: string[] }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function SubRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs leading-relaxed">
-      <span className="font-semibold uppercase tracking-[0.12em] text-ink-muted">
-        {label}
-      </span>
-      <span className="text-ink-soft">{children}</span>
-    </div>
   );
 }
 
@@ -485,7 +419,7 @@ export function UserGuide() {
                 </>,
                 "Give it a name, country and the regions or cities it covers.",
                 "Add your positioning (the one-line product angle) and target audience.",
-                "Pick a brand voice: editorial, premium, friendly or adventurous.",
+                "Choose the offer model, sales channels, output package, and brand voice.",
                 "Submit to land in the project workspace, ready to build.",
               ]}
             />
@@ -501,21 +435,20 @@ export function UserGuide() {
             title="The workspace"
           >
             <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">
-              Each project opens into a workspace with nine tabs. A typical flow is{" "}
+              Each project opens into a five-stage production route. The stages stay
+              flexible, while the route line and recommended action answer{" "}
               <span className="font-medium text-ink">
-                Trip Configuration &rarr; Matrix &rarr; Expanded Itinerary &rarr;
-                PDF
+                what must I do next to produce something I can sell?
               </span>
-              , with Listing Copy and Image Prompts produced alongside and everything
-              collected in Export. Most tabs read from your Trip Configuration, so
-              fill that in first.
+              {" "}Progress is derived from useful content checks rather than manual
+              completion toggles.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              {TABS.map((tab) => {
-                const Icon = tab.icon;
+              {STAGES.map((stage) => {
+                const Icon = stage.icon;
                 return (
                   <div
-                    key={tab.name}
+                    key={stage.name}
                     className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-paper p-5 shadow-[var(--shadow-soft)]"
                   >
                     <div className="flex items-center gap-2.5">
@@ -523,32 +456,22 @@ export function UserGuide() {
                         <Icon className="size-4" />
                       </span>
                       <p className="font-display text-lg font-semibold text-ink">
-                        {tab.name}
+                        {stage.name}
                       </p>
                     </div>
                     <p className="text-sm leading-relaxed text-ink-soft">
-                      {tab.summary}
+                      {stage.summary}
                     </p>
                     <div className="mt-auto space-y-2.5 border-t border-border-soft pt-3">
-                      <Bullets items={tab.actions} />
-                      <div className="space-y-1">
-                        {tab.free ? (
-                          <SubRow label="No key">{tab.free}</SubRow>
-                        ) : null}
-                        {tab.ai ? <SubRow label="With AI">{tab.ai}</SubRow> : null}
-                        {tab.exports ? (
-                          <SubRow label="Export">{tab.exports}</SubRow>
-                        ) : null}
-                      </div>
+                      <Bullets items={stage.actions} />
                     </div>
                   </div>
                 );
               })}
             </div>
-            <Callout tone="tip" title="Jump between tabs">
-              Expanding a matrix cell carries its duration and traveler type into the
-              Expanded Itinerary tab, and the PDF Builder links you back to create an
-              itinerary if none exists yet.
+            <Callout tone="tip" title="Deep links are persistent">
+              Stage, edition, and editor section are stored in the URL, so refreshing
+              returns you to the same production task.
             </Callout>
           </SectionShell>
 
@@ -564,7 +487,7 @@ export function UserGuide() {
             </p>
             <Steps
               items={[
-                "Open the Export tab (or the header Export button) and download the project JSON.",
+                "Open Project actions or Review and Publish, then download the project JSON.",
                 "On another browser, use Import project on the dashboard and pick that file.",
                 "Imports are validated and never overwrite existing work: a colliding project gets a fresh id.",
               ]}
