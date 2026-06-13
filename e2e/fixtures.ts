@@ -81,13 +81,25 @@ export function buildFullProject(): Project {
     style: "Food/culture heavy",
   });
   itinerary.id = "e2e-itinerary";
+  itinerary.plannedEditionId = "e2e-edition";
   itinerary.title = "Five Days Across Portugal";
+  itinerary.days = itinerary.days.map((day, index) => ({
+    ...day,
+    base: day.base || (index < 3 ? "Lisbon" : "Porto"),
+    morning:
+      day.morning ||
+      "Explore a compact neighborhood with a practical, human-paced route.",
+  }));
   itinerary.days[0].morning = "Arrive in Lisbon and settle into the Baixa.";
   itinerary.days[0].lunch = "Seasonal Portuguese lunch near the hotel.";
   itinerary.days[0].rainyDayAlternative = "Visit the tile museum.";
   itinerary.foodGuide = "Prioritize neighborhood tascas and market lunches.";
   itinerary.transportGuide = "Use intercity rail between Lisbon and Porto.";
   itinerary.packingList = "Comfortable shoes, light layers, reusable bottle.";
+  itinerary.bookingChecklist =
+    "Reserve rail seats and timed-entry attractions after checking live terms.";
+  itinerary.personalizationQuestions =
+    "Share preferred pace, dietary needs, and any fixed arrival details.";
   itinerary.verificationNotes =
     "Verify live opening hours, prices, tickets, and availability.";
 
@@ -95,8 +107,44 @@ export function buildFullProject(): Project {
     ...project,
     matrix: buildMatrix(context),
     itineraries: [itinerary],
-    listing: buildListing(context),
-    imagePrompts: buildImagePrompts(context),
+    listing: {
+      ...buildListing(context),
+      packages: buildListing(context).packages.map((item, index) => ({
+        ...item,
+        price: `$${79 + index * 40}`,
+      })),
+    },
+    imagePrompts: buildImagePrompts(context).map((prompt) => ({
+      ...prompt,
+      isFinal: true,
+    })),
+    productionPlan: {
+      offerModel: "hybrid",
+      channels: ["etsy", "fiverr"],
+      outputs: [
+        "marketplace-listing",
+        "pdf",
+        "spreadsheet",
+        "food-guide",
+        "packing-list",
+        "booking-checklist",
+        "portfolio-visuals",
+      ],
+      editions: [
+        {
+          id: "e2e-edition",
+          duration: "5 days",
+          travelerType: "Couple",
+          itineraryId: "e2e-itinerary",
+          createdAt: now,
+        },
+      ],
+      review: {
+        liveDataVerified: false,
+        presentationReviewed: false,
+        backupConfirmed: false,
+      },
+    },
     generated: Object.fromEntries(
       templates.map((template) => [
         template.id,

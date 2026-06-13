@@ -34,9 +34,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- -p 3211",
+    command: "npm run dev -- --webpack -p 3211",
     url: "http://localhost:3211/login",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120_000,
     env: {
       NEXTAUTH_SECRET: "e2e-secret-that-is-long-enough-for-routecrafter",
