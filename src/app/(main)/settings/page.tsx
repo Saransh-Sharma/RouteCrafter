@@ -25,9 +25,11 @@ import { Button } from "@/components/ui/Button";
 import { FormField, Input, Select } from "@/components/ui/field";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AiCostBadge } from "@/components/ai/AiCostButton";
+import { useAiConfig } from "@/components/ai/AiConfigProvider";
 
 export default function SettingsPage() {
   const mounted = useMounted();
+  const { config, loading: configLoading } = useAiConfig();
   const providers = useAiSettingsStore((state) => state.providers);
   const text = useAiSettingsStore((state) => state.text);
   const image = useAiSettingsStore((state) => state.image);
@@ -57,7 +59,9 @@ export default function SettingsPage() {
 
   async function testProvider(provider: AiProviderId) {
     const apiKey = providers[provider].apiKey;
-    if (!apiKey) {
+    const canUseServer =
+      provider === "openai" && Boolean(config?.serverOpenAiAvailable);
+    if (!apiKey && !canUseServer) {
       setProviderTestResult(provider, {
         status: "error",
         message: "Add an API key before testing.",
@@ -71,7 +75,7 @@ export default function SettingsPage() {
         providers[provider].customTextModel || info.defaultTextModel;
       await requestAiText({
         provider,
-        apiKey,
+        apiKey: apiKey || undefined,
         model,
         taskType: "prompt",
         prompt:
@@ -101,7 +105,7 @@ export default function SettingsPage() {
       <SectionHeader
         eyebrow="Settings"
         title="AI Studio Settings"
-        subtitle="Connect user-funded AI providers for richer drafts, itinerary expansion, listing polish, and image generation."
+        subtitle="RouteCrafter uses server OpenAI by default. Add a personal provider key only when you want to pay with and use your own account."
       />
 
       <div className="rounded-[var(--radius-card)] border border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)] p-5 shadow-[var(--shadow-soft)]">
@@ -112,15 +116,20 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold text-ink">
-                AI calls use your own provider account
+                {config?.serverOpenAiAvailable
+                  ? "RouteCrafter OpenAI is ready"
+                  : configLoading
+                    ? "Checking RouteCrafter OpenAI"
+                    : "RouteCrafter OpenAI is not configured"}
               </p>
               <AiCostBadge />
             </div>
             <p className="max-w-3xl text-sm leading-relaxed text-ink-soft">
-              Keys are saved only in this browser&apos;s local storage.
-              RouteCrafter does not sync or encrypt them in this version. Do not
-              save keys on shared devices, and remove them before handing off
-              this browser profile.
+              {config?.serverOpenAiAvailable
+                ? `Text runs use ${config.serverTextModel} and image runs use ${config.serverImageModel} on RouteCrafter's server account unless the selected provider has a personal key.`
+                : "Add a personal provider key to run AI until OPEN_AI_KEY is configured on the server."}{" "}
+              Personal keys are saved only in this browser&apos;s local storage
+              and are not synced or encrypted.
             </p>
           </div>
         </div>
@@ -142,6 +151,14 @@ export default function SettingsPage() {
                         {info.label}
                       </CardTitle>
                       <div className="mt-2 flex flex-wrap gap-1.5">
+                        {provider === "openai" &&
+                        config?.serverOpenAiAvailable ? (
+                          <Badge tone={saved.apiKey ? "gold" : "sage"}>
+                            {saved.apiKey
+                              ? "Personal key override active"
+                              : "RouteCrafter server default"}
+                          </Badge>
+                        ) : null}
                         <CapabilityBadge enabled={info.capabilities.text}>
                           Text
                         </CapabilityBadge>
@@ -171,8 +188,11 @@ export default function SettingsPage() {
                     label="API key"
                     hint={
                       saved.apiKey
-                        ? `Saved as ${maskApiKey(saved.apiKey)}`
-                        : "Saved only in this browser."
+                        ? `Personal override saved as ${maskApiKey(saved.apiKey)}`
+                        : provider === "openai" &&
+                            config?.serverOpenAiAvailable
+                          ? "Optional. Leave blank to use RouteCrafter OpenAI."
+                          : "Saved only in this browser."
                     }
                   >
                     <div className="flex flex-col gap-2 sm:flex-row">
@@ -252,7 +272,14 @@ export default function SettingsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => testProvider(provider)}
-                        disabled={testing === provider || !saved.apiKey}
+                        disabled={
+                          testing === provider ||
+                          (!saved.apiKey &&
+                            !(
+                              provider === "openai" &&
+                              config?.serverOpenAiAvailable
+                            ))
+                        }
                       >
                         <Sparkles className="size-4" />
                         {testing === provider ? "Testing..." : "Test connection"}
@@ -304,6 +331,14 @@ export default function SettingsPage() {
                   ))}
                 </Select>
               </FormField>
+              {!providers[text.provider].apiKey &&
+              config?.serverOpenAiAvailable ? (
+                <p className="text-xs leading-relaxed text-ink-muted">
+                  Without a personal key, runs use OpenAI{" "}
+                  {config.serverTextModel} on RouteCrafter&apos;s account
+                  regardless of the provider selected here.
+                </p>
+              ) : null}
               <FormField label="Text model">
                 <ModelSelect
                   value={text.model}
@@ -377,6 +412,13 @@ export default function SettingsPage() {
                   ))}
                 </Select>
               </FormField>
+              {!providers[image.provider].apiKey &&
+              config?.serverOpenAiAvailable ? (
+                <p className="text-xs leading-relaxed text-ink-muted">
+                  Without a personal key, image runs use OpenAI{" "}
+                  {config.serverImageModel} on RouteCrafter&apos;s account.
+                </p>
+              ) : null}
               <FormField label="Image model">
                 <ModelSelect
                   value={image.model}
