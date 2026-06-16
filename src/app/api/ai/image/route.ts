@@ -3,6 +3,10 @@ import { aiImageRequestSchema } from "@/lib/ai/schemas";
 import { generateImage, normalizeProviderError } from "@/lib/ai/provider-adapters";
 import { getRequestUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
+import {
+  AiConfigurationError,
+  resolveImageCredential,
+} from "@/lib/ai/credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -18,14 +22,20 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const result = await generateImage(parsed.data);
+    const result = await generateImage({
+      ...parsed.data,
+      ...resolveImageCredential(parsed.data),
+    });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
     return NextResponse.json(
       { error: normalizeProviderError(error) },
-      { status: 500, headers: { "Cache-Control": "no-store" } },
+      {
+        status: error instanceof AiConfigurationError ? error.status : 500,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 }
