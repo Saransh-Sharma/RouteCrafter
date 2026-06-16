@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
 import { errorResponse } from "@/lib/api/errors";
@@ -11,6 +12,10 @@ import { ensureRequestUser } from "@/lib/db/request-user";
 import { projectMutationSchema } from "@/lib/persistence/types";
 
 export const dynamic = "force-dynamic";
+
+const projectDeleteSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+});
 
 export async function GET(
   _request: Request,
@@ -60,7 +65,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -68,7 +73,20 @@ export async function DELETE(
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
     const { id } = await context.params;
-    await softDeleteProjectForUser({ user: requestUser, projectId: id });
+    const parsed = projectDeleteSchema.safeParse(
+      await request.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Missing or invalid project revision." },
+        { status: 400 },
+      );
+    }
+    await softDeleteProjectForUser({
+      user: requestUser,
+      projectId: id,
+      expectedRevision: parsed.data.expectedRevision,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

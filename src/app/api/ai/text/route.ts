@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai/credentials";
 import { createCompletedAiRun, createFailedAiRun } from "@/lib/db/ai-runs";
 import { ensureRequestUser } from "@/lib/db/request-user";
+import { getProjectForUser } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,17 @@ export async function POST(request: NextRequest) {
       source: parsed.data.source,
       projectId: parsed.data.projectId,
     };
-    const result = await generateText(resolved);
+    if (process.env.DATABASE_URL && parsed.data.projectId) {
+      const requestUser = await ensureRequestUser(user);
+      const project = await getProjectForUser({
+        userId: requestUser.id,
+        projectId: parsed.data.projectId,
+      });
+      if (!project) {
+        return NextResponse.json({ error: "Project not found." }, { status: 404 });
+      }
+    }
+    const result = await generateText(resolved, request.signal);
     const aiRunId = await recordCompletedAiRun(
       user,
       result,
