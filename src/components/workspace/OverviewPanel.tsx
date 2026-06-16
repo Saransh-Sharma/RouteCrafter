@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { AiCostBadge } from "@/components/ai/AiCostButton";
 import { configuredProviders, useAiSettingsStore } from "@/lib/store/ai-settings-store";
 import { AI_PROVIDERS } from "@/lib/ai/providers";
+import { useAiConfig } from "@/components/ai/AiConfigProvider";
 
 export function OverviewPanel({ project }: { project: Project }) {
   return (
@@ -89,8 +90,10 @@ export function OverviewPanel({ project }: { project: Project }) {
 function AiReadinessCard({ project }: { project: Project }) {
   const providers = useAiSettingsStore((state) => state.providers);
   const textProvider = useAiSettingsStore((state) => state.text.provider);
+  const { config } = useAiConfig();
   const configured = configuredProviders(providers);
-  const ready = configured.length > 0;
+  const hasPersonalKey = configured.length > 0;
+  const ready = hasPersonalKey || Boolean(config?.serverOpenAiAvailable);
   const suggestion =
     project.itineraries.length === 0
       ? "AI Draft itinerary"
@@ -116,8 +119,10 @@ function AiReadinessCard({ project }: { project: Project }) {
             </div>
             <p className="text-xs leading-relaxed text-ink-soft">
               {ready
-                ? `${AI_PROVIDERS[textProvider].label} is ready for billable text requests.`
-                : "Add a provider key to unlock paid AI drafting and polish."}
+                ? providers[textProvider].apiKey
+                  ? `${AI_PROVIDERS[textProvider].label} personal key override is ready.`
+                  : `RouteCrafter OpenAI ${config?.serverTextModel ?? ""} is ready.`
+                : "Ask an administrator to configure server OpenAI or add a personal provider key."}
             </p>
           </div>
         </div>
@@ -131,7 +136,7 @@ function AiReadinessCard({ project }: { project: Project }) {
           href="/settings"
           className="inline-flex w-full items-center justify-center rounded-full border border-[var(--rc-ai-border)] bg-paper/70 px-4 py-2 text-sm font-medium text-[var(--rc-ai-brown)] hover:border-forest/40 hover:text-forest"
         >
-          {ready ? "Review AI settings" : "Add AI provider key"}
+          {ready ? "Review AI settings" : "Configure AI access"}
         </Link>
       </CardContent>
     </Card>

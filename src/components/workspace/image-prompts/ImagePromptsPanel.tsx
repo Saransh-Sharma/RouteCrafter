@@ -136,7 +136,7 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
             <Wand2 className="size-4" />
             Generate all five
           </Button>
-          <AiCostButton onClick={generateAll} disabled>
+          <AiCostButton taskType="imagePrompt" onClick={generateAll} disabled>
             AI actions unlock after prompts exist
           </AiCostButton>
         </CardContent>
@@ -168,6 +168,9 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
           </Button>
           <AiCostButton
             size="sm"
+            mode="image"
+            taskType="imageGeneration"
+            prompt={prompts[0] ? JSON.stringify(prompts[0]) : ""}
             onClick={() =>
               prompts[0] && setAiTarget({ mode: "image", prompt: prompts[0] })
             }

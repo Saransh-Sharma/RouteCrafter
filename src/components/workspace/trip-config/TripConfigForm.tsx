@@ -488,6 +488,8 @@ export function TripConfigForm({
           </FormField>
           <AiCostButton
             className="w-full"
+            taskType="brief"
+            prompt={brief}
             onClick={() => setBriefAiOpen(true)}
             disabled={!brief.trim()}
           >

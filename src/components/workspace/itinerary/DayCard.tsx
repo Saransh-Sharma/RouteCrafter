@@ -68,7 +68,7 @@ export function DayCard({
             {onAiImprove ? (
               <AiCostButton
                 size="sm"
-                showBadge={false}
+                taskType="rewrite"
                 onClick={onAiImprove}
                 className="mr-1 h-8 px-2.5 text-xs"
               >

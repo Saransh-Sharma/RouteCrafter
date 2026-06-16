@@ -533,6 +533,7 @@ export function ExpandedItineraryPanel({
               <div className="flex shrink-0 items-center gap-2">
                 <AiCostButton
                   size="sm"
+                  taskType="itinerary"
                   onClick={() =>
                     setAiTarget({
                       kind: "itinerary",
@@ -579,7 +580,7 @@ export function ExpandedItineraryPanel({
                 <AiCostButton
                   key={title}
                   size="sm"
-                  showBadge={false}
+                  taskType="itinerary"
                   onClick={() =>
                     setAiTarget({ kind: "itinerary", title, focus })
                   }
