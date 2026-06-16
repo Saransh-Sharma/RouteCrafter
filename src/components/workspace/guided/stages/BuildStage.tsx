@@ -6,6 +6,7 @@ import { buildContext, buildItinerary } from "@/lib/generation";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import {
   editionLabel,
+  getProjectWorkflow,
   itineraryBlockers,
   itineraryForEdition,
   type WorkflowStageId,
@@ -31,6 +32,8 @@ export function BuildStage({
 }) {
   const update = useProjectsStore((state) => state.update);
   const editions = project.productionPlan.editions;
+  const workflow = getProjectWorkflow(project);
+  const stage = workflow.stages.find((item) => item.id === "build");
   const selected =
     editions.find((edition) => edition.id === editionId) ?? editions[0];
 
@@ -61,6 +64,9 @@ export function BuildStage({
         eyebrow="Stage 3 · Build"
         title="Turn each edition into a complete itinerary"
         description="Work one committed edition at a time. The checklist distinguishes launch blockers from quality improvements so you always know what matters next."
+        completed={stage?.completed}
+        total={stage?.total}
+        blockers={workflow.blockers.filter((issue) => issue.stage === "build")}
         aside={
           <div className="text-right">
             <p className="text-2xl font-semibold text-ink">

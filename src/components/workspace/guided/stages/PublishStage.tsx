@@ -62,6 +62,9 @@ export function PublishStage({
         eyebrow="Stage 5 · Publish"
         title="Review the launch package"
         description="RouteCrafter separates launch blockers from useful improvements. Resolve the essentials, make the final confirmations, then publish with confidence."
+        completed={workflow.stages.find((item) => item.id === "publish")?.completed}
+        total={workflow.stages.find((item) => item.id === "publish")?.total}
+        blockers={workflow.blockers.filter((issue) => issue.stage === "publish")}
         aside={
           <div className="min-w-44 text-right">
             <p className="text-3xl font-semibold text-ink">
@@ -120,7 +123,7 @@ export function PublishStage({
             <ReviewCheck
               checked={review.backupConfirmed}
               onChange={(checked) => patchReview({ backupConfirmed: checked })}
-              label="I understand this project is browser-local and created a JSON backup."
+              label="I reviewed the cloud-saved project and created a JSON backup if I need an offline copy."
             />
           </div>
 
