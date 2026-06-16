@@ -1,6 +1,11 @@
 "use client";
 
-import type { AiImageRequest, AiResult, AiTextRequest } from "./types";
+import type {
+  AiImageRequest,
+  AiResult,
+  AiServerConfig,
+  AiTextRequest,
+} from "./types";
 
 async function parseAiResponse(response: Response): Promise<AiResult> {
   const body = await response.json().catch(() => null);
@@ -38,4 +43,14 @@ export async function requestAiImage(
     signal,
   });
   return parseAiResponse(response);
+}
+
+export async function requestAiConfig(): Promise<AiServerConfig> {
+  const response = await fetch("/api/ai/config", {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error("AI server configuration is unavailable.");
+  }
+  return (await response.json()) as AiServerConfig;
 }

@@ -23,6 +23,7 @@ export function createAiRunMetadata({
     appliedAt: now,
     usage: result.usage,
     source,
+    credentialSource: result.credentialSource,
   };
 }
 
