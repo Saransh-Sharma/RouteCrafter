@@ -40,6 +40,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       NEXTAUTH_SECRET: "e2e-secret-that-is-long-enough-for-routecrafter",
+      NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED: "false",
       USER_ADMIN_PASSWORD: "admin-e2e-password",
       USER_SARANSH_PASSWORD: "saransh-e2e-password",
       USER_SAUMYA_PASSWORD: "saumya-e2e-password",
