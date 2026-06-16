@@ -1,5 +1,5 @@
 {
-  "id": "bff7124d-17f1-4b04-b102-8d9c7aa51e12",
+  "id": "94045b1d-c18d-45d2-a1c7-92e6f947b946",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -127,19 +127,6 @@
         }
       },
       "foreignKeys": {
-        "activity_logs_project_id_projects_id_fk": {
-          "name": "activity_logs_project_id_projects_id_fk",
-          "tableFrom": "activity_logs",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "activity_logs_user_id_users_id_fk": {
           "name": "activity_logs_user_id_users_id_fk",
           "tableFrom": "activity_logs",
@@ -331,19 +318,6 @@
         }
       },
       "foreignKeys": {
-        "ai_runs_project_id_projects_id_fk": {
-          "name": "ai_runs_project_id_projects_id_fk",
-          "tableFrom": "ai_runs",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "ai_runs_user_id_users_id_fk": {
           "name": "ai_runs_user_id_users_id_fk",
           "tableFrom": "ai_runs",
@@ -493,19 +467,6 @@
           "tableTo": "assets",
           "columnsFrom": [
             "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "asset_usages_project_id_projects_id_fk": {
-          "name": "asset_usages_project_id_projects_id_fk",
-          "tableFrom": "asset_usages",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -728,19 +689,6 @@
         }
       },
       "foreignKeys": {
-        "assets_project_id_projects_id_fk": {
-          "name": "assets_project_id_projects_id_fk",
-          "tableFrom": "assets",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "assets_user_id_users_id_fk": {
           "name": "assets_user_id_users_id_fk",
           "tableFrom": "assets",
@@ -971,19 +919,6 @@
         }
       },
       "foreignKeys": {
-        "project_versions_project_id_projects_id_fk": {
-          "name": "project_versions_project_id_projects_id_fk",
-          "tableFrom": "project_versions",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "project_versions_user_id_users_id_fk": {
           "name": "project_versions_user_id_users_id_fk",
           "tableFrom": "project_versions",
@@ -1011,7 +946,7 @@
         "id": {
           "name": "id",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true
         },
         "user_id": {
@@ -1146,27 +1081,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "projects_id_user_unique": {
-          "name": "projects_id_user_unique",
-          "columns": [
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1184,7 +1098,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "projects_user_id_id_pk": {
+          "name": "projects_user_id_id_pk",
+          "columns": [
+            "user_id",
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
