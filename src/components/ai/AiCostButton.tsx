@@ -3,8 +3,19 @@
 import * as React from "react";
 import { BadgeDollarSign, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
+import { estimateAiRunCost, formatCostEstimate } from "@/lib/ai/pricing";
+import type { AiCostEstimate, AiTaskType } from "@/lib/ai/types";
+import { useAiConfig } from "./AiConfigProvider";
+import { resolveClientAiRun } from "@/lib/ai/runtime";
 
-export function AiCostBadge({ className }: { className?: string }) {
+export function AiCostBadge({
+  className,
+  estimate,
+}: {
+  className?: string;
+  estimate?: AiCostEstimate | null;
+}) {
   return (
     <span
       className={cn(
@@ -12,7 +23,11 @@ export function AiCostBadge({ className }: { className?: string }) {
         className,
       )}
     >
-      Billable
+      {estimate === undefined
+        ? "Estimated cost"
+        : estimate
+          ? `Est. ${formatCostEstimate(estimate)}`
+          : "Estimate unavailable"}
     </span>
   );
 }
@@ -22,6 +37,9 @@ export interface AiCostButtonProps
   size?: "sm" | "md";
   icon?: "sparkles" | "cost";
   showBadge?: boolean;
+  mode?: "text" | "image";
+  taskType?: AiTaskType;
+  prompt?: string;
 }
 
 export const AiCostButton = React.forwardRef<
@@ -35,11 +53,44 @@ export const AiCostButton = React.forwardRef<
       size = "md",
       icon = "sparkles",
       showBadge = true,
+      mode = "text",
+      taskType = "prompt",
+      prompt = "",
       ...props
     },
     ref,
   ) => {
     const Icon = icon === "cost" ? BadgeDollarSign : Sparkles;
+    const textDefaults = useAiSettingsStore((state) => state.text);
+    const imageDefaults = useAiSettingsStore((state) => state.image);
+    const getApiKey = useAiSettingsStore((state) => state.getApiKey);
+    const { config } = useAiConfig();
+    const defaults = mode === "text" ? textDefaults : imageDefaults;
+    const selection = resolveClientAiRun({
+      mode,
+      defaults,
+      personalKey: getApiKey(defaults.provider),
+      serverConfig: config,
+    });
+    const estimate =
+      mode === "text"
+        ? estimateAiRunCost({
+            mode,
+            provider: selection.provider,
+            model: selection.model,
+            prompt,
+            taskType,
+            maxOutputTokens: textDefaults.maxOutputTokens,
+          })
+        : estimateAiRunCost({
+            mode,
+            provider: selection.provider,
+            model: selection.model,
+            prompt,
+            taskType,
+            size: imageDefaults.size,
+            quality: imageDefaults.quality,
+          });
     return (
       <button
         ref={ref}
@@ -53,7 +104,7 @@ export const AiCostButton = React.forwardRef<
       >
         <Icon className="size-4" />
         <span>{children}</span>
-        {showBadge ? <AiCostBadge /> : null}
+        {showBadge ? <AiCostBadge estimate={estimate} /> : null}
       </button>
     );
   },
