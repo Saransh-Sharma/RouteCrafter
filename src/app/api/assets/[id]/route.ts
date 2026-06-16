@@ -40,14 +40,14 @@ export async function DELETE(
         { status: 409 },
       );
     }
-    await softDeleteAsset({ userId: requestUser.id, assetId: id });
     await deleteBlobAsset(asset.blobUrl);
+    await softDeleteAsset({ userId: requestUser.id, assetId: id });
     await createAuditEvent({
       request,
       userId: requestUser.id,
       eventType: "asset.delete",
       metadata: { assetId: id, activeUsages },
-    });
+    }).catch(() => undefined);
     return NextResponse.json({ ok: true, blobDeleted: true });
   } catch (error) {
     return errorResponse(error);

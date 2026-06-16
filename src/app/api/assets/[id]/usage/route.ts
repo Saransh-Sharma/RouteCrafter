@@ -42,6 +42,7 @@ export async function POST(
       fieldPath: body.fieldPath,
       projectRevision:
         typeof body.projectRevision === "number" ? body.projectRevision : null,
+      replaceExisting: body.replaceExisting !== false,
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
