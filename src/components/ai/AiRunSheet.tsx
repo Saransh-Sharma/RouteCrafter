@@ -34,6 +34,7 @@ export interface AiRunSheetProps {
   title: string;
   description: string;
   taskType: AiTaskType;
+  projectId?: string;
   prompt: string;
   sourceLabel: string;
   currentText?: string;
@@ -51,7 +52,7 @@ export interface AiRunSheetProps {
     result: AiResult,
     mode: "replace" | "fill-empty" | "append",
   ) => void;
-  onApplyImage?: (image: string, result: AiResult) => void;
+  onApplyImage?: (image: string, result: AiResult) => void | Promise<void>;
 }
 
 const progressByMode = {
@@ -68,6 +69,7 @@ export function AiRunSheet({
   title,
   description,
   taskType,
+  projectId,
   prompt,
   sourceLabel,
   currentText = "",
@@ -181,6 +183,7 @@ export function AiRunSheet({
                 model: selection.model,
                 prompt,
                 taskType,
+                projectId,
                 label: title,
                 source: sourceLabel,
                 temperature: textDefaults.temperature,
@@ -197,6 +200,7 @@ export function AiRunSheet({
                 model: selection.model,
                 prompt,
                 taskType,
+                projectId,
                 label: title,
                 source: sourceLabel,
                 size: imageDefaults.size,
@@ -228,10 +232,19 @@ export function AiRunSheet({
     close();
   }
 
-  function applyImage() {
+  async function applyImage() {
     if (!result?.image || !onApplyImage) return;
-    onApplyImage(result.image, result);
-    close();
+    try {
+      await onApplyImage(result.image, result);
+      close();
+    } catch (applyError) {
+      setError(
+        applyError instanceof Error
+          ? applyError.message
+          : "The image could not be applied. The generated result is still available.",
+      );
+      setState("result");
+    }
   }
 
   return (
@@ -380,6 +393,7 @@ export function AiRunSheet({
 
               {state === "result" && result ? (
                 <div className="space-y-4">
+                  {error ? <InlineError message={error} /> : null}
                   {mode === "text" ? (
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                       <PreviewBlock title="Current content" value={currentText} />
@@ -462,7 +476,12 @@ export function AiRunSheet({
                       </>
                     ) : null}
                     {mode === "image" && onApplyImage ? (
-                      <Button onClick={applyImage} disabled={!result.image}>
+                      <Button
+                        onClick={() => {
+                          void applyImage();
+                        }}
+                        disabled={!result.image}
+                      >
                         Apply image
                       </Button>
                     ) : null}
