@@ -11,8 +11,8 @@ length, budget, and deliverable format — without hardcoding any single country
 Project content remains local-first in the browser: every artifact can be
 produced through copy-paste prompts without an AI API key. Access to the app is
 protected by password or email-OTP authentication. Optional AI assist lets you
-bring your own provider key (OpenAI, Anthropic, or Gemini) to draft content
-directly inside the app.
+use server-funded OpenAI by default or bring your own provider key (OpenAI,
+Anthropic, or Gemini) to draft content directly inside the app.
 
 ## Tech stack
 
@@ -72,7 +72,7 @@ src/
   lib/
     schemas/                 # Zod schemas + data model (source of truth)
     generation/              # Pure prompt-template + scaffold engine
-    ai/                       # BYOK AI provider layer (client + server)
+    ai/                       # Server OpenAI + personal-key provider layer
     store/                   # Zustand stores (projects, ai-settings)
     io/                       # Project JSON import/export
     project-normalization.ts # Schema migration/normalization
@@ -88,7 +88,7 @@ Full documentation lives in [`docs/`](docs/README.md):
 - **Guides**
   - [Getting started](docs/guides/getting-started.md) — install, scripts, where data lives
   - [User guide](docs/guides/user-guide.md) — end-to-end workspace walkthrough
-  - [AI setup (BYOK)](docs/guides/ai-setup.md) — provider keys, models, safety
+  - [AI setup](docs/guides/ai-setup.md) — server OpenAI, personal overrides, models, estimates, safety
 - **Architecture**
   - [Architecture overview](docs/architecture/overview.md) — system map and principles
   - [Data model](docs/architecture/data-model.md) — entities, enums, normalization, import/export

@@ -122,6 +122,7 @@ the dashboard to restore or move a project.
 
 ## AI usage
 
-Prompt-output mode is always available. Direct AI requires a provider key in
-Settings, shows a billable-action confirmation, and requires preview before apply.
+Prompt-output mode is always available. Direct AI uses RouteCrafter server OpenAI
+when configured, or a personal provider key override from Settings. It shows the
+payer and estimated USD range and requires preview before apply.
 See [AI setup](ai-setup.md) for provider configuration.

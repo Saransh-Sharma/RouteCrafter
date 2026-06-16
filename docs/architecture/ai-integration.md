@@ -1,9 +1,9 @@
 # AI Integration
 
-RouteCrafter's AI layer is a **bring-your-own-key (BYOK) proxy**. The browser stores
-provider keys locally, sends them per-request through Next.js route handlers to
-server-only adapters, and never persists keys on the server. It coexists with the
-copy-paste [generation engine](generation-engine.md), which needs no key.
+RouteCrafter's AI layer defaults to server-funded OpenAI and supports personal-key
+overrides. `OPEN_AI_KEY` stays inside Next.js route handlers. The browser can store
+personal provider keys locally and send one per request to override the server
+credential.
 
 For the user-facing setup, see the [AI setup guide](../guides/ai-setup.md).
 
@@ -22,7 +22,12 @@ flowchart LR
   subgraph server [Next.js server]
     TextRoute["/api/ai/text"]
     ImageRoute["/api/ai/image"]
+    ConfigRoute["/api/ai/config"]
+    ServerKey["OPEN_AI_KEY"]
     Adapters["provider-adapters.ts (server-only)"]
+    ConfigRoute --> ServerKey
+    TextRoute --> ServerKey
+    ImageRoute --> ServerKey
     TextRoute --> Adapters
     ImageRoute --> Adapters
   end
@@ -64,7 +69,7 @@ The registry in `providers.ts` describes each provider's capabilities and models
 
 | Provider | Text | Image | Structured JSON | Default text model | Default image model |
 | --- | --- | --- | --- | --- | --- |
-| OpenAI | yes | yes | yes | `gpt-5.2` | `gpt-image-1` |
+| OpenAI | yes | yes | yes | `gpt-5.4` | `gpt-image-2` |
 | Anthropic | yes | no | yes | `claude-sonnet-4-6` | — |
 | Gemini | yes | yes | yes | `gemini-3.5-flash` | `gemini-3.1-flash-image` |
 
@@ -158,8 +163,15 @@ instruction to return raw JSON with no markdown fences.
 
 ## API routes
 
-Both routes follow the same pattern: validate with a Zod schema, call the adapter,
-return the result or a normalized error, and disable caching.
+Both generation routes authenticate, validate with Zod, resolve credentials, call
+the adapter, return the result, and disable caching. Resolution order is:
+
+1. A supplied personal key keeps the selected provider and model.
+2. Otherwise `OPEN_AI_KEY` forces OpenAI with `gpt-5.4` or `gpt-image-2`.
+3. If neither exists, the route returns `503`.
+
+`GET /api/ai/config` is authenticated and returns only server availability plus
+the two server model names.
 
 ```7:27:src/app/api/ai/text/route.ts
 export async function POST(request: Request) {
@@ -192,7 +204,7 @@ export async function POST(request: Request) {
 ```24:35:src/lib/ai/schemas.ts
 export const aiTextRequestSchema = z.object({
   provider: aiProviderIdSchema,
-  apiKey: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
   model: z.string().min(1),
   prompt: z.string().min(1),
   system: z.string().optional(),
@@ -218,6 +230,7 @@ export interface AiResult {
   usage?: AiUsage;
   provider: AiProviderId;
   model: string;
+  credentialSource: "server" | "personal";
 }
 ```
 
@@ -228,8 +241,9 @@ export interface AiResult {
 
 | Concern | Client | Server |
 | --- | --- | --- |
-| Key storage | `localStorage` via Zustand | Never stored |
-| Key transit | Sent in POST body to `/api/ai/*` | Forwarded to provider, discarded after request |
+| Server key | Never available | Read from `OPEN_AI_KEY` |
+| Personal-key storage | `localStorage` via Zustand | Never stored |
+| Personal-key transit | Optional in POST body | Forwarded to provider, discarded after request |
 | Provider HTTP | — | `provider-adapters.ts` only |
 | Prompt construction | `tasks.ts` (client) | — |
 | Result parsing | `parseJsonObject` + domain Zod schemas | Raw text/image from provider |
@@ -289,64 +303,33 @@ on bad JSON/schema before anything touches the project.
    **append**.
 5. Nothing is written to the project until the user applies.
 
-The request is assembled with the key pulled from the settings store:
+The request includes a personal key only when the selected provider has one.
+Otherwise the client sends no key and the route resolves server OpenAI:
 
-```131:159:src/components/ai/AiRunSheet.tsx
-      const next =
-        mode === "text"
-          ? await requestAiText(
-              {
-                provider,
-                apiKey,
-                model: textDefaults.model,
-                prompt,
-                taskType,
-                temperature: textDefaults.temperature,
-                topP: textDefaults.topP,
-                maxOutputTokens: textDefaults.maxOutputTokens,
-                responseFormat,
-              },
-              controller.signal,
-            )
-          : await requestAiImage(
-              {
-                provider,
-                apiKey,
-                model: imageDefaults.model,
-                prompt,
-                taskType,
-                size: imageDefaults.size,
-                quality: imageDefaults.quality,
-                aspectRatio: imageDefaults.aspectRatio,
-              },
-              controller.signal,
-            );
+```ts
+await requestAiText({
+  provider: selection.provider,
+  apiKey: personalKey || undefined,
+  model: selection.model,
+  prompt,
+  taskType,
+  maxOutputTokens: textDefaults.maxOutputTokens,
+});
 ```
 
 ## Cost and usage
 
-There is **no dollar-cost estimation**. "Cost" is disclosure-only: `AiCostBadge`
-renders a static "Billable" label and `AiCostButton` is a styled trigger with no
-pricing logic.
+`pricing.ts` contains centralized standard pricing for built-in models. Text
+estimates combine a conservative prompt-token range with task-specific expected
+output and the configured output cap. Image estimates use published per-image
+costs for the selected size and quality. Unknown/custom models return no estimate.
 
-```7:17:src/components/ai/AiCostButton.tsx
-export function AiCostBadge({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--rc-ai-brown)]",
-        className,
-      )}
-    >
-      Billable
-    </span>
-  );
-}
-```
+`AiCostButton` computes a compact `Est. $X-$Y` badge from the active run
+selection. `AiRunSheet` repeats the range with its pricing basis and payer.
 
 When a result is applied, `createAiRunMetadata` records a run on `project.aiRuns`
-(provider, model, task type, token/image usage, timestamps) — never the key or the
-prompt payload. This feeds the AI-usage export appendix.
+(provider, model, credential source, task type, token/image usage, timestamps),
+never the key or prompt payload. This feeds the AI-usage export appendix.
 
 ## Settings store
 
@@ -367,15 +350,15 @@ See [State & persistence](state-and-persistence.md) for the persistence mechanic
 
 | Topic | Behavior | Risk |
 | --- | --- | --- |
-| Key storage | Plaintext in `localStorage` | XSS / shared-device exposure |
-| Key transit | Browser -> Next.js route -> provider, same request | Visible in DevTools network tab |
-| Server persistence | None (proxy only) | No server key store (good) |
-| Route auth | Valid RouteCrafter JWT session required in Proxy and the route handler | Provider keys remain browser-owned and are never persisted by the server |
+| Server key | Read from `OPEN_AI_KEY` only in server modules | Never returned by `/api/ai/config` or generation responses |
+| Personal-key storage | Plaintext in `localStorage` | XSS / shared-device exposure |
+| Personal-key transit | Browser -> Next.js route -> provider, same request | Visible in DevTools network tab |
+| Personal-key persistence | None on the server | Browser-owned override only |
+| Route auth | Valid RouteCrafter JWT session required in Proxy and route handlers | Server-funded access remains authenticated |
 | Export | AI-usage appendix excludes keys and prompts | Safe to share exports |
 
-The Settings page states explicitly that keys are only in the browser's local
-storage and are not synced or encrypted, and advises against saving keys on shared
-devices.
+The Settings page distinguishes RouteCrafter server OpenAI from personal-key
+overrides and retains the shared-device warning for browser-stored personal keys.
 
 ## Gaps / reserved code
 

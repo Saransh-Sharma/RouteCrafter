@@ -49,7 +49,7 @@ in the browser:
 | Data | Storage key | Notes |
 | --- | --- | --- |
 | Projects (all your work) | `routecrafter:v1` | Managed by the Zustand projects store. |
-| AI provider keys + defaults | `routecrafter:ai-settings:v1` | Managed by the AI settings store; keys are stored in plaintext locally — see the [AI setup guide](ai-setup.md#security). |
+| Personal AI keys + defaults | `routecrafter:ai-settings:v1` | Personal keys are stored in plaintext locally; the server `OPEN_AI_KEY` is never stored here. See the [AI setup guide](ai-setup.md#security). |
 
 Implications:
 
@@ -86,8 +86,8 @@ server console. Production fails closed when Redis or email delivery is missing.
 2. Fill in the create-project form (name, country, regions, positioning, audience).
 3. You land in the **project workspace**. Work through the tabs left to right — the
    [user guide](user-guide.md) walks through each one.
-4. (Optional) Add an AI provider key in **Settings** to enable direct AI drafting —
-   see the [AI setup guide](ai-setup.md). This is never required; every panel works
+4. Confirm that RouteCrafter OpenAI is ready, or optionally add a personal provider
+   key override in **Settings** — see the [AI setup guide](ai-setup.md). Every panel works
    with copy-paste prompts.
 
 ## Next.js 16 note

@@ -1,13 +1,13 @@
-# AI Setup (Bring Your Own Key)
+# AI Setup
 
-RouteCrafter's direct AI features are **opt-in** and use a **bring-your-own-key
-(BYOK)** model. You add a provider key in Settings; the app stores it locally and
-forwards it per-request to that provider through its own server route. RouteCrafter
-never stores your key on a server.
+RouteCrafter uses a server-side OpenAI key by default. On Vercel, configure
+`OPEN_AI_KEY`; authenticated users can then run text and image generation without
+adding a personal key. The server key is never returned to or stored in the
+browser.
 
-> Direct AI is optional. Every panel works without a key via copy-paste prompts —
-> see the [user guide](user-guide.md). If you have no key configured, AI buttons
-> prompt you to add one in Settings.
+Users can save a personal provider key in Settings. A personal key for the
+selected provider overrides server OpenAI for that run. Anthropic and Gemini
+remain personal-key-only providers.
 
 ## Supported providers
 
@@ -15,20 +15,35 @@ Configured in [`src/lib/ai/providers.ts`](../../src/lib/ai/providers.ts):
 
 | Provider | Text | Image | Structured JSON | Default text model | Default image model |
 | --- | --- | --- | --- | --- | --- |
-| **OpenAI** | yes | yes | yes | `gpt-5.2` | `gpt-image-1` |
+| **OpenAI** | yes | yes | yes | `gpt-5.4` | `gpt-image-2` |
 | **Anthropic** | yes | no | yes | `claude-sonnet-4-6` | — |
 | **Gemini** | yes | yes | yes | `gemini-3.5-flash` | `gemini-3.1-flash-image` |
 
 Each provider also exposes alternate models you can select, and you can supply a
 custom model string.
 
-## Configuring keys
+## Configuring server OpenAI
+
+Set this environment variable in Vercel Project Settings:
+
+```bash
+OPEN_AI_KEY=sk-...
+```
+
+Server-funded requests are locked to `gpt-5.4` for text and `gpt-image-2` for
+images. The authenticated `/api/ai/config` endpoint reports only whether server
+OpenAI is available and the model names; it never returns the key.
+
+## Personal key overrides
 
 1. Open **Settings** (`/settings`).
-2. For your chosen provider, paste the API key (placeholders show the expected
+2. For a provider, paste the API key (placeholders show the expected
    format, e.g. `sk-...`, `sk-ant-...`, `AIza...`).
 3. Optionally set custom text/image model names.
 4. Use **Test connection** to verify the key with a minimal request.
+
+Saving a personal key activates it for that selected provider. Removing it
+restores server OpenAI when `OPEN_AI_KEY` is configured.
 
 ### Defaults you can tune
 
@@ -46,8 +61,8 @@ follows a strict preview-before-apply workflow:
 
 ```mermaid
 flowchart TD
-  Trigger["AI button (billable)"] --> Sheet[AI Run Sheet]
-  Sheet --> Confirm["Review prompt + confirm billable run"]
+  Trigger["AI button with estimate"] --> Sheet[AI Run Sheet]
+  Sheet --> Confirm["Review payer, estimate, prompt, and confirm"]
   Confirm --> Run[Call provider via /api/ai]
   Run -->|text| Proposal[Editable proposal vs current]
   Run -->|image| ImgPreview[Image preview]
@@ -58,8 +73,8 @@ flowchart TD
 ```
 
 1. **Preview the prompt** and the provider/model that will be used.
-2. **Confirm** — the run is clearly labeled **Billable** ("This may charge your
-   provider account").
+2. **Confirm** after reviewing the payer, credential source, model, and estimated
+   USD cost range.
 3. The request runs (and can be cancelled mid-flight).
 4. For text, you see the proposed output (editable) next to your current content;
    for images, you see a preview.
@@ -104,14 +119,21 @@ clear message and nothing is applied. Details in
 
 ## Usage tracking and cost
 
-RouteCrafter does **not** estimate dollar cost. Instead:
+RouteCrafter displays a pre-run USD estimate:
 
-- AI actions are labeled **Billable** so you always know a real provider call will
-  occur.
+- Text estimates use a conservative prompt-token range, task-specific expected
+  output, and the configured output-token cap.
+- Image estimates use the selected model, image size, and quality.
+- Unknown or custom models show **Estimate unavailable** rather than an invented
+  price.
+- Estimates may differ from final provider billing and are subject to pricing
+  changes. Current OpenAI values come from the
+  [pricing page](https://developers.openai.com/api/docs/pricing) and
+  [image generation guide](https://developers.openai.com/api/docs/guides/image-generation).
 - When you apply an AI result, RouteCrafter records lightweight **run metadata** on
-  the project (provider, model, task type, token/image usage, timestamps). This is
-  surfaced in the AI-usage export appendix. It never includes your API key or the
-  prompt payload.
+  the project (provider, model, credential source, task type, token/image usage,
+  timestamps). This is surfaced in the AI-usage export appendix. It never includes
+  an API key or prompt payload.
 
 ## Security {#security}
 
@@ -119,11 +141,12 @@ Be aware of how keys are handled in this version:
 
 | Aspect | Behavior |
 | --- | --- |
-| Storage | Keys are stored in **plaintext** in your browser's `localStorage`. They are not encrypted or synced. |
-| Transit | Keys are sent in the request body from your browser to the app's own `/api/ai/*` route, which forwards them to the provider for that single request. |
-| Server persistence | The server **does not store** your key — it only proxies the request. |
+| Server key | `OPEN_AI_KEY` is read only in server route handlers and is never included in client configuration or AI responses. |
+| Personal-key storage | Personal keys are stored in **plaintext** in browser `localStorage`. They are not encrypted or synced. |
+| Personal-key transit | A personal key is sent to `/api/ai/*` for that request and forwarded to the selected provider. |
+| Server persistence | Personal keys are not persisted by the server. |
 | Export | Project exports and the AI-usage appendix **exclude** keys and prompt payloads. |
-| Route protection | The `/api/ai/*` routes require a valid RouteCrafter session in addition to a provider key. |
+| Route protection | The `/api/ai/*` routes require a valid RouteCrafter session. A personal key is optional when server OpenAI is available. |
 
 Practical advice (also shown in the Settings UI):
 

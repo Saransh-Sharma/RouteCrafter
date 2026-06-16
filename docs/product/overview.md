@@ -56,7 +56,7 @@ The built-in generation engine produces:
 
 This mode requires no account, no key, and no network calls to AI providers.
 
-### Mode 2 — Direct AI mode (opt-in, bring your own key)
+### Mode 2 — Direct AI mode
 
 If you add an API key in **Settings**, RouteCrafter can call the model for you and
 drop structured results straight into the workspace. This mode is governed by two
@@ -64,8 +64,12 @@ always-on safety rails:
 
 - **Preview before apply** — nothing is written to your project until you review the
   proposed output and confirm.
-- **Billable confirmation** — every AI run is clearly labeled as billable to your
-  provider account.
+- **Server OpenAI by default** — authenticated users can run `gpt-5.4` text and
+  `gpt-image-2` image generation through the configured server account.
+- **Personal-key overrides** — OpenAI, Anthropic, and Gemini keys can override the
+  server credential for the selected provider.
+- **Cost confirmation** — every AI action shows an estimated USD range and payer
+  before the request runs.
 
 Direct AI mode never replaces prompt-output mode; the two coexist on every panel
 that supports generation.
