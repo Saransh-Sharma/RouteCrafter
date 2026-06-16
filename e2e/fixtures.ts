@@ -155,7 +155,7 @@ export function buildFullProject(): Project {
       {
         id: "e2e-ai-run",
         provider: "openai",
-        model: "gpt-5.2",
+        model: "gpt-5.4",
         taskType: "listing",
         label: "Polished listing",
         source: "listing",
@@ -206,14 +206,14 @@ export const aiSettings = {
   },
   text: {
     provider: "openai",
-    model: "gpt-5.2",
+    model: "gpt-5.4",
     temperature: 0.7,
     topP: 0.9,
     maxOutputTokens: 4000,
   },
   image: {
     provider: "openai",
-    model: "gpt-image-1",
+    model: "gpt-image-2",
     size: "1024x1024",
     quality: "medium",
     aspectRatio: "1:1",
@@ -243,7 +243,7 @@ export async function seedBrowser(
             ]),
           ),
         },
-    version: 1,
+    version: 2,
   });
   await page.addInitScript(
     ({ projectState, settingsState }) => {
@@ -272,8 +272,19 @@ export async function prepareApp(
   options: {
     projects?: Project[];
     withAiKey?: boolean;
+    serverOpenAiAvailable?: boolean;
   } = {},
 ) {
+  await page.route("**/api/ai/config", async (route) => {
+    await fulfillAiRoute(route, {
+      status: 200,
+      body: {
+        serverOpenAiAvailable: options.serverOpenAiAvailable ?? true,
+        serverTextModel: "gpt-5.4",
+        serverImageModel: "gpt-image-2",
+      },
+    });
+  });
   await seedBrowser(page, options.projects, {
     withAiKey: options.withAiKey,
   });
@@ -285,6 +296,7 @@ export async function mockAiText(
   status = 200,
 ) {
   await page.route("**/api/ai/text", async (route) => {
+    const request = route.request().postDataJSON() as { apiKey?: string };
     await fulfillAiRoute(route, {
       status,
       body:
@@ -293,7 +305,8 @@ export async function mockAiText(
           : {
               text,
               provider: "openai",
-              model: "gpt-5.2",
+              model: "gpt-5.4",
+              credentialSource: request.apiKey ? "personal" : "server",
               usage: {
                 inputTokens: 100,
                 outputTokens: 200,
@@ -306,13 +319,15 @@ export async function mockAiText(
 
 export async function mockAiImage(page: Page, image: string) {
   await page.route("**/api/ai/image", async (route) => {
+    const request = route.request().postDataJSON() as { apiKey?: string };
     await fulfillAiRoute(route, {
       status: 200,
       body: {
         image,
         mimeType: "image/svg+xml",
         provider: "openai",
-        model: "gpt-image-1",
+        model: "gpt-image-2",
+        credentialSource: request.apiKey ? "personal" : "server",
         usage: { images: 1 },
       },
     });

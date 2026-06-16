@@ -136,7 +136,7 @@ through `projectSchema`, so seeds are guaranteed valid and fully defaulted.
 
 ## AI settings store
 
-A separate store for BYOK configuration, persisted under
+A separate store for personal-key overrides and AI defaults, persisted under
 `routecrafter:ai-settings:v1`. It holds per-provider settings (key, custom models,
 last-test status/message), text defaults, and image defaults. Two safety flags are
 type-locked to `true` and re-forced on rehydrate:

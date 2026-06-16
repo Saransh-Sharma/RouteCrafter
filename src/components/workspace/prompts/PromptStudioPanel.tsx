@@ -134,6 +134,8 @@ export function PromptStudioPanel({ project }: { project: Project }) {
               <div className="flex shrink-0 items-center gap-2">
                 <AiCostButton
                   size="sm"
+                  taskType="prompt"
+                  prompt={value}
                   onClick={() => {
                     if (!value && active) generate(active.id);
                     setAiOpen(true);

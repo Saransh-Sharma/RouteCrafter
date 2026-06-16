@@ -41,26 +41,36 @@ test("persists provider settings, tests a mocked connection, and removes the key
   await expect(temperature).toHaveValue("0.3");
 
   await openAiCard.getByRole("button", { name: "Remove" }).click();
-  await expect(openAiCard.getByText("Saved only in this browser.")).toBeVisible();
+  await expect(
+    openAiCard.getByText("Optional. Leave blank to use RouteCrafter OpenAI."),
+  ).toBeVisible();
   await expect(
     openAiCard.getByRole("button", { name: "Test connection" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 });
 
-test("blocks AI execution without a configured key", async ({ page }) => {
+test("uses RouteCrafter server OpenAI without a personal key", async ({
+  page,
+}) => {
   await prepareApp(page, { projects: [fullProject] });
+  await mockAiText(page, "Server-funded prompt result");
   await page.goto(
     `/projects/${FULL_PROJECT_ID}?stage=package&tool=prompts`,
   );
   await page.getByRole("button", { name: "Run with AI" }).click();
 
-  await expect(page.getByText("Billable request")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Add key in Settings" })).toBeVisible();
+  await expect(page.getByText("AI request estimate")).toBeVisible();
+  await expect(page.getByText("RouteCrafter server key")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Confirm billable run" }),
-  ).toBeDisabled();
+    page.getByRole("main").getByText("RouteCrafter", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("gpt-5.4", { exact: true })).toBeVisible();
+  const confirm = page.getByRole("button", { name: /Confirm run/ });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(page.getByText("AI proposal", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close AI run sheet" }).click();
-  await expect(page.getByText("Billable request")).toHaveCount(0);
+  await expect(page.getByText("AI request estimate")).toHaveCount(0);
 });
 
 test("previews and applies a mocked structured listing while recording usage", async ({
@@ -83,8 +93,10 @@ test("previews and applies a mocked structured listing while recording usage", a
     .locator("textarea");
   await expect(shortDescription).not.toHaveValue(/Mocked AI proposal/);
   await page.getByRole("button", { name: "AI improve listing" }).first().click();
-  await expect(page.getByText("Billable request")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm billable run" }).click();
+  await expect(page.getByText("AI request estimate")).toBeVisible();
+  await expect(page.getByText("Personal key override")).toBeVisible();
+  await expect(page.getByText("Your provider account")).toBeVisible();
+  await page.getByRole("button", { name: /Confirm run/ }).click();
   await expect(page.getByText("AI proposal", { exact: true })).toBeVisible();
   await expect(page.getByText("Ready to apply after your review.")).toBeVisible();
   await expect(shortDescription).not.toHaveValue(/Mocked AI proposal/);
@@ -109,7 +121,7 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
     `/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`,
   );
   await page.getByRole("button", { name: "AI improve listing" }).first().click();
-  await page.getByRole("button", { name: "Confirm billable run" }).click();
+  await page.getByRole("button", { name: /Confirm run/ }).click();
   await expect(
     page.getByText(
       "The model returned listing JSON RouteCrafter could not safely apply.",
@@ -126,8 +138,8 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
     `/projects/${FULL_PROJECT_ID}?stage=package&tool=visuals`,
   );
   await page.getByRole("button", { name: "AI create image" }).first().click();
-  await expect(page.getByText("Billable request")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm billable run" }).click();
+  await expect(page.getByText("AI request estimate")).toBeVisible();
+  await page.getByRole("button", { name: /Confirm run/ }).click();
   await expect(
     page.getByAltText("AI generated RouteCrafter visual"),
   ).toBeVisible();

@@ -22,6 +22,38 @@ const defaultProviders = () =>
     {} as Record<AiProviderId, AiProviderSettings>,
   );
 
+const LEGACY_OPENAI_TEXT_MODELS = new Set(["gpt-5.2"]);
+const LEGACY_OPENAI_IMAGE_MODELS = new Set(["gpt-image-1"]);
+
+export function migratePersistedAiSettings<T extends {
+  text?: AiTextDefaults;
+  image?: AiImageDefaults;
+}>(persisted: T): T {
+  return {
+    ...persisted,
+    text: persisted.text
+      ? {
+          ...persisted.text,
+          model:
+            persisted.text.provider === "openai" &&
+            LEGACY_OPENAI_TEXT_MODELS.has(persisted.text.model)
+              ? AI_PROVIDERS.openai.defaultTextModel
+              : persisted.text.model,
+        }
+      : persisted.text,
+    image: persisted.image
+      ? {
+          ...persisted.image,
+          model:
+            persisted.image.provider === "openai" &&
+            LEGACY_OPENAI_IMAGE_MODELS.has(persisted.image.model)
+              ? AI_PROVIDERS.openai.defaultImageModel
+              : persisted.image.model,
+        }
+      : persisted.image,
+  };
+}
+
 export interface AiSettingsState {
   providers: Record<AiProviderId, AiProviderSettings>;
   text: AiTextDefaults;
@@ -166,7 +198,7 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
     }),
     {
       name: "routecrafter:ai-settings:v1",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
         providers: state.providers,
@@ -175,9 +207,15 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
         requirePreviewBeforeApply: state.requirePreviewBeforeApply,
         showBillableConfirmation: state.showBillableConfirmation,
       }),
+      migrate: (persisted) =>
+        migratePersistedAiSettings(
+          persisted as Partial<AiSettingsState>,
+        ) as AiSettingsState,
       merge: (persisted, current) => ({
         ...current,
-        ...(persisted as Partial<AiSettingsState>),
+        ...migratePersistedAiSettings(
+          persisted as Partial<AiSettingsState>,
+        ),
         providers: {
           ...defaultProviders(),
           ...((persisted as Partial<AiSettingsState>)?.providers ?? {}),

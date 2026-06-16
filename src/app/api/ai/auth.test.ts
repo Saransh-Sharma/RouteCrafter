@@ -1,14 +1,20 @@
 // @vitest-environment node
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST as textPost } from "./text/route";
 import { POST as imagePost } from "./image/route";
+import { GET as configGet } from "./config/route";
 import { signToken } from "@/lib/auth/jwt";
 
 describe("AI route authentication", () => {
   beforeEach(() => {
     vi.stubEnv("NEXTAUTH_SECRET", "ai-route-test-secret-long-enough");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it.each([
@@ -38,19 +44,138 @@ describe("AI route authentication", () => {
   });
 
   it("allows a valid session to reach request validation", async () => {
-    const token = await signToken({
-      userId: "user_admin",
-      username: "admin",
-      displayName: "Admin",
-      role: "admin",
-    });
-    const request = new NextRequest("http://localhost/api/ai/text", {
-      method: "POST",
-      body: "{}",
-      headers: { "Content-Type": "application/json" },
-    });
-    request.cookies.set("rc-session", token);
+    const request = await authenticatedRequest("/api/ai/text", {});
 
     expect((await textPost(request)).status).toBe(400);
   });
+
+  it("protects server AI configuration metadata", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    const missing = await configGet(
+      new NextRequest("http://localhost/api/ai/config"),
+    );
+    const valid = await configGet(
+      await authenticatedRequest("/api/ai/config", undefined, "GET"),
+    );
+
+    expect(missing.status).toBe(401);
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toEqual({
+      serverOpenAiAvailable: true,
+      serverTextModel: "gpt-5.4",
+      serverImageModel: "gpt-image-2",
+    });
+  });
+
+  it("uses the server key and forced OpenAI model when no personal key is sent", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        output_text: "Server-funded result",
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await textPost(
+      await authenticatedRequest("/api/ai/text", {
+        provider: "gemini",
+        model: "gemini-3.5-flash",
+        prompt: "Hello",
+        taskType: "prompt",
+        maxOutputTokens: 100,
+      }),
+    );
+    const result = await response.json();
+    const upstream = fetchMock.mock.calls[0];
+    const upstreamBody = JSON.parse(String(upstream[1]?.body));
+
+    expect(response.status).toBe(200);
+    expect(upstream[0]).toBe("https://api.openai.com/v1/responses");
+    expect(upstream[1]?.headers).toMatchObject({
+      Authorization: "Bearer sk-server-secret",
+    });
+    expect(upstreamBody.model).toBe("gpt-5.4");
+    expect(result).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.4",
+      credentialSource: "server",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-server-secret");
+  });
+
+  it("prefers a personal provider key over the server credential", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        content: [{ type: "text", text: "Personal result" }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await textPost(
+      await authenticatedRequest("/api/ai/text", {
+        provider: "anthropic",
+        apiKey: "sk-ant-personal",
+        model: "claude-sonnet-4-6",
+        prompt: "Hello",
+        taskType: "prompt",
+        maxOutputTokens: 100,
+      }),
+    );
+    const result = await response.json();
+    const upstream = fetchMock.mock.calls[0];
+
+    expect(response.status).toBe(200);
+    expect(upstream[0]).toBe("https://api.anthropic.com/v1/messages");
+    expect(upstream[1]?.headers).toMatchObject({
+      "x-api-key": "sk-ant-personal",
+    });
+    expect(result).toMatchObject({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      credentialSource: "personal",
+    });
+  });
+
+  it("returns 503 when neither server nor personal credentials exist", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "");
+
+    const response = await textPost(
+      await authenticatedRequest("/api/ai/text", {
+        provider: "openai",
+        model: "gpt-5.4",
+        prompt: "Hello",
+        taskType: "prompt",
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error:
+        "No AI credential is available. Add a personal key or configure OPEN_AI_KEY on the server.",
+    });
+  });
 });
+
+async function authenticatedRequest(
+  path: string,
+  body?: unknown,
+  method = "POST",
+): Promise<NextRequest> {
+  const token = await signToken({
+    userId: "user_admin",
+    username: "admin",
+    displayName: "Admin",
+    role: "admin",
+  });
+  const request = new NextRequest(`http://localhost${path}`, {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers:
+      body === undefined ? undefined : { "Content-Type": "application/json" },
+  });
+  request.cookies.set("rc-session", token);
+  return request;
+}

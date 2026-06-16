@@ -62,15 +62,22 @@ export function ImagePromptCard({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {onAiImprove ? (
-              <AiCostButton size="sm" showBadge={false} onClick={onAiImprove}>
+              <AiCostButton
+                size="sm"
+                taskType="imagePrompt"
+                prompt={JSON.stringify(prompt)}
+                onClick={onAiImprove}
+              >
                 AI improve prompt
               </AiCostButton>
             ) : null}
             {onAiCreateImage ? (
               <AiCostButton
                 size="sm"
-                showBadge={false}
                 icon="cost"
+                mode="image"
+                taskType="imageGeneration"
+                prompt={JSON.stringify(prompt)}
                 onClick={onAiCreateImage}
               >
                 AI create image

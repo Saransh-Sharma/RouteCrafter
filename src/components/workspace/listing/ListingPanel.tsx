@@ -183,6 +183,7 @@ export function ListingPanel({
               Generate listing
             </Button>
             <AiCostButton
+              taskType="listing"
               onClick={() => {
                 setAiFocus("Create a complete listing from the trip config.");
                 setAiOpen(true);
@@ -214,6 +215,7 @@ export function ListingPanel({
           </Select>
           <AiCostButton
             size="sm"
+            taskType="listing"
             onClick={() => {
               setAiFocus("Improve the complete listing.");
               setAiOpen(true);
@@ -290,6 +292,7 @@ export function ListingPanel({
             </Button>
             <AiCostButton
               size="sm"
+              taskType="listing"
               onClick={() => {
                 setAiFocus("Generate stronger marketplace title options.");
                 setAiOpen(true);
@@ -430,6 +433,7 @@ export function ListingPanel({
           </Button>
           <AiCostButton
             size="sm"
+            taskType="listing"
             onClick={() => {
               setAiFocus("Improve FAQ answers and add useful buyer questions.");
               setAiOpen(true);

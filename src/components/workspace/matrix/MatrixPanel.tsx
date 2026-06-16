@@ -169,6 +169,7 @@ export function MatrixPanel({
               Generate matrix
             </Button>
             <AiCostButton
+              taskType="matrix"
               onClick={() => {
                 setAiFocus(null);
                 setAiOpen(true);
@@ -208,6 +209,7 @@ export function MatrixPanel({
         <div className="flex items-center gap-2">
           <AiCostButton
             size="sm"
+            taskType="matrix"
             onClick={() => {
               setAiFocus(null);
               setAiOpen(true);

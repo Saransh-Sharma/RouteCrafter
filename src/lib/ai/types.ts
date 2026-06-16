@@ -1,4 +1,5 @@
 export type AiProviderId = "openai" | "anthropic" | "gemini";
+export type AiCredentialSource = "server" | "personal";
 
 export type AiTaskType =
   | "brief"
@@ -20,7 +21,7 @@ export interface AiUsage {
 
 export interface AiTextRequest {
   provider: AiProviderId;
-  apiKey: string;
+  apiKey?: string;
   model: string;
   prompt: string;
   system?: string;
@@ -33,7 +34,7 @@ export interface AiTextRequest {
 
 export interface AiImageRequest {
   provider: AiProviderId;
-  apiKey: string;
+  apiKey?: string;
   model: string;
   prompt: string;
   taskType: AiTaskType;
@@ -49,6 +50,34 @@ export interface AiResult {
   usage?: AiUsage;
   provider: AiProviderId;
   model: string;
+  credentialSource: AiCredentialSource;
+}
+
+export interface ResolvedAiTextRequest extends AiTextRequest {
+  apiKey: string;
+  credentialSource: AiCredentialSource;
+}
+
+export interface ResolvedAiImageRequest extends AiImageRequest {
+  apiKey: string;
+  credentialSource: AiCredentialSource;
+}
+
+export interface AiServerConfig {
+  serverOpenAiAvailable: boolean;
+  serverTextModel: string;
+  serverImageModel: string;
+}
+
+export interface AiCostEstimate {
+  currency: "USD";
+  lowUsd: number;
+  highUsd: number;
+  basis: string;
+  inputTokensLow?: number;
+  inputTokensHigh?: number;
+  outputTokensLow?: number;
+  outputTokensHigh?: number;
 }
 
 export interface AiProviderCapability {
@@ -104,4 +133,5 @@ export interface AiAcceptedRun {
   appliedAt: string;
   usage?: AiUsage;
   source?: string;
+  credentialSource?: AiCredentialSource;
 }

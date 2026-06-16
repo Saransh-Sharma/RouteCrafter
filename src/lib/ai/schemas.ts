@@ -23,7 +23,7 @@ export const aiUsageSchema = z.object({
 
 export const aiTextRequestSchema = z.object({
   provider: aiProviderIdSchema,
-  apiKey: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
   model: z.string().min(1),
   prompt: z.string().min(1),
   system: z.string().optional(),
@@ -36,7 +36,7 @@ export const aiTextRequestSchema = z.object({
 
 export const aiImageRequestSchema = z.object({
   provider: aiProviderIdSchema,
-  apiKey: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
   model: z.string().min(1),
   prompt: z.string().min(1),
   taskType: aiTaskTypeSchema,
@@ -52,4 +52,5 @@ export const aiResultSchema = z.object({
   usage: aiUsageSchema.optional(),
   provider: aiProviderIdSchema,
   model: z.string(),
+  credentialSource: z.enum(["server", "personal"]),
 });

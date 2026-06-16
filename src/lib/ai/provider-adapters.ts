@@ -1,10 +1,10 @@
 import "server-only";
 
 import type {
-  AiImageRequest,
   AiResult,
-  AiTextRequest,
   AiUsage,
+  ResolvedAiImageRequest,
+  ResolvedAiTextRequest,
 } from "./types";
 import { providerSupports } from "./providers";
 
@@ -140,7 +140,9 @@ export function normalizeProviderError(error: unknown): string {
   return "The AI request did not complete. No project content was changed.";
 }
 
-export async function generateText(request: AiTextRequest): Promise<AiResult> {
+export async function generateText(
+  request: ResolvedAiTextRequest,
+): Promise<AiResult> {
   if (!providerSupports(request.provider, "text")) {
     throw new Error("This provider does not support text generation here.");
   }
@@ -154,7 +156,9 @@ export async function generateText(request: AiTextRequest): Promise<AiResult> {
   }
 }
 
-export async function generateImage(request: AiImageRequest): Promise<AiResult> {
+export async function generateImage(
+  request: ResolvedAiImageRequest,
+): Promise<AiResult> {
   if (!providerSupports(request.provider, "image")) {
     throw new Error("This provider does not support image generation here.");
   }
@@ -168,7 +172,9 @@ export async function generateImage(request: AiImageRequest): Promise<AiResult> 
   }
 }
 
-async function generateOpenAiText(request: AiTextRequest): Promise<AiResult> {
+async function generateOpenAiText(
+  request: ResolvedAiTextRequest,
+): Promise<AiResult> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -198,12 +204,15 @@ async function generateOpenAiText(request: AiTextRequest): Promise<AiResult> {
   return {
     provider: "openai",
     model: request.model,
+    credentialSource: request.credentialSource,
     text: cleanJsonText(extractOpenAiText(data)),
     usage: usageFromOpenAI(record.usage),
   };
 }
 
-async function generateAnthropicText(request: AiTextRequest): Promise<AiResult> {
+async function generateAnthropicText(
+  request: ResolvedAiTextRequest,
+): Promise<AiResult> {
   const isLateOpus = /^claude-opus-4-[78]/.test(request.model);
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -230,12 +239,15 @@ async function generateAnthropicText(request: AiTextRequest): Promise<AiResult> 
   return {
     provider: "anthropic",
     model: request.model,
+    credentialSource: request.credentialSource,
     text: cleanJsonText(extractAnthropicText(data)),
     usage: usageFromAnthropic(record.usage),
   };
 }
 
-async function generateGeminiText(request: AiTextRequest): Promise<AiResult> {
+async function generateGeminiText(
+  request: ResolvedAiTextRequest,
+): Promise<AiResult> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
@@ -264,12 +276,15 @@ async function generateGeminiText(request: AiTextRequest): Promise<AiResult> {
   return {
     provider: "gemini",
     model: request.model,
+    credentialSource: request.credentialSource,
     text: cleanJsonText(extractGeminiText(data)),
     usage: usageFromGemini(record.usageMetadata),
   };
 }
 
-async function generateOpenAiImage(request: AiImageRequest): Promise<AiResult> {
+async function generateOpenAiImage(
+  request: ResolvedAiImageRequest,
+): Promise<AiResult> {
   const response = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
@@ -294,13 +309,16 @@ async function generateOpenAiImage(request: AiImageRequest): Promise<AiResult> {
   return {
     provider: "openai",
     model: request.model,
+    credentialSource: request.credentialSource,
     image,
     mimeType: base64 ? "image/png" : undefined,
     usage: { images: 1 },
   };
 }
 
-async function generateGeminiImage(request: AiImageRequest): Promise<AiResult> {
+async function generateGeminiImage(
+  request: ResolvedAiImageRequest,
+): Promise<AiResult> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
@@ -329,6 +347,7 @@ async function generateGeminiImage(request: AiImageRequest): Promise<AiResult> {
   return {
     provider: "gemini",
     model: request.model,
+    credentialSource: request.credentialSource,
     image: `data:${mimeType};base64,${base64}`,
     mimeType,
     usage: { ...usageFromGemini(record.usageMetadata), images: 1 },

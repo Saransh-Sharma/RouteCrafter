@@ -21,6 +21,9 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { AiCostBadge } from "./AiCostButton";
+import { useAiConfig } from "./AiConfigProvider";
+import { resolveClientAiRun } from "@/lib/ai/runtime";
+import { estimateAiRunCost, formatCostEstimate } from "@/lib/ai/pricing";
 
 type RunState = "idle" | "running" | "result" | "error";
 
@@ -73,14 +76,41 @@ export function AiRunSheet({
   const textDefaults = useAiSettingsStore((state) => state.text);
   const imageDefaults = useAiSettingsStore((state) => state.image);
   const getApiKey = useAiSettingsStore((state) => state.getApiKey);
-  const hasKeyFor = useAiSettingsStore((state) => state.hasKeyFor);
+  const { config, loading: configLoading } = useAiConfig();
 
   const defaults = mode === "text" ? textDefaults : imageDefaults;
-  const provider = defaults.provider;
-  const info = AI_PROVIDERS[provider];
-  const apiKey = getApiKey(provider);
-  const hasKey = hasKeyFor(provider);
-  const supported = providerSupports(provider, mode === "text" ? "text" : "image");
+  const personalKey = getApiKey(defaults.provider);
+  const selection = resolveClientAiRun({
+    mode,
+    defaults,
+    personalKey,
+    serverConfig: config,
+  });
+  const info = AI_PROVIDERS[selection.provider];
+  const supported = providerSupports(
+    selection.provider,
+    mode === "text" ? "text" : "image",
+  );
+  const estimate =
+    mode === "text"
+      ? estimateAiRunCost({
+          mode,
+          provider: selection.provider,
+          model: selection.model,
+          prompt,
+          taskType,
+          maxOutputTokens: textDefaults.maxOutputTokens,
+        })
+      : estimateAiRunCost({
+          mode,
+          provider: selection.provider,
+          model: selection.model,
+          prompt,
+          taskType,
+          size: imageDefaults.size,
+          quality: imageDefaults.quality,
+        });
+  const estimateLabel = formatCostEstimate(estimate);
 
   const [state, setState] = React.useState<RunState>("idle");
   const [result, setResult] = React.useState<AiResult | null>(null);
@@ -105,8 +135,10 @@ export function AiRunSheet({
   }
 
   async function run() {
-    if (!hasKey) {
-      setError("Add an API key in Settings.");
+    if (!selection.available) {
+      setError(
+        "No AI credential is available. Add a personal key in Settings or ask an administrator to configure server OpenAI.",
+      );
       setState("error");
       return;
     }
@@ -132,9 +164,9 @@ export function AiRunSheet({
         mode === "text"
           ? await requestAiText(
               {
-                provider,
-                apiKey,
-                model: textDefaults.model,
+                provider: selection.provider,
+                apiKey: personalKey || undefined,
+                model: selection.model,
                 prompt,
                 taskType,
                 temperature: textDefaults.temperature,
@@ -146,9 +178,9 @@ export function AiRunSheet({
             )
           : await requestAiImage(
               {
-                provider,
-                apiKey,
-                model: imageDefaults.model,
+                provider: selection.provider,
+                apiKey: personalKey || undefined,
+                model: selection.model,
                 prompt,
                 taskType,
                 size: imageDefaults.size,
@@ -200,7 +232,7 @@ export function AiRunSheet({
                 )}
               </span>
               <h2 className="text-lg font-semibold text-ink">{title}</h2>
-              <AiCostBadge />
+              <AiCostBadge estimate={estimate} />
             </div>
             <p className="max-w-2xl text-sm text-ink-soft">{description}</p>
           </div>
@@ -219,35 +251,50 @@ export function AiRunSheet({
             <aside className="space-y-4">
               <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper/60 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rc-ai-brown)]">
-                  Billable request
+                  AI request estimate
                 </p>
                 <div className="mt-3 space-y-2 text-sm text-ink-soft">
                   <Meta label="Provider" value={info.label} />
-                  <Meta
-                    label="Model"
-                    value={mode === "text" ? textDefaults.model : imageDefaults.model}
-                  />
+                  <Meta label="Model" value={selection.model} />
                   <Meta label="Source" value={sourceLabel} />
-                  <Meta label="Keys" value="Sent for this request only" />
+                  <Meta
+                    label="Credential"
+                    value={
+                      selection.credentialSource === "personal"
+                        ? "Personal key override"
+                        : selection.credentialSource === "server"
+                          ? "RouteCrafter server key"
+                          : "Unavailable"
+                    }
+                  />
+                  <Meta label="Payer" value={selection.payer} />
+                  <Meta label="Estimated cost" value={estimateLabel} />
                 </div>
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  {estimate?.basis ??
+                    "Pricing is unavailable for this custom or unknown model."}
+                </p>
               </div>
 
               <div className="rounded-2xl border border-terracotta/25 bg-terracotta-soft/45 p-4 text-sm text-brown">
                 <div className="flex gap-2">
                   <ShieldAlert className="mt-0.5 size-4 shrink-0" />
                   <p>
-                    This may charge your provider account. RouteCrafter will not
-                    apply anything until you review the result.
+                    {selection.credentialSource === "server"
+                      ? "RouteCrafter pays for this request with its server OpenAI account."
+                      : "This request may charge your personal provider account."}{" "}
+                    The estimate may change with actual token usage and provider
+                    pricing. Nothing is applied until you review the result.
                   </p>
                 </div>
               </div>
 
-              {!hasKey ? (
+              {!selection.available && !configLoading ? (
                 <Link
                   href="/settings"
                   className="inline-flex w-full items-center justify-center rounded-full bg-forest px-4 py-2.5 text-sm font-medium text-paper hover:bg-forest-deep"
                 >
-                  Add key in Settings
+                  Add personal key in Settings
                 </Link>
               ) : null}
             </aside>
@@ -268,9 +315,14 @@ export function AiRunSheet({
                     <Button variant="ghost" onClick={close}>
                       Discard
                     </Button>
-                    <Button onClick={run} disabled={!hasKey || !supported}>
+                    <Button
+                      onClick={run}
+                      disabled={
+                        configLoading || !selection.available || !supported
+                      }
+                    >
                       <Sparkles className="size-4" />
-                      Confirm billable run
+                      Confirm run - {estimateLabel}
                     </Button>
                   </div>
                 </div>

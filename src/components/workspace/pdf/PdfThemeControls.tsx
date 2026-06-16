@@ -147,6 +147,14 @@ export function PdfThemeControls({
           <AiCostButton
             size="sm"
             icon="cost"
+            mode="image"
+            taskType="imageGeneration"
+            prompt={JSON.stringify({
+              title: itinerary.title,
+              country: itinerary.country,
+              overview: itinerary.overview,
+              routeSummary: itinerary.routeSummary,
+            })}
             className="w-full"
             onClick={() =>
               setAiImageTarget({
@@ -213,7 +221,9 @@ export function PdfThemeControls({
                   <AiCostButton
                     size="sm"
                     icon="cost"
-                    showBadge={false}
+                    mode="image"
+                    taskType="imageGeneration"
+                    prompt={JSON.stringify(day)}
                     className="mb-2 w-full"
                     onClick={() =>
                       setAiImageTarget({

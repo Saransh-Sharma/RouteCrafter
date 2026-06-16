@@ -27,6 +27,7 @@ export const aiAcceptedRunSchema = z.object({
     })
     .optional(),
   source: z.string().optional(),
+  credentialSource: z.enum(["server", "personal"]).optional(),
 });
 
 export type AiAcceptedRun = z.infer<typeof aiAcceptedRunSchema>;
