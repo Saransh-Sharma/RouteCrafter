@@ -402,10 +402,16 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         initialized: state.initialized,
       }),
       migrate: (persistedState) => normalizePersistedProjects(persistedState),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...normalizePersistedProjects(persistedState),
-      }),
+      merge: (persistedState, currentState) => {
+        if (persistedState == null) {
+          return currentState;
+        }
+
+        return {
+          ...currentState,
+          ...normalizePersistedProjects(persistedState),
+        };
+      },
       onRehydrateStorage: () => (state, error) => {
         if (state) {
           state.hydrateSeeds();
