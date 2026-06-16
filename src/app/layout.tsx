@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -34,6 +35,7 @@ export default function RootLayout({
     >
       <body className="rc-paper-texture min-h-full text-ink">
         {children}
+        <Analytics />
       </body>
     </html>
   );
