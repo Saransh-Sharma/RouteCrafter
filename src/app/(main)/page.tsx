@@ -10,12 +10,15 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
+import * as React from "react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PreviewCard } from "@/components/ui/PreviewCard";
 import { ImportProjectButton } from "@/components/dashboard/ImportProjectButton";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useMounted } from "@/lib/hooks";
+import { getProjectWorkflow } from "@/lib/workflow";
+import type { AssetDTO } from "@/lib/persistence/types";
 
 const quickActions = [
   {
@@ -72,7 +75,38 @@ export default function DashboardPage() {
   const projects = useProjectsStore((s) => s.projects);
   const user = useAuthStore((s) => s.user);
   const recent = mounted ? projects.slice(0, 5) : [];
+  const continueProject = mounted
+    ? [...projects]
+        .filter((project) => project.status !== "Ready to sell")
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        )[0]
+    : undefined;
+  const [recentAssets, setRecentAssets] = React.useState<AssetDTO[]>([]);
   const greeting = getGreeting();
+
+  React.useEffect(() => {
+    if (!mounted || !user) return;
+    let active = true;
+    fetch("/api/assets?limit=6", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Assets unavailable.");
+        return (await response.json()) as { assets?: AssetDTO[] };
+      })
+      .then((body) => {
+        if (active) setRecentAssets(body.assets ?? []);
+      })
+      .catch(() => {
+        if (active) setRecentAssets([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [mounted, user]);
 
   return (
     <div className="space-y-12">
@@ -112,6 +146,31 @@ export default function DashboardPage() {
         }
       />
 
+      {continueProject ? (
+        <Link
+          href={`/projects/${continueProject.id}?stage=${
+            getProjectWorkflow(continueProject).recommendedStage
+          }`}
+          className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-forest/25 bg-sage-soft/60 p-5 transition-colors hover:border-forest/50 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-forest">
+              Continue where you left off
+            </span>
+            <span className="mt-1 block text-lg font-semibold text-ink">
+              {continueProject.name}
+            </span>
+            <span className="text-sm text-ink-soft">
+              {getProjectWorkflow(continueProject).recommendedAction}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-forest">
+            Open project
+            <ArrowRight className="size-4" />
+          </span>
+        </Link>
+      ) : null}
+
       {/* Quick actions */}
       <section className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -141,6 +200,46 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+
+      {recentAssets.length ? (
+        <section className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-ink">Recent assets</h2>
+            <Link
+              href="/library"
+              className="flex items-center gap-1 text-sm font-medium text-forest hover:text-forest-deep"
+            >
+              Open library
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {recentAssets.map((asset) => (
+              <Link
+                key={asset.id}
+                href="/library"
+                className="overflow-hidden rounded-[var(--radius-card)] border border-border-soft bg-paper/55"
+              >
+                {asset.mimeType.startsWith("image/") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={asset.blobUrl}
+                    alt={asset.filename}
+                    className="h-24 w-full object-cover"
+                  />
+                ) : (
+                  <span className="grid h-24 place-items-center bg-paper-2/50 text-terracotta">
+                    <FileType className="size-7" />
+                  </span>
+                )}
+                <span className="block truncate px-2 py-2 text-xs font-medium text-ink-soft">
+                  {asset.filename}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Projects */}
       <section className="space-y-5">

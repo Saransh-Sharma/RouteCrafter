@@ -17,7 +17,7 @@ export default function ProjectsPage() {
       <SectionHeader
         eyebrow="Projects"
         title="All country projects"
-        subtitle="Every itinerary product in your studio, saved locally in your browser."
+        subtitle="Every itinerary product in your studio, synced to your cloud workspace."
         actions={
           <Link
             href="/projects/new"

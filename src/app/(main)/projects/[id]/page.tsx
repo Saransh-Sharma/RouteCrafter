@@ -67,8 +67,8 @@ export default function ProjectWorkspacePage() {
               Project not found
             </h2>
             <p className="text-sm text-ink-soft">
-              This project isn&apos;t saved in your browser. It may have been
-              deleted or created on another device.
+              This project is not available in your current cloud project list.
+              It may have been deleted or you may need to refresh your session.
             </p>
             <Link
               href="/"
@@ -141,7 +141,7 @@ export default function ProjectWorkspacePage() {
                 ? "Saving changes"
                 : saveState.status === "error"
                   ? "Save failed"
-                  : "Saved locally"}
+                  : "Saved to cloud"}
             </span>
           </div>
         </div>
