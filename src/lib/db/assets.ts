@@ -123,7 +123,17 @@ export async function createAssetUsage(input: {
   entityId?: string | null;
   fieldPath: string;
   projectRevision?: number | null;
+  replaceExisting?: boolean;
 }) {
+  if (input.replaceExisting) {
+    await clearProjectAssetUsage({
+      userId: input.userId,
+      projectId: input.projectId,
+      usageType: input.usageType,
+      entityId: input.entityId,
+      fieldPath: input.fieldPath,
+    });
+  }
   await getDb().insert(assetUsages).values({
     id: crypto.randomUUID(),
     assetId: input.assetId,
@@ -135,6 +145,34 @@ export async function createAssetUsage(input: {
     projectRevision: input.projectRevision,
     createdAt: new Date(),
   });
+}
+
+export async function clearProjectAssetUsage({
+  userId,
+  projectId,
+  usageType,
+  entityId,
+  fieldPath,
+}: {
+  userId: string;
+  projectId: string;
+  usageType: AssetUsageType;
+  entityId?: string | null;
+  fieldPath: string;
+}) {
+  await getDb()
+    .update(assetUsages)
+    .set({ clearedAt: new Date() })
+    .where(
+      and(
+        eq(assetUsages.userId, userId),
+        eq(assetUsages.projectId, projectId),
+        eq(assetUsages.usageType, usageType),
+        eq(assetUsages.fieldPath, fieldPath),
+        entityId ? eq(assetUsages.entityId, entityId) : isNull(assetUsages.entityId),
+        isNull(assetUsages.clearedAt),
+      ),
+    );
 }
 
 export async function getAssetFacets(userId: string): Promise<{

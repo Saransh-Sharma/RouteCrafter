@@ -92,8 +92,8 @@ export async function markAiRunApplied({
   projectId?: string;
   projectRevision?: number;
   assetId?: string;
-}): Promise<void> {
-  await getDb()
+}): Promise<boolean> {
+  const rows = await getDb()
     .update(aiRuns)
     .set({
       projectId,
@@ -101,5 +101,7 @@ export async function markAiRunApplied({
       assetId,
       appliedAt: new Date(),
     })
-    .where(and(eq(aiRuns.userId, userId), eq(aiRuns.id, aiRunId)));
+    .where(and(eq(aiRuns.userId, userId), eq(aiRuns.id, aiRunId)))
+    .returning({ id: aiRuns.id });
+  return rows.length > 0;
 }

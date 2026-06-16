@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { User } from "@/lib/schemas/auth";
 import {
   CURRENT_SCHEMA_VERSION,
@@ -21,6 +21,10 @@ export class ProjectConflictError extends Error {
 
 export class ProjectNotFoundError extends Error {
   status = 404;
+}
+
+export class ProjectRevisionRequiredError extends Error {
+  status = 409;
 }
 
 function rowToCloudProject(row: typeof projects.$inferSelect): CloudProject {
@@ -96,37 +100,64 @@ export async function upsertProjectForUser({
   if (existing?.deletedAt) {
     throw new ProjectNotFoundError("Project was deleted.");
   }
-  if (
-    existing &&
-    expectedRevision !== undefined &&
-    existing.revision !== expectedRevision
-  ) {
-    throw new ProjectConflictError("Project has newer cloud changes.");
-  }
-
-  const nextRevision = existing ? existing.revision + 1 : 1;
   if (existing) {
-    await getDb()
+    if (expectedRevision === undefined) {
+      throw new ProjectRevisionRequiredError(
+        "Project revision is required when updating an existing cloud project.",
+      );
+    }
+    const updateValues = projectValues(normalized, user.id, existing.revision + 1);
+    const [updated] = await getDb()
       .update(projects)
-      .set(projectValues(normalized, user.id, nextRevision))
-      .where(and(eq(projects.userId, user.id), eq(projects.id, normalized.id)));
+      .set({
+        ...updateValues,
+        createdAt: existing.createdAt,
+        revision: sql`${projects.revision} + 1`,
+      })
+      .where(
+        and(
+          eq(projects.userId, user.id),
+          eq(projects.id, normalized.id),
+          eq(projects.revision, expectedRevision),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      const latest = await getDb().query.projects.findFirst({
+        where: and(eq(projects.userId, user.id), eq(projects.id, normalized.id)),
+      });
+      if (!latest || latest.deletedAt) {
+        throw new ProjectNotFoundError("Project not found.");
+      }
+      throw new ProjectConflictError("Project has newer cloud changes.");
+    }
+    if (activityDetail) {
+      await createActivity({
+        projectId: normalized.id,
+        ownerUserId: user.id,
+        actor: user,
+        action: activityAction,
+        detail: activityDetail,
+      });
+    }
+    return rowToCloudProject(updated);
   } else {
-    await getDb()
+    const [inserted] = await getDb()
       .insert(projects)
-      .values(projectValues(normalized, user.id, nextRevision));
+      .values(projectValues(normalized, user.id, 1))
+      .returning();
+    if (activityDetail) {
+      await createActivity({
+        projectId: normalized.id,
+        ownerUserId: user.id,
+        actor: user,
+        action: "created",
+        detail: activityDetail,
+      });
+    }
+    return rowToCloudProject(inserted);
   }
-
-  if (activityDetail) {
-    await createActivity({
-      projectId: normalized.id,
-      ownerUserId: user.id,
-      actor: user,
-      action: existing ? activityAction : "created",
-      detail: activityDetail,
-    });
-  }
-
-  return { project: normalized, revision: nextRevision };
 }
 
 export async function bulkSyncProjectsForUser({
@@ -138,11 +169,12 @@ export async function bulkSyncProjectsForUser({
 }): Promise<CloudProject[]> {
   await ensureUser(user);
   const existing = await listProjectsForUser(user.id);
-  if (existing.length > 0) return existing;
+  const existingIds = new Set(existing.map((item) => item.project.id));
 
   const synced: CloudProject[] = [];
   for (const raw of incoming) {
     const normalized = normalizeProject(raw);
+    if (existingIds.has(normalized.id)) continue;
     const syncedProject = await upsertProjectForUser({
       user,
       project: normalized,
@@ -157,33 +189,51 @@ export async function bulkSyncProjectsForUser({
     });
     synced.push(syncedProject);
   }
-  return synced;
+  return listProjectsForUser(user.id);
 }
 
 export async function softDeleteProjectForUser({
   user,
   projectId,
+  expectedRevision,
 }: {
   user: User;
   projectId: string;
+  expectedRevision?: number;
 }): Promise<void> {
   const existing = await getProjectForUser({ userId: user.id, projectId });
   if (!existing) throw new ProjectNotFoundError("Project not found.");
+  if (expectedRevision === undefined) {
+    throw new ProjectRevisionRequiredError(
+      "Project revision is required when deleting a cloud project.",
+    );
+  }
+  const [deleted] = await getDb()
+    .update(projects)
+    .set({
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+      revision: sql`${projects.revision} + 1`,
+      updatedByUserId: user.id,
+    })
+    .where(
+      and(
+        eq(projects.userId, user.id),
+        eq(projects.id, projectId),
+        eq(projects.revision, expectedRevision),
+        isNull(projects.deletedAt),
+      ),
+    )
+    .returning({ id: projects.id });
+  if (!deleted) {
+    throw new ProjectConflictError("Project has newer cloud changes.");
+  }
   await createProjectVersion({
     project: existing.project,
     userId: user.id,
     revision: existing.revision,
     reason: "deleted",
   });
-  await getDb()
-    .update(projects)
-    .set({
-      deletedAt: new Date(),
-      updatedAt: new Date(),
-      revision: existing.revision + 1,
-      updatedByUserId: user.id,
-    })
-    .where(and(eq(projects.userId, user.id), eq(projects.id, projectId)));
   await createActivity({
     projectId,
     ownerUserId: user.id,

@@ -3,9 +3,9 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -22,7 +22,7 @@ export const users = pgTable("users", {
 export const projects = pgTable(
   "projects",
   {
-    id: text("id").primaryKey(),
+    id: text("id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -38,6 +38,7 @@ export const projects = pgTable(
     updatedByUserId: text("updated_by_user_id"),
   },
   (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.id] }),
     userUpdatedIdx: index("projects_user_updated_idx").on(
       table.userId,
       table.updatedAt,
@@ -50,10 +51,6 @@ export const projects = pgTable(
       table.userId,
       table.status,
     ),
-    userProjectUnique: uniqueIndex("projects_id_user_unique").on(
-      table.id,
-      table.userId,
-    ),
   }),
 );
 
@@ -61,9 +58,7 @@ export const activityLogs = pgTable(
   "activity_logs",
   {
     id: uuid("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id),
+    projectId: text("project_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -95,9 +90,7 @@ export const assets = pgTable(
   "assets",
   {
     id: uuid("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id),
+    projectId: text("project_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -143,9 +136,7 @@ export const assetUsages = pgTable(
     assetId: uuid("asset_id")
       .notNull()
       .references(() => assets.id),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id),
+    projectId: text("project_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -172,7 +163,7 @@ export const aiRuns = pgTable(
   "ai_runs",
   {
     id: uuid("id").primaryKey(),
-    projectId: text("project_id").references(() => projects.id),
+    projectId: text("project_id"),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -205,9 +196,7 @@ export const projectVersions = pgTable(
   "project_versions",
   {
     id: uuid("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id),
+    projectId: text("project_id").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
