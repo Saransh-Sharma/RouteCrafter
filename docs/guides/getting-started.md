@@ -61,7 +61,7 @@ Implications:
 - Clearing site data, using a different browser, or a private window will lose or
   hide your projects.
 - To back up or transfer work, use **JSON export/import** in the workspace
-  (see the [user guide](user-guide.md#export)).
+  (see [Local data and backup](user-guide.md#local-data-and-backup)).
 - There is a size guard: persisted state is capped (around 4M characters) to avoid
   exceeding browser quotas. Large embedded images (PDF cover/day images) are
   compressed before saving. See
@@ -84,11 +84,33 @@ server console. Production fails closed when Redis or email delivery is missing.
 1. From the **Dashboard**, click **New project** (or open one of the seeded demo
    projects).
 2. Fill in the create-project form (name, country, regions, positioning, audience).
-3. You land in the **project workspace**. Work through the tabs left to right — the
-   [user guide](user-guide.md) walks through each one.
-4. Confirm that RouteCrafter OpenAI is ready, or optionally add a personal provider
-   key override in **Settings** — see the [AI setup guide](ai-setup.md). Every panel works
-   with copy-paste prompts.
+3. You land in the **project workspace**, which is organized as a five-stage
+   production route: **Define**, **Plan**, **Build**, **Package**, and
+   **Publish**.
+4. Follow the recommended next action in the workspace header. Progress is derived
+   from completed content and readiness checks, not from manually checking off
+   steps.
+5. Confirm that RouteCrafter OpenAI is ready, or optionally add a personal provider
+   key override in **Settings** — see the [AI setup guide](ai-setup.md). Every panel
+   works with copy-paste prompts.
+
+## Build your first itinerary product
+
+RouteCrafter treats each project as a sellable itinerary product, not just a
+single document. The five stages describe the whole path from product brief to
+publish review:
+
+| Stage | What to do | What counts as progress |
+| --- | --- | --- |
+| **Define** | Choose the offer model, sales channels, destination, buyer, product promise, brand voice, trip brief, and selected output package. | Destination, audience, positioning, trip configuration, channels, and the required marketplace listing output are present. |
+| **Plan** | Commit to the exact duration and traveler-type editions you intend to ship. | At least one planned edition exists. Each added edition becomes part of the launch workload. |
+| **Build** | Create one itinerary for each planned edition and complete its overview, days, selected guides, and verification notes. | Every planned edition has a linked itinerary with the required day count and required fields. |
+| **Package** | Prepare the marketplace listing, service packages/intake when needed, portfolio visuals, PDF, spreadsheet, exports, and production prompts. | Listing requirements are complete, selected visuals are finalized, and selected delivery outputs have usable content. |
+| **Publish** | Resolve blockers, review recommendations, verify live-data language, review final files, download a JSON backup, and mark the project ready. | No blockers remain and all three final confirmations are checked. |
+
+The stages are clickable and flexible. You can jump ahead to inspect later tools,
+but the route line, blocker list, and recommended next action will point back to
+the earliest stage that still needs launch-critical work.
 
 ## Next.js 16 note
 

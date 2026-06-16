@@ -86,8 +86,8 @@ Full documentation lives in [`docs/`](docs/README.md):
 - **Product**
   - [Product overview](docs/product/overview.md) — what it is, who it's for, features, principles
 - **Guides**
-  - [Getting started](docs/guides/getting-started.md) — install, scripts, where data lives
-  - [User guide](docs/guides/user-guide.md) — end-to-end workspace walkthrough
+  - [Getting started](docs/guides/getting-started.md) — install, scripts, local data, and the five-stage production route
+  - [User guide](docs/guides/user-guide.md) — five-stage workflow from Define through Publish
   - [AI setup](docs/guides/ai-setup.md) — server OpenAI, personal overrides, models, estimates, safety
 - **Architecture**
   - [Architecture overview](docs/architecture/overview.md) — system map and principles

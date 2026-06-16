@@ -19,8 +19,8 @@ want to understand or extend the code.
 
 | Doc | What it covers |
 | --- | --- |
-| [Getting started](guides/getting-started.md) | Prerequisites, install, dev scripts, where your data lives, seeded demo projects. |
-| [User guide](guides/user-guide.md) | End-to-end walkthrough: dashboard, creating a project, and all nine workspace tabs, plus project import/export. |
+| [Getting started](guides/getting-started.md) | Prerequisites, install, dev scripts, where your data lives, seeded demo projects, and the five-stage production route. |
+| [User guide](guides/user-guide.md) | End-to-end walkthrough: dashboard, creating a project, and the Define, Plan, Build, Package, Publish workflow. |
 | [AI setup (BYOK)](guides/ai-setup.md) | Configuring OpenAI / Anthropic / Gemini keys, model defaults, connection tests, preview-before-apply, merge modes, and security caveats. |
 
 ## Architecture
