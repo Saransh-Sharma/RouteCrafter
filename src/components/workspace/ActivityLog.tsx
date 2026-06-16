@@ -84,7 +84,7 @@ function formatRelativeTime(isoString: string): string {
 export function ActivityLog({ projectId }: { projectId: string }) {
   const mounted = useMounted();
   const allEntries = useActivityStore((s) => s.entries);
-  const entries = React.useMemo(
+  const localEntries = React.useMemo(
     () =>
       allEntries
         .filter((entry) => entry.projectId === projectId)
@@ -95,7 +95,32 @@ export function ActivityLog({ projectId }: { projectId: string }) {
         ),
     [allEntries, projectId],
   );
+  const [cloudEntries, setCloudEntries] = React.useState<typeof localEntries | null>(
+    null,
+  );
   const [expanded, setExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!mounted) return;
+    let active = true;
+    fetch(`/api/projects/${projectId}/activity?limit=100`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Activity unavailable.");
+        return (await response.json()) as { entries?: typeof localEntries };
+      })
+      .then((body) => {
+        if (active) setCloudEntries(body.entries ?? []);
+      })
+      .catch(() => {
+        if (active) setCloudEntries(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [localEntries, mounted, projectId]);
 
   // Hydration guard — render nothing on the server / first client render
   if (!mounted) {
@@ -123,6 +148,7 @@ export function ActivityLog({ projectId }: { projectId: string }) {
     );
   }
 
+  const entries = cloudEntries ?? localEntries;
   const visible = expanded ? entries : entries.slice(0, VISIBLE_LIMIT);
   const hasMore = entries.length > VISIBLE_LIMIT;
 

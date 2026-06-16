@@ -11,6 +11,7 @@ declare module "html2pdf.js" {
   interface Html2PdfWorker {
     set: (options: Html2PdfOptions) => Html2PdfWorker;
     from: (element: HTMLElement) => Html2PdfWorker;
+    output: (type: "blob") => Promise<Blob>;
     save: () => Promise<void>;
   }
 

@@ -15,6 +15,7 @@ import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { buildMatrixPrompt } from "@/lib/ai/tasks";
 import { parseJsonObject } from "@/lib/ai/parse";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { markAiRunApplied } from "@/lib/assets/capture";
 import { PromptHelper } from "../PromptHelper";
 import {
   downloadMatrixCsv,
@@ -144,6 +145,7 @@ export function MatrixPanel({
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   if (!matrix || matrix.cells.length === 0) {

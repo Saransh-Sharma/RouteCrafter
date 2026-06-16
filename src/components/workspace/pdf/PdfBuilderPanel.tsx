@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/field";
 import { ItineraryDocument } from "./ItineraryDocument";
 import { PdfThemeControls } from "./PdfThemeControls";
 import { prepareDocumentForPdf } from "./pdf-assets";
+import { captureAsset, recordAssetUsage } from "@/lib/assets/capture";
 
 export function PdfBuilderPanel({
   project,
@@ -52,17 +53,43 @@ export function PdfBuilderPanel({
       await prepareDocumentForPdf(docRef.current);
       const html2pdf = (await import("html2pdf.js")).default;
       const slug = (project.country || "project").toLowerCase();
-      await html2pdf()
+      const filename = `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`;
+      const pdfBlob = await html2pdf()
         .set({
           margin: 0,
-          filename: `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`,
+          filename,
           image: { type: "jpeg", quality: 0.96 },
           html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"] },
         })
         .from(docRef.current)
-        .save();
+        .output("blob");
+      const asset = await captureAsset({
+        projectId: project.id,
+        assetType: "pdf",
+        source: "pdf-export",
+        file: pdfBlob,
+        filename,
+        usageType: "export",
+        entityId: selected.id,
+        fieldPath: "exports.pdf",
+        editionLabel: selected.duration,
+      });
+      await recordAssetUsage({
+        assetId: asset.id,
+        usageType: "export",
+        entityId: selected.id,
+        fieldPath: "exports.pdf",
+      }).catch(() => undefined);
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       setDownloadError(
         error instanceof Error ? error.message : "Could not generate the PDF.",

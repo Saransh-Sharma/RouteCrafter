@@ -12,7 +12,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import type { AiResult, AiTaskType } from "@/lib/ai/types";
+import type { AiResult, AiTaskType, AiTextRequest } from "@/lib/ai/types";
 import { requestAiImage, requestAiText } from "@/lib/ai/client";
 import { AI_PROVIDERS, providerSupports } from "@/lib/ai/providers";
 import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
@@ -42,6 +42,10 @@ export interface AiRunSheetProps {
   fillEmptyLabel?: string;
   appendLabel?: string;
   validateText?: (text: string) => string | null;
+  requestText?: (
+    request: AiTextRequest,
+    signal: AbortSignal,
+  ) => Promise<AiResult>;
   onApplyText?: (
     text: string,
     result: AiResult,
@@ -54,6 +58,8 @@ const progressByMode = {
   text: ["Preparing context", "Calling provider", "Validating response"],
   image: ["Preparing visual brief", "Calling image model", "Packaging image"],
 };
+
+const STRUCTURED_ITINERARY_OUTPUT_TOKENS = 12000;
 
 export function AiRunSheet({
   open,
@@ -70,6 +76,7 @@ export function AiRunSheet({
   fillEmptyLabel = "Fill only empty fields",
   appendLabel = "Append as notes",
   validateText,
+  requestText,
   onApplyText,
   onApplyImage,
 }: AiRunSheetProps) {
@@ -91,6 +98,10 @@ export function AiRunSheet({
     selection.provider,
     mode === "text" ? "text" : "image",
   );
+  const textMaxOutputTokens =
+    mode === "text" && taskType === "itinerary" && responseFormat === "json"
+      ? Math.max(textDefaults.maxOutputTokens, STRUCTURED_ITINERARY_OUTPUT_TOKENS)
+      : textDefaults.maxOutputTokens;
   const estimate =
     mode === "text"
       ? estimateAiRunCost({
@@ -99,7 +110,7 @@ export function AiRunSheet({
           model: selection.model,
           prompt,
           taskType,
-          maxOutputTokens: textDefaults.maxOutputTokens,
+          maxOutputTokens: textMaxOutputTokens,
         })
       : estimateAiRunCost({
           mode,
@@ -160,18 +171,21 @@ export function AiRunSheet({
     setResult(null);
 
     try {
+      const runText = requestText ?? requestAiText;
       const next =
         mode === "text"
-          ? await requestAiText(
+          ? await runText(
               {
                 provider: selection.provider,
                 apiKey: personalKey || undefined,
                 model: selection.model,
                 prompt,
                 taskType,
+                label: title,
+                source: sourceLabel,
                 temperature: textDefaults.temperature,
                 topP: textDefaults.topP,
-                maxOutputTokens: textDefaults.maxOutputTokens,
+                maxOutputTokens: textMaxOutputTokens,
                 responseFormat,
               },
               controller.signal,
@@ -183,6 +197,8 @@ export function AiRunSheet({
                 model: selection.model,
                 prompt,
                 taskType,
+                label: title,
+                source: sourceLabel,
                 size: imageDefaults.size,
                 quality: imageDefaults.quality,
                 aspectRatio: imageDefaults.aspectRatio,

@@ -22,6 +22,7 @@ import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { buildListingPrompt } from "@/lib/ai/tasks";
 import { parseJsonObject } from "@/lib/ai/parse";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { markAiRunApplied } from "@/lib/assets/capture";
 import { Section } from "../trip-config/Section";
 import { TagInput } from "../trip-config/TagInput";
 import { PromptHelper } from "../PromptHelper";
@@ -135,6 +136,7 @@ export function ListingPanel({
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   const aiSheet = (
