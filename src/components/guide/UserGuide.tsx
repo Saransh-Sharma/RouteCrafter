@@ -39,52 +39,100 @@ interface StageInfo {
   name: string;
   summary: string;
   actions: string[];
+  readiness: string[];
+  pitfalls: string[];
 }
 
 const STAGES: StageInfo[] = [
   {
     icon: SlidersHorizontal,
     name: "1. Define the Product",
-    summary: "Decide what you are selling and who it is for.",
+    summary:
+      "Turn the travel idea into a commercial brief before generating content.",
     actions: [
       "Choose Digital download, Custom service, or Hybrid",
-      "Set channels, destination, buyer, positioning, trip brief, and output package",
+      "Set channels, destination, buyer, positioning, brand voice, and trip brief",
+      "Select only the outputs you intend to finish",
+    ],
+    readiness: [
+      "Destination, buyer, positioning, trip configuration, and channels are present",
+      "Marketplace listing remains selected because every offer needs a sales page",
+    ],
+    pitfalls: [
+      "Extra selected outputs become later publish work",
+      "Service and hybrid offers need intake and package details later",
     ],
   },
   {
     icon: Grid3x3,
     name: "2. Plan the Editions",
-    summary: "Commit to the exact products you intend to ship.",
+    summary: "Commit to the exact duration and traveler combinations you will ship.",
     actions: [
-      "Add duration and traveler combinations without duplicates",
-      "Review route concepts and the workload created by each edition",
+      "Add the first duration and traveler type combination",
+      "Use custom days only when a standard duration label is not precise enough",
+      "Review route concepts as inspiration",
+    ],
+    readiness: [
+      "At least one planned edition exists",
+      "Each edition becomes a required itinerary in Build",
+    ],
+    pitfalls: [
+      "Broad duration ideas do not count until they are added as editions",
+      "More editions mean more launch blockers until completed or removed",
     ],
   },
   {
     icon: Map,
     name: "3. Build the Itineraries",
-    summary: "Complete one itinerary linked to every planned edition.",
+    summary: "Complete one linked itinerary for every planned edition.",
     actions: [
-      "Work through Overview, Days, Included guides, and Quality notes",
-      "Use the contextual checklist to distinguish blockers from improvements",
+      "Create the editable day-by-day foundation for each edition",
+      "Complete Overview, Days, Included guides, and Quality notes",
+      "Use the edition checklist to separate blockers from recommendations",
+    ],
+    readiness: [
+      "Every planned edition has a linked itinerary with the exact day count",
+      "Title, overview, audience, route summary, day titles, bases, activities, selected guides, and verification notes are complete",
+    ],
+    pitfalls: [
+      "Rainy-day alternatives and booking notes improve quality but are recommendations",
+      "Itineraries are linked by edition id, not by matching text labels",
     ],
   },
   {
     icon: BadgeDollarSign,
     name: "4. Package the Offer",
-    summary: "Prepare the sales story and selected delivery assets.",
+    summary: "Make the itinerary easy to understand, buy, and deliver.",
     actions: [
-      "Finish the adaptive marketplace listing and service intake",
-      "Build selected visuals, PDF, spreadsheet, guides, and production prompts",
+      "Finish listing titles, tags, descriptions, and delivery notes",
+      "Add service packages and buyer requirements for service or hybrid offers",
+      "Build selected visuals, PDF, spreadsheet, exports, and production prompts",
+    ],
+    readiness: [
+      "Listing fields are complete",
+      "Portfolio visuals have five final briefs when selected",
+      "Selected delivery outputs have completed itinerary content to draw from",
+    ],
+    pitfalls: [
+      "Package tools do not replace missing itinerary content",
+      "Generated visual images are recommended, but finalized briefs are the blocker",
     ],
   },
   {
     icon: Download,
     name: "5. Review and Publish",
-    summary: "Resolve launch blockers and make the final confirmations.",
+    summary: "Resolve launch blockers and make the final manual confirmations.",
     actions: [
-      "Follow direct links from each issue to the exact field or edition",
+      "Follow direct links from each issue to the exact stage, edition, or tool",
       "Verify live-data language, review files, download a backup, and mark ready",
+    ],
+    readiness: [
+      "No blockers remain",
+      "Live-data, presentation, and JSON backup confirmations are checked",
+    ],
+    pitfalls: [
+      "Readiness-sensitive edits clear final confirmations",
+      "Publish cannot verify live prices, hours, tickets, or availability for you",
     ],
   },
 ];
@@ -443,35 +491,83 @@ export function UserGuide() {
               {" "}Progress is derived from useful content checks rather than manual
               completion toggles.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  k: "Recommended next move",
+                  v: "The workspace opens the earliest incomplete stage and explains why it matters.",
+                },
+                {
+                  k: "Shareable task links",
+                  v: "Stage, edition, and package tool are stored in the URL so a refresh returns to the same task.",
+                },
+                {
+                  k: "Blockers vs. improvements",
+                  v: "Publish separates launch blockers from quality recommendations you can handle later.",
+                },
+              ].map((row) => (
+                <div
+                  key={row.k}
+                  className="border border-border-soft bg-paper-2/40 p-4"
+                >
+                  <p className="text-sm font-semibold text-ink">{row.k}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                    {row.v}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-4">
               {STAGES.map((stage) => {
                 const Icon = stage.icon;
                 return (
                   <div
                     key={stage.name}
-                    className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-paper p-5 shadow-[var(--shadow-soft)]"
+                    className="border border-border-soft bg-paper p-5 shadow-[var(--shadow-soft)]"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex size-9 items-center justify-center rounded-xl bg-sage-soft text-forest">
-                        <Icon className="size-4" />
-                      </span>
-                      <p className="font-display text-lg font-semibold text-ink">
-                        {stage.name}
-                      </p>
-                    </div>
-                    <p className="text-sm leading-relaxed text-ink-soft">
-                      {stage.summary}
-                    </p>
-                    <div className="mt-auto space-y-2.5 border-t border-border-soft pt-3">
-                      <Bullets items={stage.actions} />
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
+                      <div>
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex size-9 items-center justify-center rounded-xl bg-sage-soft text-forest">
+                            <Icon className="size-4" />
+                          </span>
+                          <p className="font-display text-lg font-semibold text-ink">
+                            {stage.name}
+                          </p>
+                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+                          {stage.summary}
+                        </p>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                            Do
+                          </p>
+                          <Bullets items={stage.actions} />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                            Progress
+                          </p>
+                          <Bullets items={stage.readiness} />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                            Watch
+                          </p>
+                          <Bullets items={stage.pitfalls} />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <Callout tone="tip" title="Deep links are persistent">
-              Stage, edition, and editor section are stored in the URL, so refreshing
-              returns you to the same production task.
+            <Callout tone="tip" title="Selected outputs drive requirements">
+              Only the outputs selected in Define become Package and Publish work.
+              Marketplace listing is always required; legacy Map Pins can appear
+              on imports but do not block publishing.
             </Callout>
           </SectionShell>
 
