@@ -13,6 +13,7 @@ describe("AI route authentication", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -155,6 +156,100 @@ describe("AI route authentication", () => {
     expect(await response.json()).toEqual({
       error:
         "No AI credential is available. Add a personal key or configure OPEN_AI_KEY on the server.",
+    });
+  });
+
+  it("returns a specific error when OpenAI stops at the token limit", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output_text: '{"days":[{"day":1,"title":"Arrival"',
+        }),
+      ),
+    );
+
+    const response = await textPost(
+      await authenticatedRequest("/api/ai/text", {
+        provider: "openai",
+        model: "gpt-5.4",
+        prompt: "Draft a long itinerary",
+        taskType: "itinerary",
+        maxOutputTokens: 4000,
+        responseFormat: "json",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error:
+        "The model stopped before finishing the JSON response. Try again with a shorter itinerary or a higher output-token limit.",
+    });
+  });
+
+  it("rejects JSON responses that look cut off without a finish reason", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          output_text:
+            '{"days":[{"day":7,"evening":"Transfer to the airport if time',
+        }),
+      ),
+    );
+
+    const response = await textPost(
+      await authenticatedRequest("/api/ai/text", {
+        provider: "openai",
+        model: "gpt-5.4",
+        prompt: "Draft a long itinerary",
+        taskType: "itinerary",
+        maxOutputTokens: 4000,
+        responseFormat: "json",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error:
+        "The model stopped before finishing the JSON response. Try again with a shorter itinerary or a higher output-token limit.",
+    });
+  });
+
+  it("returns an error when the upstream provider request times out", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    vi.stubEnv("AI_PROVIDER_TIMEOUT_MS", "1");
+    const request = await authenticatedRequest("/api/ai/text", {
+      provider: "openai",
+      model: "gpt-5.4",
+      prompt: "Draft a long itinerary",
+      taskType: "itinerary",
+      maxOutputTokens: 4000,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          }),
+      ),
+    );
+
+    const response = await textPost(request);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error:
+        "The provider request timed out. Try again or reduce the request size.",
     });
   });
 });

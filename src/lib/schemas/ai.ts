@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const aiAcceptedRunSchema = z.object({
   id: z.string(),
+  aiRunId: z.string().optional(),
   provider: z.enum(["openai", "anthropic", "gemini"]),
   model: z.string(),
   taskType: z.enum([

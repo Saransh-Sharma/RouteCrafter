@@ -3,16 +3,33 @@ import { aiTextRequestSchema } from "@/lib/ai/schemas";
 import { generateText, normalizeProviderError } from "@/lib/ai/provider-adapters";
 import { getRequestUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
+import type { User } from "@/lib/schemas/auth";
 import {
   AiConfigurationError,
   resolveTextCredential,
 } from "@/lib/ai/credentials";
+import { createCompletedAiRun, createFailedAiRun } from "@/lib/db/ai-runs";
+import { ensureRequestUser } from "@/lib/db/request-user";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  let ledgerUser: User | null = null;
+  let requestSummary:
+    | {
+        provider: string;
+        model: string;
+        taskType: string;
+        credentialSource?: string;
+        label?: string;
+        source?: string;
+        projectId?: string;
+      }
+    | null = null;
   try {
-    if (!(await getRequestUser(request))) return unauthorizedResponse();
+    const user = await getRequestUser(request);
+    if (!user) return unauthorizedResponse();
+    ledgerUser = user;
 
     const json = await request.json();
     const parsed = aiTextRequestSchema.safeParse(json);
@@ -22,14 +39,33 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const result = await generateText({
+    const resolved = {
       ...parsed.data,
       ...resolveTextCredential(parsed.data),
-    });
-    return NextResponse.json(result, {
+    };
+    requestSummary = {
+      provider: resolved.provider,
+      model: resolved.model,
+      taskType: resolved.taskType,
+      credentialSource: resolved.credentialSource,
+      label: parsed.data.label,
+      source: parsed.data.source,
+      projectId: parsed.data.projectId,
+    };
+    const result = await generateText(resolved);
+    const aiRunId = await recordCompletedAiRun(
+      user,
+      result,
+      parsed.data.taskType,
+      parsed.data.label,
+      parsed.data.source,
+      parsed.data.projectId,
+    );
+    return NextResponse.json({ ...result, aiRunId }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    await recordFailedAiRun(ledgerUser, requestSummary, error);
     return NextResponse.json(
       { error: normalizeProviderError(error) },
       {
@@ -37,5 +73,63 @@ export async function POST(request: NextRequest) {
         headers: { "Cache-Control": "no-store" },
       },
     );
+  }
+}
+
+async function recordCompletedAiRun(
+  user: User,
+  result: Awaited<ReturnType<typeof generateText>>,
+  taskType: string,
+  label?: string,
+  source?: string,
+  projectId?: string,
+): Promise<string | undefined> {
+  if (!process.env.DATABASE_URL) return undefined;
+  try {
+    const requestUser = await ensureRequestUser(user);
+    return await createCompletedAiRun({
+      userId: requestUser.id,
+      result,
+      taskType: taskType as never,
+      label: label ?? taskType,
+      source,
+      projectId,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+async function recordFailedAiRun(
+  user: User | null,
+  summary:
+    | {
+        provider: string;
+        model: string;
+        taskType: string;
+        credentialSource?: string;
+        label?: string;
+        source?: string;
+        projectId?: string;
+      }
+    | null,
+  error: unknown,
+): Promise<void> {
+  if (!process.env.DATABASE_URL || !user || !summary) return;
+  try {
+    const requestUser = await ensureRequestUser(user);
+    await createFailedAiRun({
+      userId: requestUser.id,
+      provider: summary.provider,
+      model: summary.model,
+      taskType: summary.taskType,
+      label: summary.label ?? summary.taskType,
+      source: summary.source,
+      projectId: summary.projectId,
+      credentialSource: summary.credentialSource ?? "server",
+      error: normalizeProviderError(error),
+    });
+  } catch {
+    // Do not mask the provider result with ledger write failures.
   }
 }
