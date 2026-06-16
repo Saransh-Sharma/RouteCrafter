@@ -19,7 +19,7 @@ export function AiCostBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--rc-ai-brown)]",
+        "inline-flex max-w-full shrink-0 items-center justify-center rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)] px-2 py-0.5 text-center text-[10px] font-semibold uppercase leading-[1.15] tracking-[0.12em] text-[var(--rc-ai-brown)]",
         className,
       )}
     >
@@ -96,14 +96,16 @@ export const AiCostButton = React.forwardRef<
         ref={ref}
         type="button"
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)] font-medium text-[var(--rc-ai-brown)] shadow-[inset_0_0_0_1px_rgba(193,154,75,0.18),var(--shadow-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/40 hover:text-forest active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55",
-          size === "sm" ? "h-9 px-3.5 text-sm" : "h-11 px-5 text-sm",
+          "inline-flex min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)] text-center font-medium leading-snug text-[var(--rc-ai-brown)] shadow-[inset_0_0_0_1px_rgba(193,154,75,0.18),var(--shadow-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:border-forest/40 hover:text-forest active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55",
+          size === "sm"
+            ? "min-h-9 px-3.5 py-2 text-sm"
+            : "min-h-11 px-5 py-2.5 text-sm",
           className,
         )}
         {...props}
       >
-        <Icon className="size-4" />
-        <span>{children}</span>
+        <Icon className="size-4 shrink-0" />
+        <span className="min-w-0 max-w-full text-balance">{children}</span>
         {showBadge ? <AiCostBadge estimate={estimate} /> : null}
       </button>
     );
