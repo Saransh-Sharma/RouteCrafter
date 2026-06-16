@@ -110,6 +110,7 @@ describe("AI settings store", () => {
   });
 
   it("syncs cloud preferences without provider API keys", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
     const fetchMock = vi.fn(
       async (...args: [string | URL | Request, RequestInit?]) => {
         void args;

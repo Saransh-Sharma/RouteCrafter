@@ -227,6 +227,29 @@ function cloudProjectsToRevisionMap(projects: CloudProject[]): Record<string, nu
   );
 }
 
+function mergeLocalAndCloudProjects({
+  localProjects,
+  cloudProjects,
+}: {
+  localProjects: Project[];
+  cloudProjects: CloudProject[];
+}): Project[] {
+  const cloudById = new Map(
+    cloudProjects.map((item) => [item.project.id, normalizeProject(item.project)]),
+  );
+  const merged = localProjects.map((local) => cloudById.get(local.id) ?? local);
+  const localIds = new Set(localProjects.map((project) => project.id));
+  for (const cloud of cloudProjects) {
+    if (!localIds.has(cloud.project.id)) {
+      merged.push(normalizeProject(cloud.project));
+    }
+  }
+  return merged.sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
+}
+
 function isSeedOnly(projects: Project[]): boolean {
   if (projects.length !== seedProjects.length) return false;
   const seedIds = new Set(seedProjects.map((project) => project.id));
@@ -316,21 +339,8 @@ export const useProjectsStore = createZustand<ProjectsState>()(
             });
             const body = await readCloudResponse(response);
             if (!response.ok) throw new Error(body.error ?? "Could not load cloud projects.");
-            const cloudProjects = body.projects ?? [];
-            if (cloudProjects.length > 0) {
-              set({
-                projects: cloudProjects.map((item) => normalizeProject(item.project)),
-                initialized: true,
-                cloudHydrated: true,
-                syncStatus: "synced",
-                syncError: null,
-                lastCloudRevisionByProject: cloudProjectsToRevisionMap(cloudProjects),
-              });
-              dispatchSaveState("saved");
-              return;
-            }
-
             const localProjects = get().projects;
+            const cloudProjects = body.projects ?? [];
             if (localProjects.length > 0 && !isSeedOnly(localProjects)) {
               const syncResponse = await fetch("/api/projects/sync", {
                 method: "POST",
@@ -344,12 +354,31 @@ export const useProjectsStore = createZustand<ProjectsState>()(
               }
               const synced = syncBody.projects ?? [];
               set({
-                projects: synced.map((item) => normalizeProject(item.project)),
+                projects: mergeLocalAndCloudProjects({
+                  localProjects,
+                  cloudProjects: synced,
+                }),
                 initialized: true,
                 cloudHydrated: true,
                 syncStatus: "synced",
                 syncError: null,
                 lastCloudRevisionByProject: cloudProjectsToRevisionMap(synced),
+              });
+              dispatchSaveState("saved");
+              return;
+            }
+
+            if (cloudProjects.length > 0) {
+              set({
+                projects: mergeLocalAndCloudProjects({
+                  localProjects,
+                  cloudProjects,
+                }),
+                initialized: true,
+                cloudHydrated: true,
+                syncStatus: "synced",
+                syncError: null,
+                lastCloudRevisionByProject: cloudProjectsToRevisionMap(cloudProjects),
               });
               dispatchSaveState("saved");
               return;
@@ -616,19 +645,25 @@ async function processProjectSyncQueue(projectId: string): Promise<void> {
   const item = projectSyncQueue.get(projectId);
   if (!item || item.inFlight) return;
   item.inFlight = true;
+  let activeSnapshot: ProjectSyncQueueItem["pending"] = null;
+  let failed = false;
   try {
     while (item.pending) {
       const next = item.pending;
+      activeSnapshot = next;
       item.pending = null;
       await syncProjectSnapshot(next.project, next.activityDetail, next.method);
+      activeSnapshot = null;
     }
   } catch {
-    item.pending = null;
+    // Keep the latest pending snapshot queued so a later edit or retry can sync it.
+    item.pending = item.pending ?? activeSnapshot;
+    failed = true;
   } finally {
     item.inFlight = false;
-    if (item.pending) {
+    if (item.pending && !failed) {
       void processProjectSyncQueue(projectId);
-    } else {
+    } else if (!item.pending) {
       projectSyncQueue.delete(projectId);
     }
   }
@@ -695,9 +730,18 @@ async function syncDeleteProject(projectId: string): Promise<void> {
   useProjectsStore.setState({ syncStatus: "syncing", syncError: null });
   dispatchSaveState("saving");
   try {
+    const expectedRevision =
+      useProjectsStore.getState().lastCloudRevisionByProject[projectId];
+    if (expectedRevision === undefined) {
+      throw new Error(
+        "Cloud revision is unavailable for this project. Refresh before deleting.",
+      );
+    }
     const response = await fetch(`/api/projects/${projectId}`, {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" },
       credentials: "include",
+      body: JSON.stringify({ expectedRevision }),
     });
     if (!response.ok) {
       const body = await readCloudResponse(response);
