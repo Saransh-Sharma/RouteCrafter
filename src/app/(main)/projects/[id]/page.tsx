@@ -21,6 +21,7 @@ import { useProjectsStore } from "@/lib/store/projects-store";
 import { useMounted } from "@/lib/hooks";
 import { GuidedWorkspace } from "@/components/workspace/guided/GuidedWorkspace";
 import { getProjectWorkflow } from "@/lib/workflow";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 
 const statusTone = {
   Draft: "neutral",
@@ -100,6 +101,7 @@ export default function ProjectWorkspacePage() {
   }
 
   const workflow = getProjectWorkflow(project);
+  const cloudPersistence = isCloudPersistenceEnabled();
 
   return (
     <div className="space-y-7">
@@ -141,7 +143,9 @@ export default function ProjectWorkspacePage() {
                 ? "Saving changes"
                 : saveState.status === "error"
                   ? "Save failed"
-                  : "Saved to cloud"}
+                  : cloudPersistence
+                    ? "Saved to cloud"
+                    : "Saved locally"}
             </span>
           </div>
         </div>
