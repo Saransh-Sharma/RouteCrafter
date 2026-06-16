@@ -17,6 +17,7 @@ import {
   markAiRunApplied,
   recordAssetUsage,
 } from "@/lib/assets/capture";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import { compressImageFile } from "./image-utils";
 import { DOC_THEMES } from "./themes";
 
@@ -64,7 +65,7 @@ export function PdfThemeControls({
     let imageUrl = image;
     let assetId: string | undefined;
     try {
-      if (image.startsWith("data:")) {
+      if (image.startsWith("data:") && isCloudPersistenceEnabled()) {
         const asset = await captureAsset({
           projectId: project.id,
           assetType: aiImageTarget.kind === "cover" ? "cover-image" : "day-image",
@@ -149,6 +150,10 @@ export function PdfThemeControls({
     setError(null);
     try {
       const compressed = await compressImageFile(file);
+      if (!isCloudPersistenceEnabled()) {
+        apply(compressed);
+        return;
+      }
       const asset = await captureAsset({
         projectId: project.id,
         assetType: options.assetType,
@@ -370,6 +375,7 @@ export function PdfThemeControls({
           title={aiImageTarget?.title ?? "AI create itinerary image"}
           description="Image models may be more expensive than text. Preview the generated visual before applying it to the PDF."
           taskType="imageGeneration"
+          projectId={project.id}
           sourceLabel={aiImageTarget?.kind === "cover" ? "PDF cover" : "Day image"}
           prompt={aiImageTarget?.prompt ?? ""}
           onApplyImage={recordImageRun}

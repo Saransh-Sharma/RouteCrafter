@@ -30,6 +30,7 @@ import {
   markAiRunApplied,
   recordAssetUsage,
 } from "@/lib/assets/capture";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import { ImagePromptCard } from "./ImagePromptCard";
 import { downloadImagePromptsMarkdown } from "./export-image-prompts";
 
@@ -102,19 +103,54 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     }
   }
 
+  function mergePromptFields(
+    current: PortfolioImagePrompt,
+    incoming: PortfolioImagePrompt,
+    mode: "replace" | "fill-empty" | "append",
+  ): PortfolioImagePrompt {
+    const preserved = {
+      id: current.id,
+      kind: current.kind,
+      isFinal: current.isFinal,
+      image: current.image,
+    };
+    if (mode === "replace") return { ...incoming, ...preserved };
+    const next = { ...current };
+    const fields: Array<keyof PortfolioImagePrompt> = [
+      "title",
+      "goal",
+      "canvas",
+      "layout",
+      "visualElements",
+      "textOverlay",
+      "style",
+      "negativePrompt",
+      "countryAccuracyNotes",
+      "readabilityNotes",
+    ];
+    for (const field of fields) {
+      const value = incoming[field];
+      if (typeof value !== "string" || !value.trim()) continue;
+      if (mode === "fill-empty") {
+        if (!String(next[field] ?? "").trim()) {
+          next[field] = value as never;
+        }
+      } else {
+        const currentValue = String(next[field] ?? "").trim();
+        next[field] = (currentValue ? `${currentValue}\n\n${value}` : value) as never;
+      }
+    }
+    return portfolioImagePromptSchema.parse(next);
+  }
+
   function applyImprovedPrompt(
     text: string,
     result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
   ) {
     if (!aiTarget || aiTarget.mode !== "improve") return;
     const incoming = portfolioImagePromptSchema.parse(parseJsonObject(text));
-    updateOne({
-      ...incoming,
-      id: aiTarget.prompt.id,
-      kind: aiTarget.prompt.kind,
-      isFinal: aiTarget.prompt.isFinal,
-      image: aiTarget.prompt.image,
-    });
+    updateOne(mergePromptFields(aiTarget.prompt, incoming, mode));
     update(project.id, {
       aiRuns: appendAiRun(
         project,
@@ -126,6 +162,7 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   async function applyGeneratedImage(
@@ -135,19 +172,27 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     if (!aiTarget || aiTarget.mode !== "image") return;
     let imageUrl = image;
     let assetId: string | undefined;
-    if (isDataUrl(image)) {
-      const asset = await captureAsset({
-        projectId: project.id,
-        assetType: "portfolio-visual",
-        source: "ai-generation",
-        file: dataUrlToBlob(image),
-        filename: `${project.country || "project"}-${aiTarget.prompt.kind}.png`,
-        usageType: "portfolio-visual",
-        entityId: aiTarget.prompt.id,
-        fieldPath: "imagePrompts[].image",
-      });
-      imageUrl = asset.blobUrl;
-      assetId = asset.id;
+    if (isDataUrl(image) && isCloudPersistenceEnabled()) {
+      try {
+        const asset = await captureAsset({
+          projectId: project.id,
+          assetType: "portfolio-visual",
+          source: "ai-generation",
+          file: dataUrlToBlob(image),
+          filename: `${project.country || "project"}-${aiTarget.prompt.kind}.png`,
+          usageType: "portfolio-visual",
+          entityId: aiTarget.prompt.id,
+          fieldPath: "imagePrompts[].image",
+        });
+        imageUrl = asset.blobUrl;
+        assetId = asset.id;
+      } catch (error) {
+        throw new Error(
+          error instanceof Error
+            ? error.message
+            : "Could not save the generated image asset.",
+        );
+      }
     }
     const applied = updateOne({ ...aiTarget.prompt, image: imageUrl });
     if (!applied) return;
@@ -275,6 +320,7 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
         taskType={
           aiTarget?.mode === "image" ? "imageGeneration" : "imagePrompt"
         }
+        projectId={project.id}
         sourceLabel={aiTarget?.prompt.title ?? "Image prompt"}
         prompt={
           aiTarget

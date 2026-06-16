@@ -507,6 +507,7 @@ export function TripConfigForm({
         title="AI fill trip configuration"
         description="Extracts structured trip fields from a buyer brief. Preview before applying to the form."
         taskType="brief"
+        projectId={project.id}
         sourceLabel="Buyer/client brief"
         prompt={buildBriefExtractionPrompt(project, brief)}
         currentText={tripConfigCurrentValue(values)}

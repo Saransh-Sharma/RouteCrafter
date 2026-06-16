@@ -347,7 +347,11 @@ export function ExpandedItineraryPanel({
         }),
       ),
     });
-    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
+    void markAiRunApplied({
+      aiRunId: result.aiRunId,
+      aiRunIds: result.aiRunIds,
+      projectId: project.id,
+    });
   }
 
   const aiPrompt =
@@ -706,6 +710,7 @@ export function ExpandedItineraryPanel({
         title={aiTarget?.title ?? "AI itinerary assist"}
         description="Creates structured itinerary JSON and previews it before applying. Existing edits are preserved unless you choose replace."
         taskType={aiTarget?.kind === "day" ? "rewrite" : "itinerary"}
+        projectId={project.id}
         sourceLabel={
           aiTarget?.kind === "day"
             ? `Day ${selected?.days[aiTarget.index]?.day ?? ""}`

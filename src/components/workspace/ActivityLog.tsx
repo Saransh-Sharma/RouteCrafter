@@ -5,7 +5,7 @@ import { History, Clock, ChevronDown } from "lucide-react";
 import { useActivityStore } from "@/lib/store/activity-store";
 import { useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import type { ActivityAction } from "@/lib/schemas/activity";
+import type { ActivityAction, ActivityLogEntry } from "@/lib/schemas/activity";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,6 +75,18 @@ function formatRelativeTime(isoString: string): string {
         ? "numeric"
         : undefined,
   });
+}
+
+function mergeActivityEntries(
+  localEntries: ActivityLogEntry[],
+  cloudEntries: ActivityLogEntry[] | null,
+) {
+  const byId = new Map<string, (typeof localEntries)[number]>();
+  for (const entry of cloudEntries ?? []) byId.set(entry.id, entry);
+  for (const entry of localEntries) byId.set(entry.id, entry);
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +160,7 @@ export function ActivityLog({ projectId }: { projectId: string }) {
     );
   }
 
-  const entries = cloudEntries ?? localEntries;
+  const entries = mergeActivityEntries(localEntries, cloudEntries);
   const visible = expanded ? entries : entries.slice(0, VISIBLE_LIMIT);
   const hasMore = entries.length > VISIBLE_LIMIT;
 

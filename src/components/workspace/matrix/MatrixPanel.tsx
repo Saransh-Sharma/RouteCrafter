@@ -188,6 +188,7 @@ export function MatrixPanel({
           title="AI draft premium matrix"
           description="Creates a structured duration by traveler-type matrix and previews it before replacing anything."
           taskType="matrix"
+          projectId={project.id}
           sourceLabel="Itinerary matrix"
           prompt={buildMatrixPrompt(project)}
           currentText=""
@@ -310,6 +311,7 @@ export function MatrixPanel({
         title={aiFocus ? `AI improve ${aiFocus}` : "AI draft premium matrix"}
         description="Creates structured matrix JSON and previews it before applying."
         taskType="matrix"
+        projectId={project.id}
         sourceLabel={aiFocus ?? "Itinerary matrix"}
         prompt={`${buildMatrixPrompt(project, matrix)}${
           aiFocus ? `\n\nFocus only on improving: ${aiFocus}` : ""

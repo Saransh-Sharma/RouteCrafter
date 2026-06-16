@@ -202,6 +202,7 @@ export function PromptStudioPanel({ project }: { project: Project }) {
                 title={`Run ${active.label} with AI`}
                 description="This sends the generated RouteCrafter prompt to your selected text provider and previews the response before saving."
                 taskType="prompt"
+                projectId={project.id}
                 sourceLabel={active.label}
                 prompt={buildPromptRunPrompt(
                   project,

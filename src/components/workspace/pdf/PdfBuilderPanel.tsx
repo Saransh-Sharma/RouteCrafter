@@ -65,23 +65,6 @@ export function PdfBuilderPanel({
         })
         .from(docRef.current)
         .output("blob");
-      const asset = await captureAsset({
-        projectId: project.id,
-        assetType: "pdf",
-        source: "pdf-export",
-        file: pdfBlob,
-        filename,
-        usageType: "export",
-        entityId: selected.id,
-        fieldPath: "exports.pdf",
-        editionLabel: selected.duration,
-      });
-      await recordAssetUsage({
-        assetId: asset.id,
-        usageType: "export",
-        entityId: selected.id,
-        fieldPath: "exports.pdf",
-      }).catch(() => undefined);
       const url = URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
       link.href = url;
@@ -90,6 +73,29 @@ export function PdfBuilderPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      try {
+        const asset = await captureAsset({
+          projectId: project.id,
+          assetType: "pdf",
+          source: "pdf-export",
+          file: pdfBlob,
+          filename,
+          usageType: "export",
+          entityId: selected.id,
+          fieldPath: "exports.pdf",
+          editionLabel: selected.duration,
+        });
+        await recordAssetUsage({
+          assetId: asset.id,
+          usageType: "export",
+          entityId: selected.id,
+          fieldPath: "exports.pdf",
+        }).catch(() => undefined);
+      } catch {
+        setDownloadError(
+          "Downloaded PDF, but RouteCrafter could not save a cloud library copy.",
+        );
+      }
     } catch (error) {
       setDownloadError(
         error instanceof Error ? error.message : "Could not generate the PDF.",

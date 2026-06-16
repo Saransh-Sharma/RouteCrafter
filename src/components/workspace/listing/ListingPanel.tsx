@@ -147,6 +147,7 @@ export function ListingPanel({
       title="AI improve listing"
       description="Creates structured marketplace listing copy and previews field-level JSON before applying."
       taskType="listing"
+      projectId={project.id}
       sourceLabel="Listing copy"
       prompt={buildListingPrompt(project, listing, aiFocus, marketplaceTone)}
       currentText={listing ? JSON.stringify(listing, null, 2) : ""}
