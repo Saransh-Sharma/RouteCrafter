@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AI_PROVIDERS } from "@/lib/ai/providers";
 import {
   maskApiKey,
+  migratePersistedAiSettings,
   useAiSettingsStore,
 } from "./ai-settings-store";
 
@@ -57,5 +58,45 @@ describe("AI settings store", () => {
     expect(
       useAiSettingsStore.getState().providers.gemini.customTextModel,
     ).toBe("gemini-custom");
+  });
+
+  it("migrates legacy OpenAI defaults without overwriting custom selections", () => {
+    const migrated = migratePersistedAiSettings({
+      text: {
+        provider: "openai",
+        model: "gpt-5.2",
+        temperature: 0.7,
+        topP: 0.9,
+        maxOutputTokens: 4000,
+      },
+      image: {
+        provider: "openai",
+        model: "gpt-image-1",
+        size: "1024x1024",
+        quality: "medium",
+        aspectRatio: "1:1",
+      },
+    });
+    const custom = migratePersistedAiSettings({
+      text: {
+        provider: "openai",
+        model: "gpt-custom",
+        temperature: 0.7,
+        topP: 0.9,
+        maxOutputTokens: 4000,
+      },
+      image: {
+        provider: "openai",
+        model: "gpt-image-custom",
+        size: "1024x1024",
+        quality: "medium",
+        aspectRatio: "1:1",
+      },
+    });
+
+    expect(migrated.text?.model).toBe("gpt-5.4");
+    expect(migrated.image?.model).toBe("gpt-image-2");
+    expect(custom.text?.model).toBe("gpt-custom");
+    expect(custom.image?.model).toBe("gpt-image-custom");
   });
 });
