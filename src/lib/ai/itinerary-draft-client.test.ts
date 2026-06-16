@@ -24,6 +24,7 @@ describe("structured itinerary draft orchestration", () => {
         provider: "openai",
         model: "gpt-5.4",
         credentialSource: "server",
+        aiRunId: "run-overview",
         text: JSON.stringify({
           title: "Polished Japan itinerary",
           overview: "A compact premium route.",
@@ -36,6 +37,7 @@ describe("structured itinerary draft orchestration", () => {
         provider: "openai",
         model: "gpt-5.4",
         credentialSource: "server",
+        aiRunId: "run-days-1-4",
         text: JSON.stringify({
           days: current.days.slice(0, 4).map((day) => ({
             ...day,
@@ -47,6 +49,7 @@ describe("structured itinerary draft orchestration", () => {
         provider: "openai",
         model: "gpt-5.4",
         credentialSource: "server",
+        aiRunId: "run-days-5-7",
         text: JSON.stringify({
           days: current.days.slice(4).map((day) => ({
             ...day,
@@ -78,5 +81,11 @@ describe("structured itinerary draft orchestration", () => {
     expect(itinerary.days).toHaveLength(7);
     expect(itinerary.days[0].morning).toBe("Day 1 morning plan");
     expect(itinerary.days[6].evening).toBe("Day 7 evening plan");
+    expect(result.aiRunId).toBe("run-overview");
+    expect(result.aiRunIds).toEqual([
+      "run-overview",
+      "run-days-1-4",
+      "run-days-5-7",
+    ]);
   });
 });

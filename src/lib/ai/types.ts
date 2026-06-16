@@ -60,6 +60,7 @@ export interface AiResult {
   model: string;
   credentialSource: AiCredentialSource;
   aiRunId?: string;
+  aiRunIds?: string[];
 }
 
 export interface ResolvedAiTextRequest extends AiTextRequest {

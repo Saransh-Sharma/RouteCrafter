@@ -3,10 +3,17 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { BlobConfigurationError } from "@/lib/blob";
 import { DatabaseConfigurationError } from "@/lib/db";
-import { ProjectConflictError, ProjectNotFoundError } from "@/lib/db/projects";
+import {
+  ProjectConflictError,
+  ProjectNotFoundError,
+  ProjectRevisionRequiredError,
+} from "@/lib/db/projects";
 
 export function errorResponse(error: unknown): NextResponse {
-  if (error instanceof ProjectConflictError) {
+  if (
+    error instanceof ProjectConflictError ||
+    error instanceof ProjectRevisionRequiredError
+  ) {
     return NextResponse.json(
       { error: error.message || "Project has newer cloud changes." },
       { status: 409 },
@@ -29,10 +36,7 @@ export function errorResponse(error: unknown): NextResponse {
   }
   return NextResponse.json(
     {
-      error:
-        error instanceof Error
-          ? error.message
-          : "The request could not be completed.",
+      error: "The request could not be completed.",
     },
     { status: 500 },
   );

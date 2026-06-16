@@ -124,6 +124,9 @@ export async function requestStructuredItineraryDraft({
     model: overview.model,
     credentialSource: overview.credentialSource,
     aiRunId: overview.aiRunId,
+    aiRunIds: [overview, ...dayResults]
+      .map((result) => result.aiRunId)
+      .filter((id): id is string => Boolean(id)),
     usage: aggregateUsage([overview, ...dayResults]),
     text: JSON.stringify(itinerary, null, 2),
   };

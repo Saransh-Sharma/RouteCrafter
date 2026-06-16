@@ -20,14 +20,21 @@ const DEFAULT_PROVIDER_TIMEOUT_MS = 90_000;
 async function providerFetch(
   input: string,
   init: RequestInit,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutMs =
     Number(process.env.AI_PROVIDER_TIMEOUT_MS) || DEFAULT_PROVIDER_TIMEOUT_MS;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromRequest = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abortFromRequest();
+  else signal?.addEventListener("abort", abortFromRequest, { once: true });
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } catch (error) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
     if (controller.signal.aborted) {
       throw new Error(
         "The provider request timed out. Try again or reduce the request size.",
@@ -36,6 +43,7 @@ async function providerFetch(
     throw error;
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromRequest);
   }
 }
 
@@ -198,31 +206,33 @@ export function normalizeProviderError(error: unknown): string {
 
 export async function generateText(
   request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   if (!providerSupports(request.provider, "text")) {
     throw new Error("This provider does not support text generation here.");
   }
   switch (request.provider) {
     case "openai":
-      return generateOpenAiText(request);
+      return generateOpenAiText(request, signal);
     case "anthropic":
-      return generateAnthropicText(request);
+      return generateAnthropicText(request, signal);
     case "gemini":
-      return generateGeminiText(request);
+      return generateGeminiText(request, signal);
   }
 }
 
 export async function generateImage(
   request: ResolvedAiImageRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   if (!providerSupports(request.provider, "image")) {
     throw new Error("This provider does not support image generation here.");
   }
   switch (request.provider) {
     case "openai":
-      return generateOpenAiImage(request);
+      return generateOpenAiImage(request, signal);
     case "gemini":
-      return generateGeminiImage(request);
+      return generateGeminiImage(request, signal);
     case "anthropic":
       throw new Error("This provider does not support image generation here.");
   }
@@ -230,6 +240,7 @@ export async function generateImage(
 
 async function generateOpenAiText(
   request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   const response = await providerFetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -253,7 +264,7 @@ async function generateOpenAiText(
           ? { format: { type: "json_object" } }
           : undefined,
     }),
-  });
+  }, signal);
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const record = asRecord(data);
@@ -271,6 +282,7 @@ async function generateOpenAiText(
 
 async function generateAnthropicText(
   request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   const isLateOpus = /^claude-opus-4-[78]/.test(request.model);
   const response = await providerFetch("https://api.anthropic.com/v1/messages", {
@@ -291,7 +303,7 @@ async function generateAnthropicText(
       temperature: isLateOpus ? undefined : request.temperature,
       top_p: isLateOpus ? undefined : request.topP,
     }),
-  });
+  }, signal);
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const record = asRecord(data);
@@ -309,6 +321,7 @@ async function generateAnthropicText(
 
 async function generateGeminiText(
   request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   const response = await providerFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -331,6 +344,7 @@ async function generateGeminiText(
         },
       }),
     },
+    signal,
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
@@ -349,6 +363,7 @@ async function generateGeminiText(
 
 async function generateOpenAiImage(
   request: ResolvedAiImageRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   const response = await providerFetch(
     "https://api.openai.com/v1/images/generations",
@@ -366,6 +381,7 @@ async function generateOpenAiImage(
         n: 1,
       }),
     },
+    signal,
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
@@ -386,6 +402,7 @@ async function generateOpenAiImage(
 
 async function generateGeminiImage(
   request: ResolvedAiImageRequest,
+  signal?: AbortSignal,
 ): Promise<AiResult> {
   const response = await providerFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -401,6 +418,7 @@ async function generateGeminiImage(
         },
       }),
     },
+    signal,
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();

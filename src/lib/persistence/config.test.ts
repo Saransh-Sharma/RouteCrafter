@@ -8,15 +8,15 @@ describe("cloud persistence config", () => {
     process.env.NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED = original;
   });
 
-  it("enables cloud persistence by default", () => {
+  it("keeps cloud persistence disabled by default", () => {
     delete process.env.NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED;
 
-    expect(isCloudPersistenceEnabled()).toBe(true);
+    expect(isCloudPersistenceEnabled()).toBe(false);
   });
 
-  it("allows cloud persistence to be explicitly disabled", () => {
-    process.env.NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED = "false";
+  it("enables cloud persistence explicitly", () => {
+    process.env.NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED = "true";
 
-    expect(isCloudPersistenceEnabled()).toBe(false);
+    expect(isCloudPersistenceEnabled()).toBe(true);
   });
 });
