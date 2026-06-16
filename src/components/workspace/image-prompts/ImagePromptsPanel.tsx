@@ -153,7 +153,7 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
           </h3>
           <Badge tone="sage">{finalCount} / 5 final</Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <Button variant="outline" size="sm" onClick={generateAll}>
             <RefreshCw className="size-4" />
             Regenerate all

@@ -530,7 +530,7 @@ export function ExpandedItineraryPanel({
                   placeholder="Subtitle"
                 />
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 <AiCostButton
                   size="sm"
                   taskType="itinerary"
@@ -570,7 +570,7 @@ export function ExpandedItineraryPanel({
               />
             ) : null}
 
-            {activeSection === "overview" ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {activeSection === "overview" ? <div className="grid grid-cols-1 items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 ["AI fill empty sections", "Fill only weak or empty itinerary fields."],
                 ["AI add rainy-day alternatives", "Improve rainy-day alternatives for each day."],
@@ -581,6 +581,7 @@ export function ExpandedItineraryPanel({
                   key={title}
                   size="sm"
                   taskType="itinerary"
+                  className="h-full w-full"
                   onClick={() =>
                     setAiTarget({ kind: "itinerary", title, focus })
                   }

@@ -206,7 +206,7 @@ export function MatrixPanel({
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-lg font-semibold text-ink">Itinerary matrix</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <AiCostButton
             size="sm"
             taskType="matrix"

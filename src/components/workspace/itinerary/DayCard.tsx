@@ -48,11 +48,11 @@ export function DayCard({
   return (
     <Card>
       <CardContent className="space-y-4 p-5">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-soft text-sm font-semibold text-forest">
             {day.day}
           </span>
-          <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               value={day.title}
               onChange={(e) => set("title", e.target.value)}
@@ -64,13 +64,13 @@ export function DayCard({
               placeholder="Base / city"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1 sm:justify-end">
             {onAiImprove ? (
               <AiCostButton
                 size="sm"
                 taskType="rewrite"
                 onClick={onAiImprove}
-                className="mr-1 h-8 px-2.5 text-xs"
+                className="mr-1 min-h-8 px-2.5 py-1.5 text-xs"
               >
                 AI improve
               </AiCostButton>

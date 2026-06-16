@@ -131,7 +131,7 @@ export function PromptStudioPanel({ project }: { project: Project }) {
                   {active.description}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 <AiCostButton
                   size="sm"
                   taskType="prompt"

@@ -47,11 +47,11 @@ export function ImagePromptCard({
     <Card className={cn(prompt.isFinal && "border-forest/40")}>
       <CardContent className="space-y-4 p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-soft text-sm font-semibold text-forest">
               {index + 1}
             </span>
-            <div>
+            <div className="min-w-0">
               <input
                 value={prompt.title}
                 onChange={(e) => setField("title", e.target.value)}
@@ -60,7 +60,7 @@ export function ImagePromptCard({
               {prompt.isFinal ? <Badge tone="forest">Final</Badge> : null}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {onAiImprove ? (
               <AiCostButton
                 size="sm"
