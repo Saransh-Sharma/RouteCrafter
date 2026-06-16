@@ -15,6 +15,30 @@ interface ProviderErrorBody {
   message?: string;
 }
 
+const DEFAULT_PROVIDER_TIMEOUT_MS = 90_000;
+
+async function providerFetch(
+  input: string,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutMs =
+    Number(process.env.AI_PROVIDER_TIMEOUT_MS) || DEFAULT_PROVIDER_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        "The provider request timed out. Try again or reduce the request size.",
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
@@ -132,6 +156,38 @@ function cleanJsonText(text: string): string {
     .trim();
 }
 
+function truncationError(): Error {
+  return new Error(
+    "The model stopped before finishing the JSON response. Try again with a shorter itinerary or a higher output-token limit.",
+  );
+}
+
+function throwIfOpenAiTruncated(data: JsonRecord): void {
+  const incomplete = asRecord(data.incomplete_details);
+  if (
+    data.status === "incomplete" ||
+    incomplete.reason === "max_output_tokens" ||
+    incomplete.reason === "max_tokens"
+  ) {
+    throw truncationError();
+  }
+}
+
+function throwIfAnthropicTruncated(data: JsonRecord): void {
+  if (data.stop_reason === "max_tokens") throw truncationError();
+}
+
+function throwIfGeminiTruncated(data: JsonRecord): void {
+  const candidate = asRecord(asArray(data.candidates)[0]);
+  if (candidate.finishReason === "MAX_TOKENS") throw truncationError();
+}
+
+function throwIfJsonLooksTruncated(text: string, request: ResolvedAiTextRequest): void {
+  if (request.responseFormat !== "json") return;
+  const last = text.trim().at(-1);
+  if (last && last !== "}" && last !== "]") throw truncationError();
+}
+
 export function normalizeProviderError(error: unknown): string {
   if (error instanceof Error && error.name === "AbortError") {
     return "The request was cancelled. No project content was changed.";
@@ -175,7 +231,7 @@ export async function generateImage(
 async function generateOpenAiText(
   request: ResolvedAiTextRequest,
 ): Promise<AiResult> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await providerFetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${request.apiKey}`,
@@ -201,11 +257,14 @@ async function generateOpenAiText(
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const record = asRecord(data);
+  throwIfOpenAiTruncated(record);
+  const text = cleanJsonText(extractOpenAiText(data));
+  throwIfJsonLooksTruncated(text, request);
   return {
     provider: "openai",
     model: request.model,
     credentialSource: request.credentialSource,
-    text: cleanJsonText(extractOpenAiText(data)),
+    text,
     usage: usageFromOpenAI(record.usage),
   };
 }
@@ -214,7 +273,7 @@ async function generateAnthropicText(
   request: ResolvedAiTextRequest,
 ): Promise<AiResult> {
   const isLateOpus = /^claude-opus-4-[78]/.test(request.model);
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await providerFetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": request.apiKey,
@@ -236,11 +295,14 @@ async function generateAnthropicText(
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const record = asRecord(data);
+  throwIfAnthropicTruncated(record);
+  const text = cleanJsonText(extractAnthropicText(data));
+  throwIfJsonLooksTruncated(text, request);
   return {
     provider: "anthropic",
     model: request.model,
     credentialSource: request.credentialSource,
-    text: cleanJsonText(extractAnthropicText(data)),
+    text,
     usage: usageFromAnthropic(record.usage),
   };
 }
@@ -248,7 +310,7 @@ async function generateAnthropicText(
 async function generateGeminiText(
   request: ResolvedAiTextRequest,
 ): Promise<AiResult> {
-  const response = await fetch(
+  const response = await providerFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
     )}:generateContent?key=${encodeURIComponent(request.apiKey)}`,
@@ -273,11 +335,14 @@ async function generateGeminiText(
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const record = asRecord(data);
+  throwIfGeminiTruncated(record);
+  const text = cleanJsonText(extractGeminiText(data));
+  throwIfJsonLooksTruncated(text, request);
   return {
     provider: "gemini",
     model: request.model,
     credentialSource: request.credentialSource,
-    text: cleanJsonText(extractGeminiText(data)),
+    text,
     usage: usageFromGemini(record.usageMetadata),
   };
 }
@@ -285,20 +350,23 @@ async function generateGeminiText(
 async function generateOpenAiImage(
   request: ResolvedAiImageRequest,
 ): Promise<AiResult> {
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${request.apiKey}`,
-      "Content-Type": "application/json",
+  const response = await providerFetch(
+    "https://api.openai.com/v1/images/generations",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: request.model,
+        prompt: request.prompt,
+        size: request.size || "1024x1024",
+        quality: request.quality || "medium",
+        n: 1,
+      }),
     },
-    body: JSON.stringify({
-      model: request.model,
-      prompt: request.prompt,
-      size: request.size || "1024x1024",
-      quality: request.quality || "medium",
-      n: 1,
-    }),
-  });
+  );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
   const item = asRecord(asArray(asRecord(data).data)[0]);
@@ -319,7 +387,7 @@ async function generateOpenAiImage(
 async function generateGeminiImage(
   request: ResolvedAiImageRequest,
 ): Promise<AiResult> {
-  const response = await fetch(
+  const response = await providerFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
     )}:generateContent?key=${encodeURIComponent(request.apiKey)}`,

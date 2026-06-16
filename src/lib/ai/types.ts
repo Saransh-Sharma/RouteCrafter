@@ -26,6 +26,10 @@ export interface AiTextRequest {
   prompt: string;
   system?: string;
   taskType: AiTaskType;
+  projectId?: string;
+  source?: string;
+  label?: string;
+  entityId?: string;
   temperature?: number;
   topP?: number;
   maxOutputTokens?: number;
@@ -38,6 +42,10 @@ export interface AiImageRequest {
   model: string;
   prompt: string;
   taskType: AiTaskType;
+  projectId?: string;
+  source?: string;
+  label?: string;
+  entityId?: string;
   size?: string;
   quality?: string;
   aspectRatio?: string;
@@ -51,6 +59,7 @@ export interface AiResult {
   provider: AiProviderId;
   model: string;
   credentialSource: AiCredentialSource;
+  aiRunId?: string;
 }
 
 export interface ResolvedAiTextRequest extends AiTextRequest {
@@ -125,6 +134,7 @@ export interface AiImageDefaults {
 
 export interface AiAcceptedRun {
   id: string;
+  aiRunId?: string;
   provider: AiProviderId;
   model: string;
   taskType: AiTaskType;
