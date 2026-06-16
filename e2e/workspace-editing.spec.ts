@@ -24,6 +24,57 @@ test("edits a linked itinerary and persists the deep editor location", async ({
   );
 });
 
+test("keeps embedded AI cost badges inside build overview buttons", async ({
+  seededPage: page,
+}) => {
+  for (const width of [1280, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(
+      `/projects/${FULL_PROJECT_ID}?stage=build&edition=e2e-edition&tool=overview`,
+    );
+    await expect(page.getByText("Current edition")).toBeVisible();
+
+    const aiButtons = [
+      page.getByRole("button", { name: /AI fill empty sections/ }),
+      page.getByRole("button", { name: /AI add rainy-day alternatives/ }),
+      page.getByRole("button", { name: /AI add booking notes/ }),
+      page.getByRole("button", { name: /AI add food & transport guides/ }),
+    ];
+
+    const boxes = [];
+    for (const button of aiButtons) {
+      await expect(button).toBeVisible();
+      const buttonBox = await button.boundingBox();
+      expect(buttonBox).not.toBeNull();
+      const badge = button.locator("span").filter({ hasText: /^Est\./ }).last();
+      await expect(badge).toBeVisible();
+      const badgeBox = await badge.boundingBox();
+      expect(badgeBox).not.toBeNull();
+
+      expect(badgeBox!.x).toBeGreaterThanOrEqual(buttonBox!.x);
+      expect(badgeBox!.y).toBeGreaterThanOrEqual(buttonBox!.y);
+      expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(
+        buttonBox!.x + buttonBox!.width + 1,
+      );
+      expect(badgeBox!.y + badgeBox!.height).toBeLessThanOrEqual(
+        buttonBox!.y + buttonBox!.height + 1,
+      );
+      boxes.push(buttonBox!);
+    }
+
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const separated =
+          boxes[i].x + boxes[i].width <= boxes[j].x ||
+          boxes[j].x + boxes[j].width <= boxes[i].x ||
+          boxes[i].y + boxes[i].height <= boxes[j].y ||
+          boxes[j].y + boxes[j].height <= boxes[i].y;
+        expect(separated).toBe(true);
+      }
+    }
+  }
+});
+
 test("edits the marketplace listing and publishes after final confirmations", async ({
   seededPage: page,
 }) => {
