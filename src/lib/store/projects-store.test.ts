@@ -853,4 +853,151 @@ describe("shared workspace cloud freshness and conflicts", () => {
       useProjectsStore.getState().conflictByProject[project.id],
     ).toBeUndefined();
   });
+
+  it("records a deleted conflict when the cloud PUT 404s (deleted elsewhere)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const project = useProjectsStore.getState().projects[0];
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET") === "PUT") {
+          return new Response(JSON.stringify({ error: "Project was deleted." }), {
+            status: 404,
+            headers: jsonHeaders,
+          });
+        }
+        return new Response("{}", { status: 200, headers: jsonHeaders });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useProjectsStore.setState({
+      lastCloudRevisionByProject: { [project.id]: 1 },
+    });
+
+    useProjectsStore.getState().update(project.id, { name: "My local name" });
+    await flushAsync();
+
+    const conflict = useProjectsStore.getState().conflictByProject[project.id];
+    expect(conflict?.kind).toBe("deleted");
+    // The local copy is retained until the user decides.
+    expect(
+      useProjectsStore.getState().projects.some((p) => p.id === project.id),
+    ).toBe(true);
+    // The conflict banner owns this, so no generic persistence error is shown.
+    expect(useProjectsStore.getState().persistenceError).toBeNull();
+  });
+
+  it("discards the local copy when a deleted conflict is reloaded", () => {
+    const project = useProjectsStore.getState().projects[0];
+    useProjectsStore.setState({
+      conflictByProject: {
+        [project.id]: {
+          projectId: project.id,
+          cloudProject: project,
+          cloudRevision: 3,
+          updatedByName: null,
+          kind: "deleted",
+        },
+      },
+      lastCloudRevisionByProject: { [project.id]: 3 },
+    });
+
+    useProjectsStore.getState().resolveConflictReload(project.id);
+
+    expect(
+      useProjectsStore.getState().projects.some((p) => p.id === project.id),
+    ).toBe(false);
+    expect(
+      useProjectsStore.getState().conflictByProject[project.id],
+    ).toBeUndefined();
+    expect(
+      useProjectsStore.getState().lastCloudRevisionByProject[project.id],
+    ).toBeUndefined();
+  });
+
+  it("restores with restore:true when a deleted conflict is overwritten", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const project = useProjectsStore.getState().projects[0];
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        const payload = init?.body ? JSON.parse(String(init.body)) : {};
+        return new Response(
+          JSON.stringify({ project: { project: payload.project, revision: 7 } }),
+          { status: 200, headers: jsonHeaders },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useProjectsStore.setState({
+      conflictByProject: {
+        [project.id]: {
+          projectId: project.id,
+          cloudProject: project,
+          cloudRevision: 3,
+          updatedByName: null,
+          kind: "deleted",
+        },
+      },
+      lastCloudRevisionByProject: { [project.id]: 3 },
+    });
+
+    useProjectsStore.getState().resolveConflictOverwrite(project.id);
+    await flushAsync();
+
+    expect(
+      useProjectsStore.getState().conflictByProject[project.id],
+    ).toBeUndefined();
+    const putCall = fetchMock.mock.calls.find(
+      (call) => (call[1] as RequestInit)?.method === "PUT",
+    );
+    expect(putCall).toBeTruthy();
+    const body = JSON.parse(String((putCall![1] as RequestInit).body));
+    expect(body.restore).toBe(true);
+    expect(
+      useProjectsStore.getState().lastCloudRevisionByProject[project.id],
+    ).toBe(7);
+  });
+
+  it("retries a transient sync failure and eventually succeeds", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    vi.useFakeTimers();
+    try {
+      const project = useProjectsStore.getState().projects[0];
+      let putAttempts = 0;
+      const fetchMock = vi.fn(
+        async (_url: string | URL | Request, init?: RequestInit) => {
+          if ((init?.method ?? "GET") === "PUT") {
+            putAttempts += 1;
+            if (putAttempts === 1) {
+              return new Response(JSON.stringify({ error: "boom" }), {
+                status: 500,
+                headers: jsonHeaders,
+              });
+            }
+            const payload = init?.body ? JSON.parse(String(init.body)) : {};
+            return new Response(
+              JSON.stringify({
+                project: { project: payload.project, revision: 4 },
+              }),
+              { status: 200, headers: jsonHeaders },
+            );
+          }
+          return new Response("{}", { status: 200, headers: jsonHeaders });
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      useProjectsStore.setState({
+        lastCloudRevisionByProject: { [project.id]: 1 },
+      });
+
+      useProjectsStore.getState().update(project.id, { name: "Retry me" });
+      await vi.runAllTimersAsync();
+
+      expect(putAttempts).toBeGreaterThanOrEqual(2);
+      expect(
+        useProjectsStore.getState().lastCloudRevisionByProject[project.id],
+      ).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

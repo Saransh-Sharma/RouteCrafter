@@ -37,9 +37,14 @@ interface ProjectSyncQueueItem {
         method: ProjectSyncMethod;
       }
     | null;
+  /** Consecutive transient (non-conflict) sync failures, used for backoff. */
+  retryCount: number;
 }
 
 const projectSyncQueue = new Map<string, ProjectSyncQueueItem>();
+
+/** Max automatic retries for a transient sync failure before giving up. */
+const MAX_SYNC_RETRIES = 4;
 
 /**
  * Guards against overlapping background refreshes. A slow poll must not stack on
@@ -47,6 +52,19 @@ const projectSyncQueue = new Map<string, ProjectSyncQueueItem>();
  * out-of-order merges.
  */
 let refreshFromCloudInFlight = false;
+
+/**
+ * Set for the rest of the session when a cloud call returns 503 (no DATABASE_URL).
+ * The shared workspace defaults cloud-on, so a DB-less environment (local dev,
+ * preview, CI) must degrade to local-only instead of hammering the backend and
+ * surfacing a scary persistence error on every interaction.
+ */
+let cloudUnavailable = false;
+
+/** Flip to local-only mode when a cloud response signals the DB is unconfigured. */
+function noteCloudResponse(response: Response): void {
+  if (response.status === 503) cloudUnavailable = true;
+}
 
 export type MutationResult =
   | { ok: true }
@@ -222,7 +240,7 @@ function clearPersistedProjectsStorage(): void {
 }
 
 function dispatchSaveState(
-  status: "saving" | "saved" | "error",
+  status: "idle" | "saving" | "saved" | "error",
   error?: string | null,
 ): void {
   if (typeof window === "undefined") return;
@@ -343,8 +361,9 @@ export interface ProjectConflict {
   /**
    * "update": a local edit lost the last-write race.
    * "delete": a local delete was rejected because the project changed in cloud.
+   * "deleted": the project was deleted by another user while we were editing it.
    */
-  kind: "update" | "delete";
+  kind: "update" | "delete" | "deleted";
 }
 
 /** Lightweight shape returned by `GET /api/projects/revisions` for cheap polling. */
@@ -362,6 +381,7 @@ async function readCloudResponse(response: Response): Promise<{
   project?: CloudProject;
   projects?: CloudProject[];
 }> {
+  noteCloudResponse(response);
   try {
     return await response.json();
   } catch {
@@ -494,6 +514,18 @@ export const useProjectsStore = createZustand<ProjectsState>()(
             });
             dispatchSaveState("saved");
           } catch (error) {
+            if (cloudUnavailable) {
+              // No DATABASE_URL: degrade to local-only instead of surfacing an
+              // error. The cached local projects remain fully usable.
+              set({
+                cloudHydrated: true,
+                syncStatus: "idle",
+                syncError: null,
+                persistenceError: null,
+              });
+              dispatchSaveState("idle");
+              return;
+            }
             const message =
               error instanceof Error ? error.message : "Cloud sync failed.";
             set({
@@ -507,7 +539,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         },
 
         refreshFromCloud: async () => {
-          if (!isCloudPersistenceEnabled()) return;
+          if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
           const user = useAuthStore.getState().user;
           if (!user || typeof fetch === "undefined") return;
           if (refreshFromCloudInFlight) return;
@@ -607,7 +639,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         },
 
         refreshProject: async (id) => {
-          if (!isCloudPersistenceEnabled()) return;
+          if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
           const user = useAuthStore.getState().user;
           if (!user || typeof fetch === "undefined") return;
           if (isProjectDirty(id)) return;
@@ -653,6 +685,24 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (!conflict) return;
           // Discard the stale local snapshot so it is not re-synced later.
           projectSyncQueue.delete(id);
+          if (conflict.kind === "deleted") {
+            // "Discard": the project is gone in cloud, so drop the local copy and
+            // stop tracking its revision.
+            commitProjects(get().projects.filter((p) => p.id !== id));
+            set((current) => {
+              const conflicts = { ...current.conflictByProject };
+              delete conflicts[id];
+              const revisions = { ...current.lastCloudRevisionByProject };
+              delete revisions[id];
+              return {
+                conflictByProject: conflicts,
+                lastCloudRevisionByProject: revisions,
+                syncStatus: "synced",
+                syncError: null,
+              };
+            });
+            return;
+          }
           const exists = get().projects.some((p) => p.id === id);
           commitProjects(
             exists
@@ -707,6 +757,15 @@ export const useProjectsStore = createZustand<ProjectsState>()(
                 user,
               );
               void syncDeleteProject(id);
+            }
+            return;
+          }
+          if (kind === "deleted") {
+            // User chose "Restore": re-create the deleted project in cloud from the
+            // local copy via the revive path (restore flag).
+            const project = get().projects.find((p) => p.id === id);
+            if (project) {
+              void syncProjectSnapshot(project, "restored project", "PUT", true);
             }
             return;
           }
@@ -929,7 +988,7 @@ function enqueueProjectSync(
   activityDetail: string,
   method: ProjectSyncMethod,
 ): void {
-  if (!isCloudPersistenceEnabled()) return;
+  if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
   const project = useProjectsStore
     .getState()
     .projects.find((item) => item.id === projectId);
@@ -937,6 +996,7 @@ function enqueueProjectSync(
   const item = projectSyncQueue.get(projectId) ?? {
     inFlight: false,
     pending: null,
+    retryCount: 0,
   };
   item.pending = {
     project,
@@ -956,6 +1016,8 @@ async function processProjectSyncQueue(projectId: string): Promise<void> {
   item.inFlight = true;
   let activeSnapshot: ProjectSyncQueueItem["pending"] = null;
   let failed = false;
+  // Conflicts are resolved by the user via the banner, never auto-retried.
+  let isConflict = false;
   try {
     while (item.pending) {
       const next = item.pending;
@@ -964,14 +1026,24 @@ async function processProjectSyncQueue(projectId: string): Promise<void> {
       await syncProjectSnapshot(next.project, next.activityDetail, next.method);
       activeSnapshot = null;
     }
-  } catch {
+    item.retryCount = 0;
+  } catch (error) {
     // Keep the latest pending snapshot queued so a later edit or retry can sync it.
     item.pending = item.pending ?? activeSnapshot;
     failed = true;
+    isConflict = error instanceof ProjectSyncConflictError;
   } finally {
     item.inFlight = false;
     if (item.pending && !failed) {
       void processProjectSyncQueue(projectId);
+    } else if (failed && item.pending && !isConflict && !cloudUnavailable) {
+      // Transient failure: retry with bounded exponential backoff so a network
+      // blip does not strand the project (background refresh skips dirty ids).
+      if (item.retryCount < MAX_SYNC_RETRIES) {
+        const delay = 1000 * 2 ** item.retryCount;
+        item.retryCount += 1;
+        setTimeout(() => void processProjectSyncQueue(projectId), delay);
+      }
     } else if (!item.pending) {
       projectSyncQueue.delete(projectId);
     }
@@ -982,8 +1054,9 @@ async function syncProjectSnapshot(
   project: Project,
   activityDetail: string,
   method: ProjectSyncMethod,
+  restore = false,
 ): Promise<void> {
-  if (!isCloudPersistenceEnabled()) return;
+  if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
   const user = useAuthStore.getState().user;
   if (!user || typeof fetch === "undefined") return;
   const state = useProjectsStore.getState();
@@ -996,7 +1069,7 @@ async function syncProjectSnapshot(
       method,
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ project, expectedRevision, activityDetail }),
+      body: JSON.stringify({ project, expectedRevision, activityDetail, restore }),
     });
     const body = await readCloudResponse(response);
     if (response.status === 409) {
@@ -1031,6 +1104,33 @@ async function syncProjectSnapshot(
         "Cloud has newer changes for this project. Reload the latest version or overwrite it with your changes.",
       );
     }
+    if (response.status === 404) {
+      // The project was deleted in the shared workspace while we were editing it.
+      // Surface it via the conflict banner (discard the local copy, or restore it)
+      // instead of a generic persistence error. Cloud has no body to show, so the
+      // local snapshot stands in as the conflict's project.
+      const local = useProjectsStore
+        .getState()
+        .projects.find((p) => p.id === project.id);
+      if (local) {
+        projectSyncQueue.delete(project.id);
+        useProjectsStore.setState((current) => ({
+          conflictByProject: {
+            ...current.conflictByProject,
+            [project.id]: {
+              projectId: project.id,
+              cloudProject: local,
+              cloudRevision: expectedRevision ?? 0,
+              updatedByName: null,
+              kind: "deleted",
+            },
+          },
+        }));
+      }
+      throw new ProjectSyncConflictError(
+        "This project was deleted by someone else. Discard your copy or restore the project.",
+      );
+    }
     if (!response.ok || !body.project) {
       throw new Error(body.error ?? "Could not sync project to cloud.");
     }
@@ -1059,7 +1159,7 @@ async function syncProjectSnapshot(
 }
 
 async function syncDeleteProject(projectId: string): Promise<void> {
-  if (!isCloudPersistenceEnabled()) return;
+  if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
   const user = useAuthStore.getState().user;
   if (!user || typeof fetch === "undefined") return;
   useProjectsStore.setState({ syncStatus: "syncing", syncError: null });
