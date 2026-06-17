@@ -292,8 +292,20 @@
   font-weight: 600;
 }
 
-.rc-doc-img {
+/* Day illustration: ratio-locked 3:2 frame (matches generated 1536x1024). The
+   padding-bottom technique is used instead of `aspect-ratio` for reliable
+   html2canvas/PDF rendering. */
+.rc-doc-img-frame {
+  position: relative;
   width: 100%;
+  padding-bottom: 66.67%;
+}
+
+.rc-doc-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }
@@ -322,15 +334,33 @@
   inset: 0;
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.62) 0%,
-    rgba(0, 0, 0, 0.18) 45%,
-    rgba(0, 0, 0, 0.05) 100%
+    rgba(0, 0, 0, 0.78) 0%,
+    rgba(0, 0, 0, 0.45) 30%,
+    rgba(0, 0, 0, 0.12) 55%,
+    transparent 75%
   );
 }
 
 .rc-doc-cover-inner {
   position: relative;
   padding: 3.5rem;
+}
+
+/* Soft text plate behind the cover title so it stays legible over any image.
+   No backdrop-filter — html2canvas does not render blur reliably. */
+.rc-doc-cover.has-photo .rc-doc-cover-inner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.22) 55%,
+    transparent 100%
+  );
+  border-radius: 1.5rem 1.5rem 0 0;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .rc-doc-cover.has-photo .rc-doc-cover-inner,
@@ -345,6 +375,171 @@
 
 .rc-doc-cover.has-photo .rc-doc-rule {
   background: #fff;
+}
+
+/* --- PDF editor affordances (screen-only; never exported/printed) --- */
+@media print {
+  .rc-edit-only {
+    display: none !important;
+  }
+}
+
+.rc-editable {
+  outline: none;
+  cursor: text;
+  border-radius: 0.35rem;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.rc-doc-editing .rc-editable:hover {
+  box-shadow: 0 0 0 1px var(--doc-border);
+}
+
+.rc-doc-editing .rc-editable:focus {
+  box-shadow: 0 0 0 2px var(--doc-accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rc-editable:empty::before {
+  content: attr(data-placeholder);
+  opacity: 0.45;
+}
+
+.rc-edit-group {
+  position: relative;
+}
+
+.rc-remove-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: rgba(180, 60, 50, 0.92);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rc-edit-group:hover > .rc-remove-btn,
+.rc-remove-btn:focus-visible {
+  opacity: 1;
+}
+
+.rc-remove-day {
+  opacity: 0.85;
+}
+
+.rc-restore-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px dashed var(--doc-border);
+  background: var(--doc-accent-soft);
+  color: var(--doc-ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rc-doc-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.rc-doc-block {
+  position: relative;
+}
+
+.rc-doc-callout-block,
+.rc-doc-callout {
+  display: block;
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--doc-accent-soft);
+  border: 1px solid var(--doc-border);
+}
+
+.rc-insert-bar,
+.rc-block-bar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--doc-ink-muted);
+}
+
+.rc-insert-bar button,
+.rc-block-bar button,
+.rc-block-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--doc-border);
+  background: var(--doc-paper);
+  color: var(--doc-ink-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rc-block-bar {
+  position: absolute;
+  top: -0.6rem;
+  right: 0;
+  z-index: 5;
+  background: var(--doc-paper);
+  border: 1px solid var(--doc-border);
+  border-radius: 999px;
+  padding: 0.25rem 0.5rem;
+  box-shadow: var(--shadow-soft, 0 4px 14px rgba(0, 0, 0, 0.12));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rc-doc-block:hover > .rc-block-bar,
+.rc-block-bar:focus-within {
+  opacity: 1;
+}
+
+.rc-block-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rc-block-bar select {
+  border-radius: 999px;
+  border: 1px solid var(--doc-border);
+  background: var(--doc-paper);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.rc-block-delete {
+  color: rgb(180, 60, 50);
+}
+
+.rc-block-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.25rem;
+  width: 100%;
+  justify-content: center;
+  border-radius: 1rem;
+  border: 1px dashed var(--doc-border);
+  color: var(--doc-ink-muted);
+  font-size: 0.8rem;
 }
 
 /* Day time-block row: label column + content */
