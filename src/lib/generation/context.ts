@@ -4,11 +4,24 @@ import {
 } from "../schemas";
 import type { GenerationContext } from "./types";
 
-/** Build a generation context from a project, filling sensible fallbacks. */
-export function buildContext(project: Project): GenerationContext {
-  const config =
+/** Build a generation context from a project, filling sensible fallbacks.
+ *
+ * `extraCities` are additive cities for a specific itinerary edition. They are
+ * merged on top of the brief's base set (config cities, falling back to project
+ * regions) and de-duplicated, so every downstream consumer — `configBlock`,
+ * `buildItinerary`, `buildMatrix` — picks them up uniformly. */
+export function buildContext(
+  project: Project,
+  options?: { extraCities?: string[] },
+): GenerationContext {
+  const base =
     project.tripConfigs[0] ??
     createEmptyTripConfig({ cities: project.regions });
+  const baseCities = base.cities.length ? base.cities : project.regions;
+  const extra = options?.extraCities ?? [];
+  const config = extra.length
+    ? { ...base, cities: [...new Set([...baseCities, ...extra])] }
+    : base;
   return {
     project,
     config,
