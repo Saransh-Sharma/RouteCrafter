@@ -36,6 +36,23 @@ export const dayPlanSchema = z.object({
 
 export type DayPlan = z.infer<typeof dayPlanSchema>;
 
+/**
+ * User-authored block added in the PDF editor. Rendered at an `anchor` section
+ * (cover | overview | day:<n> | guides | closing), ordered by `order`.
+ */
+export const customBlockSchema = z.object({
+  id: z.string(),
+  anchor: z.string(),
+  order: z.number().default(0),
+  type: z.enum(["text", "image", "divider"]).default("text"),
+  /** text: heading|subheading|body|callout ; divider: line|space|rule */
+  variant: z.string().default(""),
+  text: z.string().default(""),
+  image: z.string().default(""),
+});
+
+export type CustomBlock = z.infer<typeof customBlockSchema>;
+
 export const itineraryOutputSchema = z.object({
   id: z.string(),
   plannedEditionId: z.string().optional(),
@@ -61,6 +78,10 @@ export const itineraryOutputSchema = z.object({
   /** PDF presentation config. */
   pdfTheme: pdfThemeEnum.default("beige"),
   coverImage: z.string().default(""),
+  /** PDF editor: keys of built-in elements the user hid (reversible). */
+  hiddenElements: z.array(z.string()).default([]),
+  /** PDF editor: user-authored blocks (text/image/divider). */
+  customBlocks: z.array(customBlockSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

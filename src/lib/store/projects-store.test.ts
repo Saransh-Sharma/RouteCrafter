@@ -122,6 +122,8 @@ describe("projects store mutations", () => {
           verificationNotes: "",
           pdfTheme: "beige",
           coverImage: "",
+          hiddenElements: [],
+          customBlocks: [],
           createdAt: now,
           updatedAt: now,
         },

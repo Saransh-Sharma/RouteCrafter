@@ -1,7 +1,15 @@
 /* eslint-disable @next/next/no-img-element */
 import * as React from "react";
+import { Eye, Trash2 } from "lucide-react";
 import type { ItineraryOutput, Project } from "@/lib/types";
 import { getTheme, themeVars } from "./themes";
+import {
+  AnchorSlot,
+  EditableText,
+  Removable,
+  isHidden,
+  type DocEditor,
+} from "./doc-editing";
 
 const TIME_FIELDS: { key: keyof ItineraryOutput["days"][number]; label: string }[] =
   [
@@ -37,11 +45,50 @@ export const ItineraryDocument = React.forwardRef<
     itinerary: ItineraryOutput;
     project: Project;
     onAssetSettled?: () => void;
+    editable?: boolean;
+    editor?: DocEditor;
   }
 >(function ItineraryDocument(
-  { itinerary, project, onAssetSettled },
+  { itinerary, project, onAssetSettled, editable = false, editor },
   ref,
 ) {
+  const isEdit = editable && Boolean(editor);
+  const patch = React.useMemo(
+    () => editor?.patch ?? (() => {}),
+    [editor],
+  );
+
+  const setField = React.useCallback(
+    <K extends keyof ItineraryOutput>(key: K, value: ItineraryOutput[K]) => {
+      patch((it) => ({ ...it, [key]: value }));
+    },
+    [patch],
+  );
+  const setDayField = React.useCallback(
+    (
+      dayNum: number,
+      key: keyof ItineraryOutput["days"][number],
+      value: string,
+    ) => {
+      patch((it) => ({
+        ...it,
+        days: it.days.map((day) =>
+          day.day === dayNum ? { ...day, [key]: value } : day,
+        ),
+      }));
+    },
+    [patch],
+  );
+  const hidden = (key: string) => isHidden(itinerary, key);
+  const toggle = (key: string) => {
+    patch((it) => {
+      const set = new Set(it.hiddenElements ?? []);
+      if (set.has(key)) set.delete(key);
+      else set.add(key);
+      return { ...it, hiddenElements: [...set] };
+    });
+  };
+
   const country = itinerary.country || project.country || "Your trip";
   const guides = GUIDE_FIELDS.filter((g) => itinerary[g.key]);
   const theme = getTheme(itinerary.pdfTheme);
@@ -52,7 +99,11 @@ export const ItineraryDocument = React.forwardRef<
     "Verify live opening hours, prices, tickets, and hotel/restaurant availability before travel. Nothing here is presented as guaranteed real-time data.";
 
   return (
-    <div ref={ref} className="rc-doc rc-print-root" style={themeVars(theme)}>
+    <div
+      ref={ref}
+      className={`rc-doc rc-print-root${isEdit ? " rc-doc-editing" : ""}`}
+      style={themeVars(theme)}
+    >
       {/* Cover */}
       <section
         className={`rc-print-page rc-doc-cover${
@@ -76,30 +127,46 @@ export const ItineraryDocument = React.forwardRef<
             {businessName || "Custom Travel Itinerary"}
           </p>
           <div className="rc-doc-rule mt-4" />
-          <h1 className="mt-5 text-6xl font-semibold leading-[1.04]">
-            {country}
-          </h1>
-          <p
+          <EditableText
+            as="h1"
+            value={country}
+            editable={isEdit}
+            onCommit={(next) => setField("country", next)}
+            className="mt-5 text-6xl font-semibold leading-[1.04]"
+          />
+          <EditableText
+            as="p"
+            value={itinerary.title}
+            editable={isEdit}
+            onCommit={(next) => setField("title", next)}
             className="mt-3 text-2xl"
             style={{
               color: itinerary.coverImage
                 ? "rgba(255,255,255,0.92)"
                 : "var(--doc-ink-soft)",
             }}
-          >
-            {itinerary.title}
-          </p>
-          {itinerary.subtitle ? (
-            <p
-              className="mt-1 text-base"
-              style={{
-                color: itinerary.coverImage
-                  ? "rgba(255,255,255,0.8)"
-                  : "var(--doc-ink-muted)",
-              }}
+          />
+          {itinerary.subtitle || isEdit ? (
+            <Removable
+              editable={isEdit}
+              hidden={hidden("subtitle")}
+              onToggle={() => toggle("subtitle")}
+              label="subtitle"
             >
-              {itinerary.subtitle}
-            </p>
+              <EditableText
+                as="p"
+                value={itinerary.subtitle}
+                editable={isEdit}
+                placeholder="Subtitle"
+                onCommit={(next) => setField("subtitle", next)}
+                className="mt-1 text-base"
+                style={{
+                  color: itinerary.coverImage
+                    ? "rgba(255,255,255,0.8)"
+                    : "var(--doc-ink-muted)",
+                }}
+              />
+            </Removable>
           ) : null}
           <div className="mt-7 flex flex-wrap gap-2">
             <span className="rc-doc-chip">{itinerary.duration}</span>
@@ -111,6 +178,12 @@ export const ItineraryDocument = React.forwardRef<
               <span className="rc-doc-chip">{itinerary.budget}</span>
             ) : null}
           </div>
+          <AnchorSlot
+            anchor="cover"
+            itinerary={itinerary}
+            editable={isEdit}
+            patch={patch}
+          />
         </div>
       </section>
 
@@ -119,118 +192,240 @@ export const ItineraryDocument = React.forwardRef<
         <p className="rc-doc-eyebrow">The trip at a glance</p>
         <div className="rc-doc-rule mt-3" />
         <h2 className="mt-5 text-3xl font-semibold">Trip overview</h2>
-        {itinerary.overview ? (
-          <p
-            className="mt-4 text-base leading-relaxed"
-            style={{ color: "var(--doc-ink-soft)" }}
+        {itinerary.overview || isEdit ? (
+          <Removable
+            editable={isEdit}
+            hidden={hidden("overview")}
+            onToggle={() => toggle("overview")}
+            label="overview"
           >
-            {itinerary.overview}
-          </p>
+            <EditableText
+              as="p"
+              value={itinerary.overview}
+              editable={isEdit}
+              placeholder="Trip overview..."
+              onCommit={(next) => setField("overview", next)}
+              className="mt-4 text-base leading-relaxed"
+              style={{ color: "var(--doc-ink-soft)" }}
+            />
+          </Removable>
         ) : null}
         <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <DocField label="Who it's for" value={itinerary.whoFor} />
-          <DocField label="Route" value={itinerary.routeSummary} />
-          <DocField label="Best stay areas" value={itinerary.bestStayAreas} />
+          <DocField
+            label="Who it's for"
+            value={itinerary.whoFor}
+            editable={isEdit}
+            onCommit={(next) => setField("whoFor", next)}
+          />
+          <DocField
+            label="Route"
+            value={itinerary.routeSummary}
+            editable={isEdit}
+            onCommit={(next) => setField("routeSummary", next)}
+          />
+          <DocField
+            label="Best stay areas"
+            value={itinerary.bestStayAreas}
+            editable={isEdit}
+            onCommit={(next) => setField("bestStayAreas", next)}
+          />
           <DocField label="Pace & style" value={paceStyle(itinerary)} />
         </div>
+        <AnchorSlot
+          anchor="overview"
+          itinerary={itinerary}
+          editable={isEdit}
+          patch={patch}
+        />
       </section>
 
       {/* Days */}
       {itinerary.days.map((day) => {
-        const times = TIME_FIELDS.filter((f) => day[f.key]);
+        const dayKey = `day:${day.day}`;
+        const times = TIME_FIELDS.filter((f) => day[f.key] || isEdit);
         const notes = NOTE_FIELDS.filter((f) => day[f.key]);
+        if (hidden(dayKey)) {
+          if (!isEdit) return null;
+          return (
+            <section
+              key={day.day}
+              className="rc-print-page rc-edit-only flex items-center justify-center px-14 py-14"
+            >
+              <button
+                type="button"
+                onClick={() => toggle(dayKey)}
+                className="rc-restore-bar"
+                title={`Restore day ${day.day}`}
+              >
+                <Eye className="size-3.5" />
+                Restore Day {day.day}
+              </button>
+            </section>
+          );
+        }
         return (
           <section key={day.day} className="rc-print-page px-14 py-14">
+            {isEdit ? (
+              <button
+                type="button"
+                onClick={() => toggle(dayKey)}
+                className="rc-edit-only rc-remove-btn rc-remove-day"
+                title={`Remove day ${day.day}`}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            ) : null}
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="rc-doc-eyebrow">Day {String(day.day).padStart(2, "0")}</p>
-                <h3 className="mt-1 text-3xl font-semibold">{day.title}</h3>
-                {day.base ? (
-                  <p
+                <p className="rc-doc-eyebrow">
+                  Day {String(day.day).padStart(2, "0")}
+                </p>
+                <EditableText
+                  as="h3"
+                  value={day.title}
+                  editable={isEdit}
+                  placeholder="Day title"
+                  onCommit={(next) => setDayField(day.day, "title", next)}
+                  className="mt-1 text-3xl font-semibold"
+                />
+                {day.base || isEdit ? (
+                  <EditableText
+                    as="p"
+                    value={day.base}
+                    editable={isEdit}
+                    placeholder="Base city"
+                    onCommit={(next) => setDayField(day.day, "base", next)}
                     className="mt-1 text-sm uppercase tracking-[0.18em]"
                     style={{ color: "var(--doc-ink-muted)" }}
-                  >
-                    {day.base}
-                  </p>
+                  />
                 ) : null}
               </div>
               <span className="rc-day-num">{day.day}</span>
             </div>
 
             {day.image ? (
-              <div
-                className="mt-6 overflow-hidden rounded-2xl"
-                style={{ border: "1px solid var(--doc-border)" }}
+              <Removable
+                editable={isEdit}
+                hidden={hidden(`${dayKey}:image`)}
+                onToggle={() => toggle(`${dayKey}:image`)}
+                label="day image"
+                className="mt-6"
               >
-                <img
-                  className="rc-doc-img"
-                  src={day.image ?? ""}
-                  alt={`Day ${day.day}`}
-                  style={{ height: "260px" }}
-                  onLoad={onAssetSettled}
-                  onError={onAssetSettled}
-                />
-              </div>
+                <div
+                  className="overflow-hidden rounded-2xl"
+                  style={{ border: "1px solid var(--doc-border)" }}
+                >
+                  <div className="rc-doc-img-frame">
+                    <img
+                      className="rc-doc-img"
+                      src={day.image ?? ""}
+                      alt={`Day ${day.day}`}
+                      onLoad={onAssetSettled}
+                      onError={onAssetSettled}
+                    />
+                  </div>
+                </div>
+              </Removable>
             ) : null}
 
             <div className="mt-7">
               {times.map((f) => (
                 <div key={f.key as string} className="rc-day-row">
                   <div className="rc-day-row-label">{f.label}</div>
-                  <div className="rc-day-row-body">{day[f.key] as string}</div>
+                  <EditableText
+                    as="div"
+                    value={(day[f.key] as string) ?? ""}
+                    editable={isEdit}
+                    placeholder={`${f.label}...`}
+                    onCommit={(next) => setDayField(day.day, f.key, next)}
+                    className="rc-day-row-body"
+                  />
                 </div>
               ))}
             </div>
 
             {notes.length ? (
-              <div
-                className="rc-doc-section mt-6 rounded-2xl p-5"
-                style={{
-                  background: "var(--doc-accent-soft)",
-                }}
+              <Removable
+                editable={isEdit}
+                hidden={hidden(`${dayKey}:notes`)}
+                onToggle={() => toggle(`${dayKey}:notes`)}
+                label="notes"
+                className="mt-6"
               >
-                <p className="rc-doc-eyebrow">Good to know</p>
-                <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
-                  {notes.map((f) => (
-                    <div key={f.key as string} className="text-sm">
-                      <span
-                        className="font-semibold"
-                        style={{ color: "var(--doc-ink)" }}
-                      >
-                        {f.label}:{" "}
-                      </span>
-                      <span style={{ color: "var(--doc-ink-soft)" }}>
-                        {day[f.key] as string}
-                      </span>
-                    </div>
-                  ))}
+                <div
+                  className="rc-doc-section rounded-2xl p-5"
+                  style={{ background: "var(--doc-accent-soft)" }}
+                >
+                  <p className="rc-doc-eyebrow">Good to know</p>
+                  <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                    {notes.map((f) => (
+                      <div key={f.key as string} className="text-sm">
+                        <span
+                          className="font-semibold"
+                          style={{ color: "var(--doc-ink)" }}
+                        >
+                          {f.label}:{" "}
+                        </span>
+                        <EditableText
+                          as="span"
+                          value={(day[f.key] as string) ?? ""}
+                          editable={isEdit}
+                          onCommit={(next) => setDayField(day.day, f.key, next)}
+                          style={{ color: "var(--doc-ink-soft)" }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </Removable>
             ) : null}
+
+            <AnchorSlot
+              anchor={dayKey}
+              itinerary={itinerary}
+              editable={isEdit}
+              patch={patch}
+            />
           </section>
         );
       })}
 
       {/* Guides */}
-      {guides.length ? (
+      {guides.length || isEdit ? (
         <section className="rc-print-page px-14 py-16">
           <p className="rc-doc-eyebrow">Plan with confidence</p>
           <div className="rc-doc-rule mt-3" />
           <h2 className="mt-5 text-3xl font-semibold">Guides & checklists</h2>
           <div className="mt-6 space-y-6">
             {guides.map((g) => (
-              <div key={g.key} className="rc-doc-section">
-                <h3 className="text-lg font-semibold">{g.label}</h3>
-                <div className="rc-doc-hairline mt-2" />
-                <p
-                  className="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
-                  style={{ color: "var(--doc-ink-soft)" }}
-                >
-                  {itinerary[g.key] as string}
-                </p>
-              </div>
+              <Removable
+                key={g.key}
+                editable={isEdit}
+                hidden={hidden(`guide:${g.key}`)}
+                onToggle={() => toggle(`guide:${g.key}`)}
+                label={g.label}
+              >
+                <div className="rc-doc-section">
+                  <h3 className="text-lg font-semibold">{g.label}</h3>
+                  <div className="rc-doc-hairline mt-2" />
+                  <EditableText
+                    as="p"
+                    value={itinerary[g.key] as string}
+                    editable={isEdit}
+                    onCommit={(next) => setField(g.key, next)}
+                    className="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
+                    style={{ color: "var(--doc-ink-soft)" }}
+                  />
+                </div>
+              </Removable>
             ))}
           </div>
+          <AnchorSlot
+            anchor="guides"
+            itinerary={itinerary}
+            editable={isEdit}
+            patch={patch}
+          />
         </section>
       ) : null}
 
@@ -240,12 +435,20 @@ export const ItineraryDocument = React.forwardRef<
         <p className="mt-5 text-xl font-semibold">
           {businessName || "Thank you & safe travels"}
         </p>
-        <p
+        <EditableText
+          as="p"
+          value={disclaimer}
+          editable={isEdit}
+          onCommit={(next) => setField("verificationNotes", next)}
           className="mt-4 max-w-2xl text-xs leading-relaxed"
           style={{ color: "var(--doc-ink-muted)" }}
-        >
-          {disclaimer}
-        </p>
+        />
+        <AnchorSlot
+          anchor="closing"
+          itinerary={itinerary}
+          editable={isEdit}
+          patch={patch}
+        />
       </section>
     </div>
   );
@@ -257,8 +460,18 @@ function paceStyle(itinerary: ItineraryOutput): string {
     .join(" - ");
 }
 
-function DocField({ label, value }: { label: string; value: string }) {
-  if (!value) return null;
+function DocField({
+  label,
+  value,
+  editable = false,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  editable?: boolean;
+  onCommit?: (next: string) => void;
+}) {
+  if (!value && !editable) return null;
   return (
     <div>
       <p
@@ -267,9 +480,15 @@ function DocField({ label, value }: { label: string; value: string }) {
       >
         {label}
       </p>
-      <p className="mt-1 text-sm" style={{ color: "var(--doc-ink-soft)" }}>
-        {value}
-      </p>
+      <EditableText
+        as="p"
+        value={value}
+        editable={editable && Boolean(onCommit)}
+        placeholder={`${label}...`}
+        onCommit={(next) => onCommit?.(next)}
+        className="mt-1 text-sm"
+        style={{ color: "var(--doc-ink-soft)" }}
+      />
     </div>
   );
 }

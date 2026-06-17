@@ -1,8 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Printer, Download, FileType, ArrowRight } from "lucide-react";
-import type { Project } from "@/lib/types";
+import {
+  Printer,
+  Download,
+  FileType,
+  ArrowRight,
+  Check,
+  Pencil,
+} from "lucide-react";
+import type { ItineraryOutput, Project } from "@/lib/types";
+import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/field";
@@ -10,6 +18,12 @@ import { ItineraryDocument } from "./ItineraryDocument";
 import { PdfThemeControls } from "./PdfThemeControls";
 import { prepareDocumentForPdf } from "./pdf-assets";
 import { captureAsset, recordAssetUsage } from "@/lib/assets/capture";
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
 
 export function PdfBuilderPanel({
   project,
@@ -24,10 +38,22 @@ export function PdfBuilderPanel({
   );
   const [downloading, setDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState(false);
+  const [capturing, setCapturing] = React.useState(false);
   const docRef = React.useRef<HTMLDivElement>(null);
+  const patchItinerary = useProjectsStore((state) => state.patchItinerary);
 
   const selected =
     itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;
+  const selectedDocId = selected?.id ?? "";
+  const docEditor = React.useMemo(
+    () => ({
+      patch: (updater: (it: ItineraryOutput) => ItineraryOutput) => {
+        if (selectedDocId) patchItinerary(project.id, selectedDocId, updater);
+      },
+    }),
+    [patchItinerary, project.id, selectedDocId],
+  );
   const assetKey = selected
     ? [selected.coverImage, ...selected.days.map((day) => day.image)].join("|")
     : "";
@@ -49,6 +75,10 @@ export function PdfBuilderPanel({
     if (!docRef.current || !selected) return;
     setDownloading(true);
     setDownloadError(null);
+    // Render the clean (non-edit) document for capture so no edit chrome leaks
+    // into the PDF.
+    setCapturing(true);
+    await nextFrame();
     try {
       await prepareDocumentForPdf(docRef.current);
       const html2pdf = (await import("html2pdf.js")).default;
@@ -59,7 +89,13 @@ export function PdfBuilderPanel({
           margin: 0,
           filename,
           image: { type: "jpeg", quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            ignoreElements: (element: Element) =>
+              element.classList?.contains("rc-edit-only"),
+          },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"] },
         })
@@ -102,6 +138,7 @@ export function PdfBuilderPanel({
       );
     } finally {
       setDownloading(false);
+      setCapturing(false);
     }
   }
 
@@ -151,6 +188,24 @@ export function PdfBuilderPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <Button
+            variant={editing ? "primary" : "outline"}
+            size="sm"
+            onClick={() => setEditing((value) => !value)}
+            disabled={downloading}
+          >
+            {editing ? (
+              <>
+                <Check className="size-4" />
+                Done editing
+              </>
+            ) : (
+              <>
+                <Pencil className="size-4" />
+                Edit
+              </>
+            )}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={() => window.print()}
@@ -175,6 +230,12 @@ export function PdfBuilderPanel({
         <p className="rc-no-print text-sm text-ink-muted">
           Waiting for document images to load...
         </p>
+      ) : editing ? (
+        <p className="rc-no-print text-sm text-ink-muted">
+          Click any text to edit it. Use the controls on each element to remove
+          it, and the <span className="font-medium">+ Text / Image / Divider</span>{" "}
+          bars to add new blocks. Removed elements can be restored.
+        </p>
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
@@ -186,6 +247,8 @@ export function PdfBuilderPanel({
             ref={docRef}
             itinerary={selected}
             project={project}
+            editable={editing && !capturing}
+            editor={docEditor}
             onAssetSettled={() =>
               setAssetState((current) =>
                 current.key === assetKey

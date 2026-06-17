@@ -40,6 +40,8 @@ export interface AiRunSheetProps {
   projectId?: string;
   prompt: string;
   sourceLabel: string;
+  /** Override the configured default image size (e.g. "1024x1536" for portrait). */
+  imageSize?: string;
   currentText?: string;
   responseFormat?: "text" | "json";
   applyLabel?: string;
@@ -100,6 +102,7 @@ function AiRunSheetDialog({
   projectId,
   prompt,
   sourceLabel,
+  imageSize,
   currentText = "",
   responseFormat,
   applyLabel = "Replace selected fields",
@@ -116,6 +119,7 @@ function AiRunSheetDialog({
   const { config, loading: configLoading } = useAiConfig();
 
   const defaults = mode === "text" ? textDefaults : imageDefaults;
+  const effectiveImageSize = imageSize ?? imageDefaults.size;
   const personalKey = getApiKey(defaults.provider);
   const selection = resolveClientAiRun({
     mode,
@@ -148,7 +152,7 @@ function AiRunSheetDialog({
           model: selection.model,
           prompt,
           taskType,
-          size: imageDefaults.size,
+          size: effectiveImageSize,
           quality: imageDefaults.quality,
         });
   const estimateLabel = formatCostEstimate(estimate);
@@ -241,7 +245,7 @@ function AiRunSheetDialog({
                 projectId,
                 label: title,
                 source: sourceLabel,
-                size: imageDefaults.size,
+                size: effectiveImageSize,
                 quality: imageQuality,
                 aspectRatio: imageDefaults.aspectRatio,
               },
