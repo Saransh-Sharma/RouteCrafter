@@ -111,6 +111,11 @@ let authCookies: Awaited<ReturnType<BrowserContext["cookies"]>> | null = null;
 
 test.describe.serial("deep persistent production AI audit", () => {
   test.beforeAll(() => {
+    if (process.env.ROUTECRAFTER_PROD_AUDIT !== "1") {
+      throw new Error(
+        "Production audit is opt-in only. Set ROUTECRAFTER_PROD_AUDIT=1 to run this suite.",
+      );
+    }
     if (!password) {
       throw new Error(
         "ROUTECRAFTER_PROD_PASSWORD is required for production E2E.",

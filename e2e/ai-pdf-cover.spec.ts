@@ -120,7 +120,9 @@ test("closes the AI sheet with Escape and returns focus to the trigger", async (
   ).resolves.toBe(true);
 });
 
-test("recovers from a transient image API error via Retry", async ({ page }) => {
+test("recovers from a transient image API error via Retry on the portfolio visuals flow", async ({
+  page,
+}) => {
   let attempts = 0;
   await prepareApp(page, { projects: [fullProject], withAiKey: true });
   await page.route("**/api/ai/image", async (route) => {

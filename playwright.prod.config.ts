@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Manual production audit only. Requires ROUTECRAFTER_PROD_AUDIT=1 — see prod-e2e/README.md.
 delete process.env.NO_COLOR;
 
 export default defineConfig({
