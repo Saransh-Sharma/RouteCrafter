@@ -27,7 +27,26 @@ export function ConflictBanner() {
         const by = conflict.updatedByName
           ? ` by ${conflict.updatedByName}`
           : "";
-        const isDelete = conflict.kind === "delete";
+        // "delete": our delete lost the race. "deleted": removed under us while
+        // editing. "update": our edit lost the race.
+        const verb =
+          conflict.kind === "deleted"
+            ? `was deleted${by} in the shared workspace while you were editing`
+            : conflict.kind === "delete"
+              ? `was updated${by} in the shared workspace while you were deleting it`
+              : `was updated${by} in the shared workspace while you were editing`;
+        const reloadLabel =
+          conflict.kind === "deleted"
+            ? "Discard"
+            : conflict.kind === "delete"
+              ? "Keep it"
+              : "Reload latest";
+        const overwriteLabel =
+          conflict.kind === "deleted"
+            ? "Restore"
+            : conflict.kind === "delete"
+              ? "Delete anyway"
+              : "Overwrite";
         return (
           <div
             key={conflict.projectId}
@@ -35,9 +54,8 @@ export function ConflictBanner() {
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-gold" />
             <p className="flex-1">
-              <span className="font-medium">{name}</span> was updated{by} in the
-              shared workspace while you were{" "}
-              {isDelete ? "deleting it" : "editing"}. Choose what to do.
+              <span className="font-medium">{name}</span> {verb}. Choose what to
+              do.
             </p>
             <div className="flex shrink-0 gap-2">
               <button
@@ -45,14 +63,14 @@ export function ConflictBanner() {
                 onClick={() => reload(conflict.projectId)}
                 className="inline-flex h-9 items-center rounded-full border border-border-strong bg-paper px-4 text-sm font-medium text-ink-soft hover:border-forest/40 hover:text-ink"
               >
-                {isDelete ? "Keep it" : "Reload latest"}
+                {reloadLabel}
               </button>
               <button
                 type="button"
                 onClick={() => overwrite(conflict.projectId)}
                 className="inline-flex h-9 items-center rounded-full bg-terracotta px-4 text-sm font-medium text-paper hover:bg-terracotta/90"
               >
-                {isDelete ? "Delete anyway" : "Overwrite"}
+                {overwriteLabel}
               </button>
             </div>
           </div>
