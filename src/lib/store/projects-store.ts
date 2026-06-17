@@ -41,6 +41,13 @@ interface ProjectSyncQueueItem {
 
 const projectSyncQueue = new Map<string, ProjectSyncQueueItem>();
 
+/**
+ * Guards against overlapping background refreshes. A slow poll must not stack on
+ * the next interval/focus tick, which would multiply request load and risk
+ * out-of-order merges.
+ */
+let refreshFromCloudInFlight = false;
+
 export type MutationResult =
   | { ok: true }
   | {
@@ -140,9 +147,14 @@ interface ProjectsState extends PersistedSlice {
   syncStatus: "idle" | "syncing" | "synced" | "error";
   syncError: string | null;
   lastCloudRevisionByProject: Record<string, number>;
+  conflictByProject: Record<string, ProjectConflict>;
   persistenceError: string | null;
   setHasHydrated: (value: boolean) => void;
   hydrateCloudProjects: () => Promise<void>;
+  refreshFromCloud: () => Promise<void>;
+  refreshProject: (id: string) => Promise<void>;
+  resolveConflictReload: (id: string) => void;
+  resolveConflictOverwrite: (id: string) => void;
   hydrateSeeds: () => void;
   create: (input: CreateProjectInput) => Project;
   update: (id: string, patch: Partial<Project>) => MutationResult;
@@ -256,6 +268,95 @@ function isSeedOnly(projects: Project[]): boolean {
   return projects.every((project) => seedIds.has(project.id));
 }
 
+/**
+ * A project is "dirty" when it has a pending or in-flight cloud sync. Background
+ * refetches must never clobber dirty projects, otherwise local edits are lost.
+ */
+function isProjectDirty(projectId: string): boolean {
+  const item = projectSyncQueue.get(projectId);
+  return Boolean(item && (item.inFlight || item.pending));
+}
+
+/**
+ * Reconcile a set of changed cloud projects into the local cache. Used by the
+ * cheap poll, which only fetches the full bodies that actually changed:
+ * - dirty projects keep their local copy (pending edits win until synced),
+ * - clean projects adopt a fetched cloud copy, but only when its revision did
+ *   not regress below the last known revision (guards read-replica lag and
+ *   in-flight writes from overwriting fresher local state),
+ * - clean projects whose id is absent from the cloud revision set were deleted
+ *   by another user and are dropped,
+ * - fetched cloud projects not present locally are added.
+ */
+function reconcileCloudChanges({
+  localProjects,
+  changedById,
+  cloudIds,
+  knownRevisions,
+}: {
+  localProjects: Project[];
+  changedById: Map<string, CloudProject>;
+  cloudIds: Set<string>;
+  knownRevisions: Record<string, number>;
+}): Project[] {
+  const result: Project[] = [];
+  for (const local of localProjects) {
+    if (isProjectDirty(local.id)) {
+      result.push(local);
+      continue;
+    }
+    if (!cloudIds.has(local.id)) {
+      // Clean and absent from cloud => deleted elsewhere; drop it.
+      continue;
+    }
+    const changed = changedById.get(local.id);
+    if (!changed) {
+      // Present in cloud but unchanged (not refetched); keep the local copy.
+      result.push(local);
+      continue;
+    }
+    const known = knownRevisions[local.id];
+    if (known !== undefined && changed.revision < known) {
+      // Stale read: keep the locally known (newer) copy.
+      result.push(local);
+      continue;
+    }
+    result.push(normalizeProject(changed.project));
+  }
+  const localIds = new Set(localProjects.map((project) => project.id));
+  for (const [id, cloud] of changedById) {
+    if (!localIds.has(id)) {
+      result.push(normalizeProject(cloud.project));
+    }
+  }
+  return result.sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
+}
+
+export interface ProjectConflict {
+  projectId: string;
+  cloudProject: Project;
+  cloudRevision: number;
+  updatedByName: string | null;
+  /**
+   * "update": a local edit lost the last-write race.
+   * "delete": a local delete was rejected because the project changed in cloud.
+   */
+  kind: "update" | "delete";
+}
+
+/** Lightweight shape returned by `GET /api/projects/revisions` for cheap polling. */
+interface ProjectRevisionSummary {
+  id: string;
+  revision: number;
+  updatedAt: string;
+}
+
+/** Thrown when a cloud write is rejected because the project has newer changes. */
+class ProjectSyncConflictError extends Error {}
+
 async function readCloudResponse(response: Response): Promise<{
   error?: string;
   project?: CloudProject;
@@ -313,6 +414,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         syncStatus: "idle",
         syncError: null,
         lastCloudRevisionByProject: {},
+        conflictByProject: {},
         persistenceError: null,
         expandHint: null,
 
@@ -402,6 +504,213 @@ export const useProjectsStore = createZustand<ProjectsState>()(
             });
             dispatchSaveState("error", message);
           }
+        },
+
+        refreshFromCloud: async () => {
+          if (!isCloudPersistenceEnabled()) return;
+          const user = useAuthStore.getState().user;
+          if (!user || typeof fetch === "undefined") return;
+          if (refreshFromCloudInFlight) return;
+          refreshFromCloudInFlight = true;
+          try {
+            // 1. Cheap revisions probe: tells us which ids actually changed
+            // without transferring every project body on each poll.
+            const response = await fetch("/api/projects/revisions", {
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            });
+            if (!response.ok) return;
+            const body = (await response.json().catch(() => null)) as {
+              revisions?: ProjectRevisionSummary[];
+            } | null;
+            if (!body?.revisions) return;
+            const cloudRevisions = body.revisions;
+            const cloudIds = new Set(cloudRevisions.map((item) => item.id));
+            const known = get().lastCloudRevisionByProject;
+            const localProjects = get().projects;
+            const localIds = new Set(localProjects.map((p) => p.id));
+
+            // Ids that need a full fetch: new in cloud, or revision advanced.
+            const changedIds = cloudRevisions
+              .filter((item) => {
+                if (isProjectDirty(item.id)) return false;
+                const knownRevision = known[item.id];
+                return (
+                  !localIds.has(item.id) ||
+                  knownRevision === undefined ||
+                  item.revision > knownRevision
+                );
+              })
+              .map((item) => item.id);
+
+            // Clean local projects absent from cloud were deleted elsewhere.
+            const deletedIds = localProjects
+              .filter((p) => !isProjectDirty(p.id) && !cloudIds.has(p.id))
+              .map((p) => p.id);
+
+            if (changedIds.length === 0 && deletedIds.length === 0) {
+              // Nothing changed: skip the body fetch, the merge, and the
+              // localStorage rewrite + re-render entirely.
+              if (!get().cloudHydrated) set({ cloudHydrated: true });
+              return;
+            }
+
+            // 2. Only fetch the full bodies that changed.
+            const fetched = await Promise.all(
+              changedIds.map((id) =>
+                fetch(`/api/projects/${id}`, {
+                  credentials: "include",
+                  headers: { Accept: "application/json" },
+                })
+                  .then(readCloudResponse)
+                  .then((cloud) => cloud.project ?? null)
+                  .catch(() => null),
+              ),
+            );
+            const changedById = new Map<string, CloudProject>();
+            for (const cloud of fetched) {
+              if (cloud) changedById.set(cloud.project.id, cloud);
+            }
+
+            commitProjects(
+              reconcileCloudChanges({
+                localProjects: get().projects,
+                changedById,
+                cloudIds,
+                knownRevisions: known,
+              }),
+            );
+            set((current) => {
+              const revisions = { ...current.lastCloudRevisionByProject };
+              for (const cloud of changedById.values()) {
+                // Never advance a dirty project's expected revision, and never
+                // lower a known revision (stale read-replica responses).
+                if (isProjectDirty(cloud.project.id)) continue;
+                const knownRevision = revisions[cloud.project.id];
+                if (knownRevision === undefined || cloud.revision >= knownRevision) {
+                  revisions[cloud.project.id] = cloud.revision;
+                }
+              }
+              for (const id of deletedIds) {
+                delete revisions[id];
+              }
+              return {
+                cloudHydrated: true,
+                lastCloudRevisionByProject: revisions,
+              };
+            });
+          } catch {
+            // Background refresh is best-effort; keep the cached copy on failure.
+          } finally {
+            refreshFromCloudInFlight = false;
+          }
+        },
+
+        refreshProject: async (id) => {
+          if (!isCloudPersistenceEnabled()) return;
+          const user = useAuthStore.getState().user;
+          if (!user || typeof fetch === "undefined") return;
+          if (isProjectDirty(id)) return;
+          try {
+            const response = await fetch(`/api/projects/${id}`, {
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            });
+            if (response.status === 404) {
+              const remaining = get().projects.filter((p) => p.id !== id);
+              if (remaining.length !== get().projects.length) {
+                commitProjects(remaining);
+              }
+              return;
+            }
+            const body = await readCloudResponse(response);
+            if (!response.ok || !body.project) return;
+            if (isProjectDirty(id)) return;
+            const cloudRevision = body.project.revision;
+            const known = get().lastCloudRevisionByProject[id];
+            // Guard against a stale read-replica response lowering fresh state.
+            if (known !== undefined && cloudRevision < known) return;
+            const cloud = normalizeProject(body.project.project);
+            const exists = get().projects.some((p) => p.id === id);
+            commitProjects(
+              exists
+                ? get().projects.map((p) => (p.id === id ? cloud : p))
+                : [cloud, ...get().projects],
+            );
+            set((current) => ({
+              lastCloudRevisionByProject: {
+                ...current.lastCloudRevisionByProject,
+                [id]: cloudRevision,
+              },
+            }));
+          } catch {
+            // Best-effort freshness on workspace open.
+          }
+        },
+
+        resolveConflictReload: (id) => {
+          const conflict = get().conflictByProject[id];
+          if (!conflict) return;
+          // Discard the stale local snapshot so it is not re-synced later.
+          projectSyncQueue.delete(id);
+          const exists = get().projects.some((p) => p.id === id);
+          commitProjects(
+            exists
+              ? get().projects.map((p) =>
+                  p.id === id ? conflict.cloudProject : p,
+                )
+              : [conflict.cloudProject, ...get().projects],
+          );
+          set((current) => {
+            const conflicts = { ...current.conflictByProject };
+            delete conflicts[id];
+            return {
+              conflictByProject: conflicts,
+              lastCloudRevisionByProject: {
+                ...current.lastCloudRevisionByProject,
+                [id]: conflict.cloudRevision,
+              },
+              syncStatus: "synced",
+              syncError: null,
+            };
+          });
+        },
+
+        resolveConflictOverwrite: (id) => {
+          const conflict = get().conflictByProject[id];
+          if (!conflict) return;
+          const kind = conflict.kind;
+          set((current) => {
+            const conflicts = { ...current.conflictByProject };
+            delete conflicts[id];
+            return {
+              conflictByProject: conflicts,
+              // The 409 handler already set this to the latest cloud revision; the
+              // next write uses it as expectedRevision to win the last-write race.
+              lastCloudRevisionByProject: {
+                ...current.lastCloudRevisionByProject,
+                [id]: conflict.cloudRevision,
+              },
+            };
+          });
+          if (kind === "delete") {
+            // User chose "Delete anyway": drop the reverted copy locally again and
+            // retry the cloud delete at the latest revision.
+            const project = get().projects.find((p) => p.id === id);
+            const result = commitProjects(get().projects.filter((p) => p.id !== id));
+            if (result.ok) {
+              const user = useAuthStore.getState().user;
+              logActivity(
+                id,
+                "deleted",
+                `Deleted project "${project?.name ?? id}"`,
+                user,
+              );
+              void syncDeleteProject(id);
+            }
+            return;
+          }
+          enqueueProjectSync(id, "overwrote cloud with local changes", "PUT");
         },
 
         hydrateSeeds: () => {
@@ -691,12 +1000,35 @@ async function syncProjectSnapshot(
     });
     const body = await readCloudResponse(response);
     if (response.status === 409) {
-      await fetch(`/api/projects/${project.id}`, {
+      const latest = await fetch(`/api/projects/${project.id}`, {
         credentials: "include",
         headers: { Accept: "application/json" },
-      }).catch(() => undefined);
-      throw new Error(
-        "Cloud has newer changes for this project. Review the latest cloud version before saving again.",
+      })
+        .then(readCloudResponse)
+        .catch(() => null);
+      if (latest?.project) {
+        const cloudProject = normalizeProject(latest.project.project);
+        const cloudRevision = latest.project.revision;
+        const updatedByName = latest.project.updatedByName ?? null;
+        useProjectsStore.setState((current) => ({
+          conflictByProject: {
+            ...current.conflictByProject,
+            [project.id]: {
+              projectId: project.id,
+              cloudProject,
+              cloudRevision,
+              updatedByName,
+              kind: "update",
+            },
+          },
+          lastCloudRevisionByProject: {
+            ...current.lastCloudRevisionByProject,
+            [project.id]: cloudRevision,
+          },
+        }));
+      }
+      throw new ProjectSyncConflictError(
+        "Cloud has newer changes for this project. Reload the latest version or overwrite it with your changes.",
       );
     }
     if (!response.ok || !body.project) {
@@ -713,11 +1045,14 @@ async function syncProjectSnapshot(
     dispatchSaveState("saved");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed.";
-    useProjectsStore.setState({
+    const isConflict = error instanceof ProjectSyncConflictError;
+    useProjectsStore.setState((current) => ({
       syncStatus: "error",
       syncError: message,
-      persistenceError: message,
-    });
+      // Conflicts surface via the dedicated conflict banner, so leave the generic
+      // persistence error untouched to avoid a duplicate scary notice.
+      persistenceError: isConflict ? current.persistenceError : message,
+    }));
     dispatchSaveState("error", message);
     throw error;
   }
@@ -743,6 +1078,14 @@ async function syncDeleteProject(projectId: string): Promise<void> {
       credentials: "include",
       body: JSON.stringify({ expectedRevision }),
     });
+    if (response.status === 409) {
+      // The project changed in the shared workspace after we read it. Revert the
+      // optimistic delete and let the user decide (keep it, or delete again).
+      await recordDeleteConflict(projectId);
+      throw new ProjectSyncConflictError(
+        "Cloud has newer changes for this project. Keep it or delete it again.",
+      );
+    }
     if (!response.ok) {
       const body = await readCloudResponse(response);
       throw new Error(body.error ?? "Could not delete cloud project.");
@@ -759,11 +1102,66 @@ async function syncDeleteProject(projectId: string): Promise<void> {
     dispatchSaveState("saved");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed.";
-    useProjectsStore.setState({
+    const isConflict = error instanceof ProjectSyncConflictError;
+    useProjectsStore.setState((current) => ({
       syncStatus: "error",
       syncError: message,
-      persistenceError: message,
-    });
+      // Delete conflicts surface via the conflict banner, so leave the generic
+      // persistence error untouched to avoid a duplicate scary notice.
+      persistenceError: isConflict ? current.persistenceError : message,
+    }));
     dispatchSaveState("error", message);
   }
+}
+
+/**
+ * On a delete 409, refetch the latest cloud copy, revert the optimistic delete
+ * by re-adding it locally, record a delete-kind conflict, and resync the
+ * expected revision. If the project is already gone in cloud, the delete
+ * effectively succeeded, so just drop its tracked revision.
+ */
+async function recordDeleteConflict(projectId: string): Promise<void> {
+  const latest = await fetch(`/api/projects/${projectId}`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  })
+    .then(readCloudResponse)
+    .catch(() => null);
+
+  if (!latest?.project) {
+    useProjectsStore.setState((current) => {
+      const next = { ...current.lastCloudRevisionByProject };
+      delete next[projectId];
+      return { lastCloudRevisionByProject: next };
+    });
+    return;
+  }
+
+  const cloudProject = normalizeProject(latest.project.project);
+  const cloudRevision = latest.project.revision;
+  const updatedByName = latest.project.updatedByName ?? null;
+
+  useProjectsStore.setState((current) => {
+    const exists = current.projects.some((p) => p.id === projectId);
+    const projects = exists
+      ? current.projects.map((p) => (p.id === projectId ? cloudProject : p))
+      : [cloudProject, ...current.projects];
+    return {
+      projects,
+      conflictByProject: {
+        ...current.conflictByProject,
+        [projectId]: {
+          projectId,
+          cloudProject,
+          cloudRevision,
+          updatedByName,
+          kind: "delete",
+        },
+      },
+      lastCloudRevisionByProject: {
+        ...current.lastCloudRevisionByProject,
+        [projectId]: cloudRevision,
+      },
+    };
+  });
 }
