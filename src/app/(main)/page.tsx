@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { PreviewCard } from "@/components/ui/PreviewCard";
 import { ImportProjectButton } from "@/components/dashboard/ImportProjectButton";
+import { CountryProjectExplorer } from "@/components/dashboard/CountryProjectExplorer";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useMounted } from "@/lib/hooks";
@@ -62,11 +62,6 @@ const SUBTITLES = [
   "Your itinerary studio awaits.",
 ];
 
-const INITIAL_PROJECT_COUNT = 5;
-const PROJECT_BATCH_SIZE = 6;
-// Paginate the dashboard project grid so large accounts (for example after
-// production audit projects accumulate) stay responsive without rendering every card.
-
 function getDailySubtitle(): string {
   const dayOfYear = Math.floor(
     (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) /
@@ -79,12 +74,7 @@ export default function DashboardPage() {
   const mounted = useMounted();
   const projects = useProjectsStore((s) => s.projects);
   const user = useAuthStore((s) => s.user);
-  const [visibleProjectCount, setVisibleProjectCount] = React.useState(
-    INITIAL_PROJECT_COUNT,
-  );
-  const visibleProjects = mounted ? projects.slice(0, visibleProjectCount) : [];
-  const hasMoreProjects = mounted && visibleProjectCount < projects.length;
-  const projectLoaderRef = React.useRef<HTMLDivElement | null>(null);
+  const visibleProjects = mounted ? projects : [];
   const continueProject = mounted
     ? [...projects]
         .filter((project) => project.status !== "Ready to sell")
@@ -95,25 +85,6 @@ export default function DashboardPage() {
     : undefined;
   const [recentAssets, setRecentAssets] = React.useState<AssetDTO[]>([]);
   const greeting = getGreeting();
-
-  React.useEffect(() => {
-    if (!mounted || !hasMoreProjects) return;
-    const loader = projectLoaderRef.current;
-    if (!loader) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setVisibleProjectCount((count) =>
-          Math.min(count + PROJECT_BATCH_SIZE, projects.length),
-        );
-      },
-      { rootMargin: "480px 0px" },
-    );
-
-    observer.observe(loader);
-    return () => observer.disconnect();
-  }, [hasMoreProjects, mounted, projects.length, visibleProjectCount]);
 
   React.useEffect(() => {
     if (!mounted || !user) return;
@@ -270,23 +241,15 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      {/* Projects */}
-      <section className="space-y-5">
-        <div className="flex items-center justify-between">
+      {/* Projects organized by country */}
+      {visibleProjects.length > 0 ? (
+        <CountryProjectExplorer projects={visibleProjects} />
+      ) : mounted ? (
+        <section className="space-y-5">
           <h2 className="text-xl font-semibold text-ink">Country projects</h2>
           <Link
-            href="/projects"
-            className="flex items-center gap-1 text-sm font-medium text-forest hover:text-forest-deep"
-          >
-            View all
-            <ArrowRight className="size-4" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Link
             href="/projects/new"
-            className="group flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed border-border-strong bg-paper/40 p-6 text-center transition-colors hover:border-forest/40 hover:bg-paper/70"
+            className="group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed border-border-strong bg-paper/40 p-6 text-center transition-colors hover:border-forest/40 hover:bg-paper/70"
           >
             <span className="flex size-12 items-center justify-center rounded-full bg-sage-soft text-forest transition-transform group-hover:scale-105">
               <Plus className="size-6" />
@@ -298,23 +261,8 @@ export default function DashboardPage() {
               Start a new Fiverr-ready itinerary product for any country.
             </span>
           </Link>
-
-          {visibleProjects.map((project) => (
-            <PreviewCard key={project.id} project={project} />
-          ))}
-        </div>
-
-        {hasMoreProjects ? (
-          <div
-            ref={projectLoaderRef}
-            className="h-8"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="sr-only">Loading more projects</span>
-          </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

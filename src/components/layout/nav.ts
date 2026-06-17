@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   FolderOpen,
+  Globe2,
   LibraryBig,
   Images,
   BookOpen,
@@ -28,6 +29,12 @@ export const navItems: NavItem[] = [
     href: "/projects",
     icon: FolderOpen,
     match: (p) => p.startsWith("/projects"),
+  },
+  {
+    label: "Countries",
+    href: "/countries",
+    icon: Globe2,
+    match: (p) => p.startsWith("/countries"),
   },
   {
     label: "Templates",
