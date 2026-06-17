@@ -144,6 +144,14 @@ return `X-AI-Provider-Attempts` and set `export const maxDuration = 300`.
 The browser client uses `AI_CLIENT_TIMEOUT_MS = 330_000` so it outlasts the
 server retry budget.
 
+**Retry stacking and billing:** Each API request may retry up to 3 times on the
+server. The AI run sheet also offers a client **Retry** button for transient
+failures (not rate limits). A single user action can therefore trigger up to
+~6 provider calls. POST retries on ambiguous timeouts may bill twice if the
+provider accepted a request but the connection dropped before the response
+returned. Treat this as an accepted tradeoff for resilience; prefer waiting on
+rate limits rather than hammering the provider from the UI.
+
 ## Task types
 
 ```3:12:src/lib/ai/types.ts
@@ -400,6 +408,14 @@ overrides and retains the shared-device warning for browser-stored personal keys
 If the Vercel plan caps functions below ~270s, lower `AI_PROVIDER_TIMEOUT_MS`
 and/or `PROVIDER_MAX_ATTEMPTS` in `provider-adapters.ts` so the retry loop fits
 inside the deployment ceiling.
+
+### Production verification (manual)
+
+The opt-in Playwright audit in [`prod-e2e/`](../../prod-e2e/) signs into live
+deployments, upserts kept audit projects, and runs real billed AI flows. It is
+**not** part of CI. Set `ROUTECRAFTER_PROD_AUDIT=1` and follow
+[`prod-e2e/README.md`](../../prod-e2e/README.md) for env vars, cost estimate,
+and cleanup of `Prod E2E Keep - *` projects.
 
 ## Gaps / reserved code
 
