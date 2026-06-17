@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
 import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { buildImageGenerationPrompt } from "@/lib/ai/tasks";
+import { editionExtraCities } from "@/lib/workflow";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { cn } from "@/lib/utils";
 import {
@@ -269,6 +270,7 @@ export function PdfThemeControls({
                     2,
                   ),
                   "Premium itinerary PDF cover image",
+                  editionExtraCities(project, itinerary),
                 ),
               })
             }
@@ -334,6 +336,7 @@ export function PdfThemeControls({
                           project,
                           JSON.stringify(day, null, 2),
                           `Day ${day.day} itinerary illustration`,
+                          editionExtraCities(project, itinerary),
                         ),
                       })
                     }

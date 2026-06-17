@@ -38,11 +38,14 @@ export function BuildStage({
     editions.find((edition) => edition.id === editionId) ?? editions[0];
 
   function createEditionItinerary(edition: PlannedEdition) {
-    const itinerary = buildItinerary(buildContext(project), {
-      duration: edition.duration,
-      customDays: edition.customDays,
-      travelerType: edition.travelerType,
-    });
+    const itinerary = buildItinerary(
+      buildContext(project, { extraCities: edition.cities }),
+      {
+        duration: edition.duration,
+        customDays: edition.customDays,
+        travelerType: edition.travelerType,
+      },
+    );
     itinerary.plannedEditionId = edition.id;
     update(project.id, {
       itineraries: [...project.itineraries, itinerary],

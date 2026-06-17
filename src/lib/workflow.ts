@@ -108,6 +108,16 @@ export function itineraryForEdition(
   );
 }
 
+/** Additive cities for the planned edition linked to this itinerary, if any. */
+export function editionExtraCities(
+  project: Project,
+  itinerary?: ItineraryOutput | null,
+): string[] {
+  const id = itinerary?.plannedEditionId;
+  if (!id) return [];
+  return project.productionPlan.editions.find((e) => e.id === id)?.cities ?? [];
+}
+
 function hasText(value: string | undefined): boolean {
   return Boolean(value?.trim());
 }

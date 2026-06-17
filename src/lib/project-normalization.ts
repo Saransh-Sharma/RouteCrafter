@@ -96,6 +96,7 @@ function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Pr
         duration: canonicalDuration(itinerary.duration, fallbackDuration),
         customDays: customDays(itinerary.duration),
         travelerType: itinerary.travelerType,
+        cities: [],
         itineraryId: itinerary.id,
         createdAt: itinerary.createdAt,
       }));

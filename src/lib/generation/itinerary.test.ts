@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { seedProjects } from "../seed-projects";
 import { createEmptyTripConfig } from "../schemas";
-import { buildContext } from "./context";
+import { buildContext, configBlock } from "./context";
 import { buildItinerary } from "./itinerary";
 
 function projectWithConfig() {
@@ -50,5 +50,31 @@ describe("itinerary duration resolution", () => {
     });
 
     expect(itinerary.whoFor).toContain("romantic");
+  });
+});
+
+describe("edition extra cities", () => {
+  it("merges extra cities onto base cities and de-dupes", () => {
+    const ctx = buildContext(projectWithConfig(), {
+      extraCities: ["Osaka", "Tokyo"],
+    });
+
+    expect(ctx.config.cities).toEqual(["Tokyo", "Kyoto", "Osaka"]);
+    expect(configBlock(ctx)).toContain("Tokyo, Kyoto, Osaka");
+  });
+
+  it("seeds the itinerary route summary with merged cities", () => {
+    const itinerary = buildItinerary(
+      buildContext(projectWithConfig(), { extraCities: ["Osaka"] }),
+      { duration: "3 days" },
+    );
+
+    expect(itinerary.routeSummary).toContain("Osaka");
+    expect(itinerary.overview).toContain("Osaka");
+  });
+
+  it("leaves base cities unchanged when no extras are given", () => {
+    const ctx = buildContext(projectWithConfig());
+    expect(ctx.config.cities).toEqual(["Tokyo", "Kyoto"]);
   });
 });
