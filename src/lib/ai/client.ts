@@ -6,8 +6,9 @@ import type {
   AiServerConfig,
   AiTextRequest,
 } from "./types";
+import { AI_ERROR } from "./errors";
 
-const AI_CLIENT_TIMEOUT_MS = 120_000;
+const AI_CLIENT_TIMEOUT_MS = 330_000;
 
 function requestSignalWithTimeout(signal?: AbortSignal): {
   signal: AbortSignal;
@@ -54,9 +55,7 @@ export async function requestAiText(
     return parseAiResponse(response);
   } catch (error) {
     if (timeoutSignal.timedOut()) {
-      throw new Error(
-        "The AI request timed out. Try again or reduce the request size.",
-      );
+      throw new Error(AI_ERROR.PROVIDER_TIMEOUT);
     }
     throw error;
   } finally {
@@ -79,9 +78,7 @@ export async function requestAiImage(
     return parseAiResponse(response);
   } catch (error) {
     if (timeoutSignal.timedOut()) {
-      throw new Error(
-        "The AI request timed out. Try again or reduce the request size.",
-      );
+      throw new Error(AI_ERROR.PROVIDER_TIMEOUT);
     }
     throw error;
   } finally {

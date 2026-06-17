@@ -1,5 +1,12 @@
 import "server-only";
 
+import {
+  AI_ERROR,
+  isRetryableHttpStatus,
+  isRetryableThrownError,
+  normalizeThrownError,
+  providerErrorFromStatus,
+} from "./errors";
 import type {
   AiResult,
   AiUsage,
@@ -15,16 +22,73 @@ interface ProviderErrorBody {
   message?: string;
 }
 
+export interface ProviderFetchMeta {
+  attempts: number;
+  lastStatus?: number;
+}
+
+interface ProviderFetchResult {
+  response: Response;
+  meta: ProviderFetchMeta;
+}
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 90_000;
+const PROVIDER_MAX_ATTEMPTS = 3;
+const PROVIDER_RETRY_BASE_DELAY_MS = 1_000;
+
+function resolveProviderTimeoutMs(kind: "text" | "image"): number {
+  const imageOverride = Number(process.env.AI_IMAGE_PROVIDER_TIMEOUT_MS);
+  const sharedOverride = Number(process.env.AI_PROVIDER_TIMEOUT_MS);
+  if (kind === "image" && imageOverride > 0) return imageOverride;
+  if (sharedOverride > 0) return sharedOverride;
+  return DEFAULT_PROVIDER_TIMEOUT_MS;
+}
+
+function retryDelayMs(attempt: number): number {
+  const exponential = PROVIDER_RETRY_BASE_DELAY_MS * 2 ** attempt;
+  const jitter = Math.floor(Math.random() * 250);
+  return exponential + jitter;
+}
+
+function attachProviderAttempts(error: unknown, attempts: number): never {
+  if (error instanceof Error) {
+    (error as Error & { providerAttempts?: number }).providerAttempts = attempts;
+    throw error;
+  }
+  const wrapped = new Error(AI_ERROR.DID_NOT_COMPLETE);
+  (wrapped as Error & { providerAttempts?: number }).providerAttempts = attempts;
+  throw wrapped;
+}
+
+function redactProviderUrl(input: string): string {
+  return input.replace(/key=[^&]+/i, "key=redacted");
+}
+
+async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 async function providerFetch(
   input: string,
   init: RequestInit,
   signal?: AbortSignal,
+  timeoutMs = resolveProviderTimeoutMs("text"),
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeoutMs =
-    Number(process.env.AI_PROVIDER_TIMEOUT_MS) || DEFAULT_PROVIDER_TIMEOUT_MS;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const abortFromRequest = () => controller.abort(signal?.reason);
   if (signal?.aborted) abortFromRequest();
@@ -36,15 +100,74 @@ async function providerFetch(
       throw new DOMException("Aborted", "AbortError");
     }
     if (controller.signal.aborted) {
-      throw new Error(
-        "The provider request timed out. Try again or reduce the request size.",
-      );
+      throw new Error(AI_ERROR.PROVIDER_TIMEOUT);
     }
     throw error;
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abortFromRequest);
   }
+}
+
+async function providerFetchWithRetry(
+  input: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+  kind: "text" | "image" = "text",
+): Promise<ProviderFetchResult> {
+  let lastError: unknown;
+  let lastStatus: number | undefined;
+  const timeoutMs = resolveProviderTimeoutMs(kind);
+
+  for (let attempt = 0; attempt < PROVIDER_MAX_ATTEMPTS; attempt += 1) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    try {
+      const response = await providerFetch(input, init, signal, timeoutMs);
+      if (response.ok || !isRetryableHttpStatus(response.status)) {
+        return {
+          response,
+          meta: { attempts: attempt + 1, lastStatus: response.status },
+        };
+      }
+      lastStatus = response.status;
+      lastError = new Error(await readError(response));
+      console.warn("[ai-provider-retry]", {
+        url: redactProviderUrl(input),
+        attempt: attempt + 1,
+        status: response.status,
+        error: lastError instanceof Error ? lastError.message : "unknown",
+      });
+    } catch (error) {
+      if (signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      if (!isRetryableThrownError(error) || attempt === PROVIDER_MAX_ATTEMPTS - 1) {
+        attachProviderAttempts(error, attempt + 1);
+      }
+      lastError = error;
+      console.warn("[ai-provider-retry]", {
+        url: redactProviderUrl(input),
+        attempt: attempt + 1,
+        status: lastStatus,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+
+    if (attempt < PROVIDER_MAX_ATTEMPTS - 1) {
+      await sleep(retryDelayMs(attempt), signal);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    attachProviderAttempts(lastError, PROVIDER_MAX_ATTEMPTS);
+  }
+  attachProviderAttempts(
+    new Error(AI_ERROR.DID_NOT_COMPLETE),
+    PROVIDER_MAX_ATTEMPTS,
+  );
 }
 
 function asRecord(value: unknown): JsonRecord {
@@ -108,16 +231,7 @@ async function readError(response: Response): Promise<string> {
     typeof body?.error === "string"
       ? body.error
       : body?.error?.message ?? body?.message ?? response.statusText;
-  if (response.status === 401 || response.status === 403) {
-    return "Provider authentication failed.";
-  }
-  if (response.status === 429) {
-    return "Provider rate limit reached. Wait or switch models.";
-  }
-  if (response.status >= 500) {
-    return "The provider is temporarily unavailable. No project content was changed.";
-  }
-  return raw || "The provider rejected this request.";
+  return providerErrorFromStatus(response.status, raw);
 }
 
 function extractOpenAiText(data: unknown): string {
@@ -197,11 +311,15 @@ function throwIfJsonLooksTruncated(text: string, request: ResolvedAiTextRequest)
 }
 
 export function normalizeProviderError(error: unknown): string {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request was cancelled. No project content was changed.";
+  return normalizeThrownError(error);
+}
+
+export function readProviderAttempts(error: unknown): number | undefined {
+  if (error && typeof error === "object" && "providerAttempts" in error) {
+    const attempts = (error as { providerAttempts?: unknown }).providerAttempts;
+    return typeof attempts === "number" ? attempts : undefined;
   }
-  if (error instanceof Error) return error.message;
-  return "The AI request did not complete. No project content was changed.";
+  return undefined;
 }
 
 export async function generateText(
@@ -242,7 +360,7 @@ async function generateOpenAiText(
   request: ResolvedAiTextRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await providerFetch("https://api.openai.com/v1/responses", {
+  const { response, meta } = await providerFetchWithRetry("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${request.apiKey}`,
@@ -277,6 +395,7 @@ async function generateOpenAiText(
     credentialSource: request.credentialSource,
     text,
     usage: usageFromOpenAI(record.usage),
+    providerAttempts: meta.attempts,
   };
 }
 
@@ -285,7 +404,7 @@ async function generateAnthropicText(
   signal?: AbortSignal,
 ): Promise<AiResult> {
   const isLateOpus = /^claude-opus-4-[78]/.test(request.model);
-  const response = await providerFetch("https://api.anthropic.com/v1/messages", {
+  const { response, meta } = await providerFetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": request.apiKey,
@@ -316,6 +435,7 @@ async function generateAnthropicText(
     credentialSource: request.credentialSource,
     text,
     usage: usageFromAnthropic(record.usage),
+    providerAttempts: meta.attempts,
   };
 }
 
@@ -323,7 +443,7 @@ async function generateGeminiText(
   request: ResolvedAiTextRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await providerFetch(
+  const { response, meta } = await providerFetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
     )}:generateContent?key=${encodeURIComponent(request.apiKey)}`,
@@ -345,6 +465,7 @@ async function generateGeminiText(
       }),
     },
     signal,
+    "text",
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
@@ -358,6 +479,7 @@ async function generateGeminiText(
     credentialSource: request.credentialSource,
     text,
     usage: usageFromGemini(record.usageMetadata),
+    providerAttempts: meta.attempts,
   };
 }
 
@@ -365,7 +487,7 @@ async function generateOpenAiImage(
   request: ResolvedAiImageRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await providerFetch(
+  const { response, meta } = await providerFetchWithRetry(
     "https://api.openai.com/v1/images/generations",
     {
       method: "POST",
@@ -382,6 +504,7 @@ async function generateOpenAiImage(
       }),
     },
     signal,
+    "image",
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
@@ -397,6 +520,7 @@ async function generateOpenAiImage(
     image,
     mimeType: base64 ? "image/png" : undefined,
     usage: { images: 1 },
+    providerAttempts: meta.attempts,
   };
 }
 
@@ -404,7 +528,7 @@ async function generateGeminiImage(
   request: ResolvedAiImageRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await providerFetch(
+  const { response, meta } = await providerFetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       request.model,
     )}:generateContent?key=${encodeURIComponent(request.apiKey)}`,
@@ -419,6 +543,7 @@ async function generateGeminiImage(
       }),
     },
     signal,
+    "image",
   );
   if (!response.ok) throw new Error(await readError(response));
   const data: unknown = await response.json();
@@ -437,5 +562,6 @@ async function generateGeminiImage(
     image: `data:${mimeType};base64,${base64}`,
     mimeType,
     usage: { ...usageFromGemini(record.usageMetadata), images: 1 },
+    providerAttempts: meta.attempts,
   };
 }

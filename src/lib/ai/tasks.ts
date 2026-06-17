@@ -310,6 +310,10 @@ export function buildImageGenerationPrompt(
   purpose: string,
 ): string {
   const ctx = buildContext(project);
+  const brief =
+    source.length > 4000
+      ? `${source.slice(0, 4000)}\n...[truncated]`
+      : source;
   return `Create one premium RouteCrafter visual asset.
 
 Purpose: ${purpose}
@@ -319,7 +323,7 @@ Trip context:
 ${configBlock(ctx)}
 
 Visual brief:
-${source}
+${brief}
 
 Style:
 Warm ivory editorial travel-studio aesthetic, sage and forest green, terracotta, muted gold, premium PDF mockup energy, clean composition, crisp readable short text only if needed.
