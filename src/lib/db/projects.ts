@@ -107,12 +107,14 @@ export async function upsertProjectForUser({
   expectedRevision,
   activityDetail,
   activityAction = "updated",
+  restore = false,
 }: {
   user: User;
   project: unknown;
   expectedRevision?: number;
   activityDetail?: string;
   activityAction?: "created" | "updated" | "imported" | "duplicated";
+  restore?: boolean;
 }): Promise<CloudProject> {
   await ensureUser(user);
   const normalized = projectSchema.parse(normalizeProject(project));
@@ -121,7 +123,33 @@ export async function upsertProjectForUser({
   });
 
   if (existing?.deletedAt) {
-    throw new ProjectNotFoundError("Project was deleted.");
+    if (!restore) {
+      throw new ProjectNotFoundError("Project was deleted.");
+    }
+    // Revive a soft-deleted project: clear the tombstone and bump the revision,
+    // preserving original creator attribution.
+    const reviveValues = projectValues(normalized, user.id, existing.revision + 1);
+    const [revived] = await getDb()
+      .update(projects)
+      .set({
+        ...reviveValues,
+        userId: existing.userId,
+        createdAt: existing.createdAt,
+        deletedAt: null,
+        revision: existing.revision + 1,
+      })
+      .where(eq(projects.id, normalized.id))
+      .returning();
+    if (activityDetail) {
+      await createActivity({
+        projectId: normalized.id,
+        ownerUserId: existing.userId,
+        actor: user,
+        action: activityAction,
+        detail: activityDetail,
+      });
+    }
+    return rowToCloudProject(revived);
   }
   if (existing) {
     if (expectedRevision === undefined) {
