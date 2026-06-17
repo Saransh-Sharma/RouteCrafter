@@ -5,7 +5,7 @@ import { errorResponse } from "@/lib/api/errors";
 import { deleteBlobAsset, uploadBlobAsset } from "@/lib/blob";
 import { createActivity } from "@/lib/db/activity";
 import { createAsset } from "@/lib/db/assets";
-import { getProjectForUser } from "@/lib/db/projects";
+import { getProject } from "@/lib/db/projects";
 import { ensureRequestUser } from "@/lib/db/request-user";
 import {
   assetSourceSchema,
@@ -50,14 +50,14 @@ export async function POST(request: Request) {
         { status: 413 },
       );
     }
-    const project = await getProjectForUser({ userId: requestUser.id, projectId });
+    const project = await getProject(projectId);
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }
 
     const blob = await uploadBlobAsset({
       body: file,
-      pathname: `${requestUser.id}/${projectId}/${Date.now()}-${filename}`,
+      pathname: `shared/${projectId}/${Date.now()}-${filename}`,
       contentType: file.type || "application/octet-stream",
     });
     try {

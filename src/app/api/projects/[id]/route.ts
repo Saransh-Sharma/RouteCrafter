@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
 import { errorResponse } from "@/lib/api/errors";
 import {
-  getProjectForUser,
+  getProject,
   softDeleteProjectForUser,
   upsertProjectForUser,
 } from "@/lib/db/projects";
@@ -24,13 +24,21 @@ export async function GET(
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     const { id } = await context.params;
-    const project = await getProjectForUser({ userId: requestUser.id, projectId: id });
+    const project = await getProject(id);
     if (!project) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Project not found." },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
+      );
     }
-    return NextResponse.json({ project });
+    // The shared workspace relies on fresh reads (refreshProject + 409 refetch),
+    // so never serve a cached project body.
+    return NextResponse.json(
+      { project },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return errorResponse(error);
   }

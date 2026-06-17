@@ -11,7 +11,7 @@ import {
 } from "@/lib/ai/credentials";
 import { createCompletedAiRun, createFailedAiRun } from "@/lib/db/ai-runs";
 import { ensureRequestUser } from "@/lib/db/request-user";
-import { getProjectForUser } from "@/lib/db/projects";
+import { getProject } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -56,11 +56,8 @@ export async function POST(request: NextRequest) {
       projectId: parsed.data.projectId,
     };
     if (process.env.DATABASE_URL && parsed.data.projectId) {
-      const requestUser = await ensureRequestUser(user);
-      const project = await getProjectForUser({
-        userId: requestUser.id,
-        projectId: parsed.data.projectId,
-      });
+      await ensureRequestUser(user);
+      const project = await getProject(parsed.data.projectId);
       if (!project) {
         return NextResponse.json({ error: "Project not found." }, { status: 404 });
       }

@@ -5,7 +5,7 @@ import { errorResponse } from "@/lib/api/errors";
 import { deleteBlobAsset } from "@/lib/blob";
 import {
   countActiveAssetUsages,
-  getAssetForUser,
+  getAsset,
   softDeleteAsset,
 } from "@/lib/db/assets";
 import { createAuditEvent } from "@/lib/db/audit";
@@ -22,14 +22,11 @@ export async function DELETE(
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
     const { id } = await context.params;
-    const asset = await getAssetForUser({ userId: requestUser.id, assetId: id });
+    const asset = await getAsset(id);
     if (!asset) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
-    const activeUsages = await countActiveAssetUsages({
-      userId: requestUser.id,
-      assetId: id,
-    });
+    const activeUsages = await countActiveAssetUsages({ assetId: id });
     if (activeUsages > 0) {
       return NextResponse.json(
         {
@@ -41,7 +38,7 @@ export async function DELETE(
       );
     }
     await deleteBlobAsset(asset.blobUrl);
-    await softDeleteAsset({ userId: requestUser.id, assetId: id });
+    await softDeleteAsset({ assetId: id });
     await createAuditEvent({
       request,
       userId: requestUser.id,

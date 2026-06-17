@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     const url = new URL(request.url);
     const parsedType = assetTypeSchema.safeParse(url.searchParams.get("assetType"));
     const limit = Math.min(
@@ -20,14 +20,13 @@ export async function GET(request: Request) {
       Math.max(1, Number(url.searchParams.get("limit") ?? 60)),
     );
     const assets = await listAssets({
-      userId: requestUser.id,
       limit,
       cursor: url.searchParams.get("cursor"),
       projectId: url.searchParams.get("projectId"),
       country: url.searchParams.get("country"),
       assetType: parsedType.success ? parsedType.data : null,
     });
-    const facets = await getAssetFacets(requestUser.id);
+    const facets = await getAssetFacets();
     return NextResponse.json({ assets, facets });
   } catch (error) {
     return errorResponse(error);
