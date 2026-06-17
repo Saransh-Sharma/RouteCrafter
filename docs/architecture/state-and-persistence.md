@@ -21,6 +21,11 @@ and migrated through Zod on every read and write.
 
 - **Authoritative cloud.** `isCloudPersistenceEnabled()` defaults to `true`; it is
   only disabled when `NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED="false"` (local-only dev).
+  Because cloud is on by default, a `DATABASE_URL`-less environment (local dev,
+  preview, CI) is detected at runtime — a `503` from any cloud call flips the client
+  into local-only mode for the session, so the app stays usable instead of showing a
+  persistence error on every interaction. **For DB-less local dev, set
+  `NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED=false`** to skip the cloud round-trips.
 - **Freshness.** The client reconciles the shared list on tab focus/visibility and
   a light ~20s poll (`refreshFromCloud`), and refetches a single project when its
   workspace opens (`refreshProject`). Dirty projects (pending/in-flight local edits)
@@ -46,6 +51,17 @@ and migrated through Zod on every read and write.
   optimistic local delete by re-adding the latest cloud copy, then records a
   `kind: "delete"` conflict. The banner offers **Keep it** (adopt the cloud copy) or
   **Delete anyway** (retry the delete at the latest revision).
+- **Deleted-while-editing.** If a write `404`s because another user deleted the
+  project mid-edit, the store records a `kind: "deleted"` conflict (the local copy
+  stands in, since cloud has none) instead of a generic error. The banner offers
+  **Discard** (drop the local copy) or **Restore** — the latter re-creates the
+  project via the server revive path (`PUT … { restore: true }`, which clears the
+  soft-delete tombstone and bumps the revision).
+- **Transient retries.** A non-conflict sync failure (network blip, `5xx`) is retried
+  with bounded exponential backoff (up to `MAX_SYNC_RETRIES`) rather than stranding
+  the project as permanently dirty — important because background refresh deliberately
+  skips dirty ids. Conflicts (`409`/`404`) are never auto-retried; the user resolves
+  them via the banner.
 
 ## Projects store
 
