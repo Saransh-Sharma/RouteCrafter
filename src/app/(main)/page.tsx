@@ -64,6 +64,8 @@ const SUBTITLES = [
 
 const INITIAL_PROJECT_COUNT = 5;
 const PROJECT_BATCH_SIZE = 6;
+// Paginate the dashboard project grid so large accounts (for example after
+// production audit projects accumulate) stay responsive without rendering every card.
 
 function getDailySubtitle(): string {
   const dayOfYear = Math.floor(
