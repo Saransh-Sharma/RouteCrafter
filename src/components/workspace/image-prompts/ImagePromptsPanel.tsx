@@ -12,9 +12,11 @@ import {
 } from "@/lib/generation";
 import { portfolioImagePromptSchema } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
+import { editionLabel } from "@/lib/workflow";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { FormField, Select } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
 import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import {
@@ -38,14 +40,19 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
   const prompts = project.imagePrompts;
   const finalCount = prompts.filter((p) => p.isFinal).length;
+  const editions = project.productionPlan.editions;
+  const [editionId, setEditionId] = React.useState<string>("");
   const [aiTarget, setAiTarget] = React.useState<
     | { mode: "improve"; prompt: PortfolioImagePrompt }
     | { mode: "image"; prompt: PortfolioImagePrompt }
     | null
   >(null);
 
+  const extraCities =
+    editions.find((edition) => edition.id === editionId)?.cities ?? [];
+
   function ctx(): GenerationContext {
-    return buildContext(project);
+    return buildContext(project, { extraCities });
   }
 
   function generateAll() {
@@ -287,6 +294,26 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
         </div>
       </div>
 
+      {editions.length ? (
+        <FormField
+          label="Tailor cities to an edition"
+          hint="Adds that edition's custom cities/regions on top of the brief cities for image prompts."
+        >
+          <Select
+            value={editionId}
+            onChange={(event) => setEditionId(event.target.value)}
+          >
+            <option value="">Project-wide (brief cities)</option>
+            {editions.map((edition) => (
+              <option key={edition.id} value={edition.id}>
+                {editionLabel(edition)}
+                {edition.cities.length ? ` · +${edition.cities.length} cities` : ""}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+      ) : null}
+
       <div className="space-y-5">
         {prompts.map((prompt, i) => (
           <ImagePromptCard
@@ -329,8 +356,13 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
                   project,
                   imagePromptToText(aiTarget.prompt),
                   aiTarget.prompt.title,
+                  extraCities,
                 )
-              : buildImagePromptImprovementPrompt(project, aiTarget.prompt)
+              : buildImagePromptImprovementPrompt(
+                  project,
+                  aiTarget.prompt,
+                  extraCities,
+                )
             : ""
         }
         currentText={aiTarget ? JSON.stringify(aiTarget.prompt, null, 2) : ""}
