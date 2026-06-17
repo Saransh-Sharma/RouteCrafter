@@ -86,6 +86,8 @@ export const projectMutationSchema = z.object({
   project: z.unknown(),
   expectedRevision: z.number().int().positive().optional(),
   activityDetail: z.string().optional(),
+  /** Revive a soft-deleted project (used to restore after a delete-vs-edit conflict). */
+  restore: z.boolean().optional(),
 });
 
 export const preferencePayloadSchema = z.object({
