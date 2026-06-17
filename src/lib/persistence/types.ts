@@ -6,6 +6,9 @@ import { activityActionEnum } from "@/lib/schemas/activity";
 export interface CloudProject {
   project: Project;
   revision: number;
+  /** Attribution for the last writer, used to surface conflicts to other users. */
+  updatedByUserId?: string | null;
+  updatedByName?: string | null;
 }
 
 export interface ProjectMutationRequest {
