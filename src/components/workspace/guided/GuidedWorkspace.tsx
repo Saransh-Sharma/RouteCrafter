@@ -15,6 +15,7 @@ import { PlanStage } from "./stages/PlanStage";
 import { BuildStage } from "./stages/BuildStage";
 import { PackageStage } from "./stages/PackageStage";
 import { PublishStage } from "./stages/PublishStage";
+import { NextActionCard } from "./NextActionCard";
 
 const VALID_STAGES = new Set<WorkflowStageId>(WORKFLOW_STAGE_ORDER);
 
@@ -63,30 +64,7 @@ export function GuidedWorkspace({ project }: { project: Project }) {
         onNavigate={navigate}
       />
 
-      <section className="relative overflow-hidden border-y border-border-strong bg-paper/55 px-5 py-5 sm:px-7">
-        <div className="absolute inset-y-0 left-0 w-1 bg-terracotta" />
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-terracotta">
-              Recommended next move
-            </p>
-            <h2 className="mt-1 text-xl font-semibold text-ink">
-              {workflow.recommendedAction}
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-soft">
-              {workflow.recommendedReason}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(workflow.recommendedStage)}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-forest px-5 text-sm font-semibold text-paper transition-colors hover:bg-forest-deep"
-          >
-            Open recommended stage
-            <ArrowRight className="size-4" />
-          </button>
-        </div>
-      </section>
+      <NextActionCard project={project} workflow={workflow} onNavigate={navigate} />
 
       <div key={activeStage} className="animate-in fade-in slide-in-from-bottom-2">
         {activeStage === "define" ? (

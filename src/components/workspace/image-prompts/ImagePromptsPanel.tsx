@@ -23,6 +23,14 @@ import {
 } from "@/lib/ai/tasks";
 import { parseJsonObject } from "@/lib/ai/parse";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import {
+  captureAsset,
+  dataUrlToBlob,
+  isDataUrl,
+  markAiRunApplied,
+  recordAssetUsage,
+} from "@/lib/assets/capture";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import { ImagePromptCard } from "./ImagePromptCard";
 import { downloadImagePromptsMarkdown } from "./export-image-prompts";
 
@@ -44,12 +52,12 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     update(project.id, { imagePrompts: buildImagePrompts(ctx()) });
   }
 
-  function setPrompts(next: PortfolioImagePrompt[]) {
-    update(project.id, { imagePrompts: next });
+  function setPrompts(next: PortfolioImagePrompt[]): boolean {
+    return update(project.id, { imagePrompts: next }).ok;
   }
 
-  function updateOne(updated: PortfolioImagePrompt) {
-    setPrompts(prompts.map((p) => (p.id === updated.id ? updated : p)));
+  function updateOne(updated: PortfolioImagePrompt): boolean {
+    return setPrompts(prompts.map((p) => (p.id === updated.id ? updated : p)));
   }
 
   function regenerateOne(prompt: PortfolioImagePrompt) {
@@ -57,7 +65,32 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     updateOne({ ...fresh, id: prompt.id, isFinal: prompt.isFinal });
   }
 
-  function toggleFinal(prompt: PortfolioImagePrompt) {
+  async function toggleFinal(prompt: PortfolioImagePrompt) {
+    if (!prompt.isFinal && prompt.image && isDataUrl(prompt.image)) {
+      try {
+        const asset = await captureAsset({
+          projectId: project.id,
+          assetType: "portfolio-visual",
+          source: "ai-generation",
+          file: dataUrlToBlob(prompt.image),
+          filename: `${project.country || "project"}-${prompt.kind}.png`,
+          usageType: "portfolio-visual",
+          entityId: prompt.id,
+          fieldPath: "imagePrompts[].image",
+        });
+        if (updateOne({ ...prompt, image: asset.blobUrl, isFinal: true })) {
+          await recordAssetUsage({
+            assetId: asset.id,
+            usageType: "portfolio-visual",
+            entityId: prompt.id,
+            fieldPath: "imagePrompts[].image",
+          }).catch(() => undefined);
+        }
+        return;
+      } catch {
+        // Keep the existing final toggle available if the cloud capture fails.
+      }
+    }
     updateOne({ ...prompt, isFinal: !prompt.isFinal });
   }
 
@@ -70,19 +103,54 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
     }
   }
 
+  function mergePromptFields(
+    current: PortfolioImagePrompt,
+    incoming: PortfolioImagePrompt,
+    mode: "replace" | "fill-empty" | "append",
+  ): PortfolioImagePrompt {
+    const preserved = {
+      id: current.id,
+      kind: current.kind,
+      isFinal: current.isFinal,
+      image: current.image,
+    };
+    if (mode === "replace") return { ...incoming, ...preserved };
+    const next = { ...current };
+    const fields: Array<keyof PortfolioImagePrompt> = [
+      "title",
+      "goal",
+      "canvas",
+      "layout",
+      "visualElements",
+      "textOverlay",
+      "style",
+      "negativePrompt",
+      "countryAccuracyNotes",
+      "readabilityNotes",
+    ];
+    for (const field of fields) {
+      const value = incoming[field];
+      if (typeof value !== "string" || !value.trim()) continue;
+      if (mode === "fill-empty") {
+        if (!String(next[field] ?? "").trim()) {
+          next[field] = value as never;
+        }
+      } else {
+        const currentValue = String(next[field] ?? "").trim();
+        next[field] = (currentValue ? `${currentValue}\n\n${value}` : value) as never;
+      }
+    }
+    return portfolioImagePromptSchema.parse(next);
+  }
+
   function applyImprovedPrompt(
     text: string,
     result: Parameters<typeof createAiRunMetadata>[0]["result"],
+    mode: "replace" | "fill-empty" | "append",
   ) {
     if (!aiTarget || aiTarget.mode !== "improve") return;
     const incoming = portfolioImagePromptSchema.parse(parseJsonObject(text));
-    updateOne({
-      ...incoming,
-      id: aiTarget.prompt.id,
-      kind: aiTarget.prompt.kind,
-      isFinal: aiTarget.prompt.isFinal,
-      image: aiTarget.prompt.image,
-    });
+    updateOne(mergePromptFields(aiTarget.prompt, incoming, mode));
     update(project.id, {
       aiRuns: appendAiRun(
         project,
@@ -94,14 +162,48 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
-  function applyGeneratedImage(
+  async function applyGeneratedImage(
     image: string,
     result: Parameters<typeof createAiRunMetadata>[0]["result"],
   ) {
     if (!aiTarget || aiTarget.mode !== "image") return;
-    updateOne({ ...aiTarget.prompt, image });
+    let imageUrl = image;
+    let assetId: string | undefined;
+    if (isDataUrl(image) && isCloudPersistenceEnabled()) {
+      try {
+        const asset = await captureAsset({
+          projectId: project.id,
+          assetType: "portfolio-visual",
+          source: "ai-generation",
+          file: dataUrlToBlob(image),
+          filename: `${project.country || "project"}-${aiTarget.prompt.kind}.png`,
+          usageType: "portfolio-visual",
+          entityId: aiTarget.prompt.id,
+          fieldPath: "imagePrompts[].image",
+        });
+        imageUrl = asset.blobUrl;
+        assetId = asset.id;
+      } catch (error) {
+        throw new Error(
+          error instanceof Error
+            ? error.message
+            : "Could not save the generated image asset.",
+        );
+      }
+    }
+    const applied = updateOne({ ...aiTarget.prompt, image: imageUrl });
+    if (!applied) return;
+    if (assetId) {
+      await recordAssetUsage({
+        assetId,
+        usageType: "portfolio-visual",
+        entityId: aiTarget.prompt.id,
+        fieldPath: "imagePrompts[].image",
+      }).catch(() => undefined);
+    }
     update(project.id, {
       aiRuns: appendAiRun(
         project,
@@ -112,6 +214,11 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
           source: "image-prompts",
         }),
       ),
+    });
+    void markAiRunApplied({
+      aiRunId: result.aiRunId,
+      projectId: project.id,
+      assetId,
     });
   }
 
@@ -213,6 +320,7 @@ export function ImagePromptsPanel({ project }: { project: Project }) {
         taskType={
           aiTarget?.mode === "image" ? "imageGeneration" : "imagePrompt"
         }
+        projectId={project.id}
         sourceLabel={aiTarget?.prompt.title ?? "Image prompt"}
         prompt={
           aiTarget

@@ -21,6 +21,7 @@ import { useProjectsStore } from "@/lib/store/projects-store";
 import { useMounted } from "@/lib/hooks";
 import { GuidedWorkspace } from "@/components/workspace/guided/GuidedWorkspace";
 import { getProjectWorkflow } from "@/lib/workflow";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 
 const statusTone = {
   Draft: "neutral",
@@ -67,8 +68,8 @@ export default function ProjectWorkspacePage() {
               Project not found
             </h2>
             <p className="text-sm text-ink-soft">
-              This project isn&apos;t saved in your browser. It may have been
-              deleted or created on another device.
+              This project is not available in your current cloud project list.
+              It may have been deleted or you may need to refresh your session.
             </p>
             <Link
               href="/"
@@ -100,6 +101,7 @@ export default function ProjectWorkspacePage() {
   }
 
   const workflow = getProjectWorkflow(project);
+  const cloudPersistence = isCloudPersistenceEnabled();
 
   return (
     <div className="space-y-7">
@@ -141,7 +143,9 @@ export default function ProjectWorkspacePage() {
                 ? "Saving changes"
                 : saveState.status === "error"
                   ? "Save failed"
-                  : "Saved locally"}
+                  : cloudPersistence
+                    ? "Saved to cloud"
+                    : "Saved locally"}
             </span>
           </div>
         </div>

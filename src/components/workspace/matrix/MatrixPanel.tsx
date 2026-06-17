@@ -15,6 +15,7 @@ import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { buildMatrixPrompt } from "@/lib/ai/tasks";
 import { parseJsonObject } from "@/lib/ai/parse";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { markAiRunApplied } from "@/lib/assets/capture";
 import { PromptHelper } from "../PromptHelper";
 import {
   downloadMatrixCsv,
@@ -144,6 +145,7 @@ export function MatrixPanel({
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   if (!matrix || matrix.cells.length === 0) {
@@ -186,6 +188,7 @@ export function MatrixPanel({
           title="AI draft premium matrix"
           description="Creates a structured duration by traveler-type matrix and previews it before replacing anything."
           taskType="matrix"
+          projectId={project.id}
           sourceLabel="Itinerary matrix"
           prompt={buildMatrixPrompt(project)}
           currentText=""
@@ -308,6 +311,7 @@ export function MatrixPanel({
         title={aiFocus ? `AI improve ${aiFocus}` : "AI draft premium matrix"}
         description="Creates structured matrix JSON and previews it before applying."
         taskType="matrix"
+        projectId={project.id}
         sourceLabel={aiFocus ?? "Itinerary matrix"}
         prompt={`${buildMatrixPrompt(project, matrix)}${
           aiFocus ? `\n\nFocus only on improving: ${aiFocus}` : ""

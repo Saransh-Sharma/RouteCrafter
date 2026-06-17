@@ -15,7 +15,7 @@ test("navigates the complete authenticated application shell", async ({
   await expect(
     page.getByRole("heading", { name: /Good (morning|afternoon|evening|night), Admin/ }),
   ).toBeVisible();
-  await expect(page.getByText("Portugal Editorial Escape")).toBeVisible();
+  await expect(page.getByText("Portugal Editorial Escape").first()).toBeVisible();
 
   await page.getByRole("link", { name: "Projects" }).first().click();
   await expect(page).toHaveURL(/\/projects$/);
@@ -86,7 +86,7 @@ test("creates, persists, duplicates, and deletes a project", async ({
   await page.getByLabel("Project actions").click();
   await page.getByRole("button", { name: "Delete project" }).click();
   await expect(page).toHaveURL("/");
-  await expect(page.getByText("Iceland Winter Weekend")).toBeVisible();
+  await expect(page.getByText("Iceland Winter Weekend").first()).toBeVisible();
   await expect(page.getByText("Iceland Winter Weekend (Copy)")).toHaveCount(0);
 });
 

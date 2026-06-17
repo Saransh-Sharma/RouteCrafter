@@ -11,7 +11,11 @@ import type {
 import { enumValues } from "@/lib/schemas";
 import { buildContext, buildMatrix } from "@/lib/generation";
 import { useProjectsStore } from "@/lib/store/projects-store";
-import { editionLabel, type WorkflowStageId } from "@/lib/workflow";
+import {
+  editionLabel,
+  getProjectWorkflow,
+  type WorkflowStageId,
+} from "@/lib/workflow";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input, Select } from "@/components/ui/field";
 import { StageHeader } from "./StageHeader";
@@ -39,6 +43,8 @@ export function PlanStage({
       "Couple",
   );
   const editions = project.productionPlan.editions;
+  const workflow = getProjectWorkflow(project);
+  const stage = workflow.stages.find((item) => item.id === "plan");
   const duplicate = editions.some(
     (edition) =>
       edition.duration === duration &&
@@ -102,6 +108,9 @@ export function PlanStage({
         eyebrow="Stage 2 · Plan"
         title="Commit to the editions you will ship"
         description="Possible durations and audiences are ideas. Planned editions are promises: each one needs a finished itinerary and the selected package assets."
+        completed={stage?.completed}
+        total={stage?.total}
+        blockers={workflow.blockers.filter((issue) => issue.stage === "plan")}
         aside={
           <div className="min-w-40 border-l border-border-strong pl-5">
             <p className="text-2xl font-semibold text-ink">{editions.length}</p>

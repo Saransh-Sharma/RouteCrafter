@@ -7,6 +7,26 @@ import type {
   AiTextRequest,
 } from "./types";
 
+const AI_CLIENT_TIMEOUT_MS = 120_000;
+
+function requestSignalWithTimeout(signal?: AbortSignal): {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_CLIENT_TIMEOUT_MS);
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  return {
+    signal: controller.signal,
+    timedOut: () => controller.signal.aborted && !signal?.aborted,
+    cleanup: () => clearTimeout(timeout),
+  };
+}
+
 async function parseAiResponse(response: Response): Promise<AiResult> {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
@@ -23,26 +43,50 @@ export async function requestAiText(
   request: AiTextRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await fetch("/api/ai/text", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-    signal,
-  });
-  return parseAiResponse(response);
+  const timeoutSignal = requestSignalWithTimeout(signal);
+  try {
+    const response = await fetch("/api/ai/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: timeoutSignal.signal,
+    });
+    return parseAiResponse(response);
+  } catch (error) {
+    if (timeoutSignal.timedOut()) {
+      throw new Error(
+        "The AI request timed out. Try again or reduce the request size.",
+      );
+    }
+    throw error;
+  } finally {
+    timeoutSignal.cleanup();
+  }
 }
 
 export async function requestAiImage(
   request: AiImageRequest,
   signal?: AbortSignal,
 ): Promise<AiResult> {
-  const response = await fetch("/api/ai/image", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-    signal,
-  });
-  return parseAiResponse(response);
+  const timeoutSignal = requestSignalWithTimeout(signal);
+  try {
+    const response = await fetch("/api/ai/image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: timeoutSignal.signal,
+    });
+    return parseAiResponse(response);
+  } catch (error) {
+    if (timeoutSignal.timedOut()) {
+      throw new Error(
+        "The AI request timed out. Try again or reduce the request size.",
+      );
+    }
+    throw error;
+  } finally {
+    timeoutSignal.cleanup();
+  }
 }
 
 export async function requestAiConfig(): Promise<AiServerConfig> {

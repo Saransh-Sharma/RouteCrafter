@@ -15,6 +15,7 @@ import { FormField, Input, Select } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
 import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { markAiRunApplied } from "@/lib/assets/capture";
 import { buildBriefExtractionPrompt, tripConfigCurrentValue } from "@/lib/ai/tasks";
 import { parseJsonObject } from "@/lib/ai/parse";
 import { Section } from "./Section";
@@ -174,6 +175,7 @@ export function TripConfigForm({
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   React.useEffect(() => {
@@ -505,6 +507,7 @@ export function TripConfigForm({
         title="AI fill trip configuration"
         description="Extracts structured trip fields from a buyer brief. Preview before applying to the form."
         taskType="brief"
+        projectId={project.id}
         sourceLabel="Buyer/client brief"
         prompt={buildBriefExtractionPrompt(project, brief)}
         currentText={tripConfigCurrentValue(values)}

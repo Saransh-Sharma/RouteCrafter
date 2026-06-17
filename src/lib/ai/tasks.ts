@@ -12,6 +12,7 @@ import {
   voiceDescription,
 } from "@/lib/generation/context";
 import { buildContext, imagePromptToText } from "@/lib/generation";
+import { enumValues } from "@/lib/schemas";
 
 const REALISM =
   "Do not invent live hours, prices, ticket availability, hotel availability, or real-time route conditions. Include verification notes where relevant.";
@@ -92,11 +93,121 @@ ${current ? JSON.stringify(current, null, 2) : "None"}
 
 Rules:
 - Preserve manually edited fields unless the focus requires improvement.
+- Preserve itinerary identity fields exactly: id, plannedEditionId, country, duration, travelerType, createdAt, pdfTheme, and coverImage.
+- Use exactly one enum value for style, budget, travelerType, and day pace. Do not return comma-separated enum lists.
+- Allowed style values: ${enumValues.travelStyle.join(", ")}.
+- Allowed budget values: ${enumValues.budget.join(", ")}.
+- Allowed travelerType values: ${enumValues.travelerType.join(", ")}.
+- Allowed day pace values: ${enumValues.pace.join(", ")}.
+- Keep JSON values compact: top-level guide fields should be 2-4 concise sentences, and each day activity field should be 1 concise sentence.
+- Return complete JSON only. If detail must be reduced to fit, shorten field values rather than omitting closing braces or returning partial JSON.
 - Every day needs practical morning, lunch, afternoon, evening, dinner, transport, booking, backup, and rationale fields.
 - Keep the itinerary sellable, editable, and client-ready.
 - ${REALISM}
 
 ${jsonOnly("ItineraryOutput")}`;
+}
+
+export function buildItineraryOverviewPrompt(
+  project: Project,
+  current: ItineraryOutput,
+  focus?: string,
+): string {
+  const ctx = buildContext(project);
+  return `Draft or improve only the non-day fields for a RouteCrafter itinerary.
+
+Project configuration:
+${configBlock(ctx)}
+
+Requested focus:
+${focus || "Build a complete premium itinerary overview and guide sections."}
+
+Current itinerary shell:
+${JSON.stringify(
+  {
+    title: current.title,
+    subtitle: current.subtitle,
+    country: current.country,
+    duration: current.duration,
+    travelerType: current.travelerType,
+    style: current.style,
+    budget: current.budget,
+    overview: current.overview,
+    whoFor: current.whoFor,
+    routeSummary: current.routeSummary,
+    bestStayAreas: current.bestStayAreas,
+    foodGuide: current.foodGuide,
+    transportGuide: current.transportGuide,
+    packingList: current.packingList,
+    etiquetteSafety: current.etiquetteSafety,
+    bookingChecklist: current.bookingChecklist,
+    personalizationQuestions: current.personalizationQuestions,
+    verificationNotes: current.verificationNotes,
+  },
+  null,
+  2,
+)}
+
+Rules:
+- Return only the fields shown above. Do not include days.
+- Preserve country, duration, and travelerType exactly.
+- Use exactly one enum value for style and budget. Do not return comma-separated enum lists.
+- Allowed style values: ${enumValues.travelStyle.join(", ")}.
+- Allowed budget values: ${enumValues.budget.join(", ")}.
+- Keep each guide field compact: 2-4 concise sentences or a short practical checklist.
+- ${REALISM}
+
+${jsonOnly("ItineraryOverviewChunk")}`;
+}
+
+export function buildItineraryDaysPrompt({
+  project,
+  itinerary,
+  days,
+  focus,
+}: {
+  project: Project;
+  itinerary: ItineraryOutput;
+  days: DayPlan[];
+  focus?: string;
+}): string {
+  const ctx = buildContext(project);
+  const dayNumbers = days.map((day) => day.day);
+  return `Draft or improve only days ${dayNumbers.join(", ")} for a RouteCrafter itinerary.
+
+Project configuration:
+${configBlock(ctx)}
+
+Itinerary context:
+${JSON.stringify(
+  {
+    title: itinerary.title,
+    duration: itinerary.duration,
+    travelerType: itinerary.travelerType,
+    style: itinerary.style,
+    budget: itinerary.budget,
+    routeSummary: itinerary.routeSummary,
+  },
+  null,
+  2,
+)}
+
+Requested focus:
+${focus || "Build complete premium day plans."}
+
+Current days:
+${JSON.stringify(days, null, 2)}
+
+Rules:
+- Return an object with a "days" array only.
+- Return exactly ${days.length} day objects, in this order: ${dayNumbers.join(", ")}.
+- Preserve each day number exactly.
+- Every day needs concise morning, lunch, afternoon, evening, dinner, transportNotes, bookingNotes, lowEnergyAlternative, rainyDayAlternative, and whyThisWorks fields.
+- Use exactly one allowed pace value when pace is included: ${enumValues.pace.join(", ")}.
+- Keep each activity field to 1 concise sentence so the JSON always finishes.
+- ${REALISM}
+
+${jsonOnly("{ days: DayPlan[] }")}`;
 }
 
 export function buildDayPrompt(

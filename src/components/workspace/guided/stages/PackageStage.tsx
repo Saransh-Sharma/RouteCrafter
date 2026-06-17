@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { Project } from "@/lib/types";
-import type { WorkflowStageId } from "@/lib/workflow";
+import { getProjectWorkflow, type WorkflowStageId } from "@/lib/workflow";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { ListingPanel } from "../../listing/ListingPanel";
@@ -45,6 +45,8 @@ export function PackageStage({
   const active = TOOLS.some((item) => item.id === tool)
     ? (tool as PackageTool)
     : "listing";
+  const workflow = getProjectWorkflow(project);
+  const stage = workflow.stages.find((item) => item.id === "package");
 
   const chooseTool = (next: PackageTool) =>
     onNavigate("package", { tool: next });
@@ -55,6 +57,9 @@ export function PackageStage({
         eyebrow="Stage 4 · Package"
         title="Make the itinerary easy to understand and buy"
         description="Build the sales story and selected delivery files around your completed editions. Only outputs chosen in Define become publish requirements."
+        completed={stage?.completed}
+        total={stage?.total}
+        blockers={workflow.blockers.filter((issue) => issue.stage === "package")}
       />
 
       <div className="grid gap-7 lg:grid-cols-[230px_minmax(0,1fr)]">

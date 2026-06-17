@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedProjects } from "../seed-projects";
 import {
   MAX_PERSISTED_STATE_CHARS,
@@ -10,6 +10,18 @@ import { useAuthStore } from "./auth-store";
 describe("projects store mutations", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const payload = init?.body ? JSON.parse(String(init.body)) : {};
+        return new Response(
+          JSON.stringify({
+            project: { project: payload.project, revision: 1 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
     useActivityStore.setState({ entries: [] });
     useAuthStore.setState({
       user: {
@@ -29,6 +41,10 @@ describe("projects store mutations", () => {
       hasHydrated: true,
       persistenceError: null,
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("logs the specific project fields changed by an update", () => {
@@ -214,5 +230,176 @@ describe("projects store mutations", () => {
       presentationReviewed: false,
       backupConfirmed: false,
     });
+  });
+
+  it("serializes rapid cloud sync writes with the returned revision", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const project = useProjectsStore.getState().projects[0];
+    let resolveFirst!: (response: Response) => void;
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if (fetchMock.mock.calls.length === 1) return firstResponse;
+        const payload = init?.body ? JSON.parse(String(init.body)) : {};
+        return new Response(
+          JSON.stringify({
+            project: { project: payload.project, revision: 3 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useProjectsStore.setState({
+      lastCloudRevisionByProject: { [project.id]: 1 },
+    });
+
+    useProjectsStore.getState().update(project.id, { name: "First edit" });
+    useProjectsStore.getState().update(project.id, { country: "Japan" });
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveFirst(
+      new Response(
+        JSON.stringify({
+          project: {
+            project: JSON.parse(
+              String((fetchMock.mock.calls[0][1] as RequestInit).body),
+            ).project,
+            revision: 2,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(
+      String((fetchMock.mock.calls[0][1] as RequestInit).body),
+    );
+    const secondBody = JSON.parse(
+      String((fetchMock.mock.calls[1][1] as RequestInit).body),
+    );
+    expect(firstBody.expectedRevision).toBe(1);
+    expect(secondBody.expectedRevision).toBe(2);
+    expect(secondBody.project.country).toBe("Japan");
+    expect(useProjectsStore.getState().lastCloudRevisionByProject[project.id]).toBe(3);
+  });
+
+  it("merges cloud hydration with local-only projects", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const local = {
+      ...structuredClone(seedProjects[0]),
+      id: "local-only-project",
+      name: "Local Only Project",
+      updatedAt: "2026-06-15T00:00:00.000Z",
+    };
+    const cloud = {
+      ...structuredClone(seedProjects[1]),
+      id: "cloud-project",
+      name: "Cloud Project",
+      updatedAt: "2026-06-16T00:00:00.000Z",
+    };
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const path = String(url);
+      if (path === "/api/projects") {
+        return new Response(
+          JSON.stringify({ projects: [{ project: cloud, revision: 4 }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          projects: [
+            { project: cloud, revision: 4 },
+            { project: local, revision: 1 },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useProjectsStore.setState({
+      projects: [local],
+      initialized: true,
+      cloudHydrated: false,
+      lastCloudRevisionByProject: {},
+    });
+
+    await useProjectsStore.getState().hydrateCloudProjects();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(useProjectsStore.getState().projects.map((project) => project.id)).toEqual([
+      "cloud-project",
+      "local-only-project",
+    ]);
+    expect(useProjectsStore.getState().lastCloudRevisionByProject).toMatchObject({
+      "cloud-project": 4,
+      "local-only-project": 1,
+    });
+  });
+
+  it("sends the expected cloud revision when deleting", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const project = useProjectsStore.getState().projects[0];
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useProjectsStore.setState({
+      lastCloudRevisionByProject: { [project.id]: 7 },
+    });
+
+    expect(useProjectsStore.getState().remove(project.id).ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/projects/${project.id}`,
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ expectedRevision: 7 }),
+      }),
+    );
+  });
+
+  it("retries the latest queued project snapshot after a failed sync", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
+    const project = useProjectsStore.getState().projects[0];
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            project: {
+              project: { ...project, name: "Recovered edit" },
+              revision: 2,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    useProjectsStore.getState().update(project.id, { name: "Failed edit" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    useProjectsStore.getState().update(project.id, { name: "Recovered edit" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryBody = JSON.parse(
+      String((fetchMock.mock.calls[1][1] as RequestInit).body),
+    );
+    expect(retryBody.project.name).toBe("Recovered edit");
+    expect(useProjectsStore.getState().syncStatus).toBe("synced");
   });
 });

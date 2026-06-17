@@ -11,6 +11,13 @@ import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { buildImageGenerationPrompt } from "@/lib/ai/tasks";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { cn } from "@/lib/utils";
+import {
+  captureAsset,
+  dataUrlToBlob,
+  markAiRunApplied,
+  recordAssetUsage,
+} from "@/lib/assets/capture";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import { compressImageFile } from "./image-utils";
 import { DOC_THEMES } from "./themes";
 
@@ -40,8 +47,8 @@ export function PdfThemeControls({
     return result.ok;
   }
 
-  function patchDay(index: number, image: string) {
-    applyPatch((current) => ({
+  function patchDay(index: number, image: string): boolean {
+    return applyPatch((current) => ({
       ...current,
       days: current.days.map((day, dayIndex) =>
         dayIndex === index ? { ...day, image } : day,
@@ -49,15 +56,66 @@ export function PdfThemeControls({
     }));
   }
 
-  function recordImageRun(
+  async function recordImageRun(
     image: string,
     result: Parameters<typeof createAiRunMetadata>[0]["result"],
   ) {
     if (!aiImageTarget) return;
-    if (aiImageTarget.kind === "cover") {
-      applyPatch({ coverImage: image });
-    } else {
-      patchDay(aiImageTarget.index, image);
+    setError(null);
+    let imageUrl = image;
+    let assetId: string | undefined;
+    try {
+      if (image.startsWith("data:") && isCloudPersistenceEnabled()) {
+        const asset = await captureAsset({
+          projectId: project.id,
+          assetType: aiImageTarget.kind === "cover" ? "cover-image" : "day-image",
+          source: "ai-generation",
+          file: dataUrlToBlob(image),
+          filename:
+            aiImageTarget.kind === "cover"
+              ? `${project.country || "project"}-cover.png`
+              : `${project.country || "project"}-day-${aiImageTarget.index + 1}.png`,
+          usageType:
+            aiImageTarget.kind === "cover" ? "itinerary-cover" : "itinerary-day",
+          entityId: itinerary.id,
+          fieldPath:
+            aiImageTarget.kind === "cover"
+              ? "itineraries[].coverImage"
+              : `itineraries[].days[${aiImageTarget.index}].image`,
+          editionLabel: itinerary.duration,
+        });
+        imageUrl = asset.blobUrl;
+        assetId = asset.id;
+      }
+    } catch (captureError) {
+      setError(
+        captureError instanceof Error
+          ? captureError.message
+          : "Could not save the image asset.",
+      );
+      return;
+    }
+    const applied =
+      aiImageTarget.kind === "cover"
+        ? applyPatch({ coverImage: imageUrl })
+        : applyPatch((current) => ({
+            ...current,
+            days: current.days.map((day, dayIndex) =>
+              dayIndex === aiImageTarget.index ? { ...day, image: imageUrl } : day,
+            ),
+          }));
+    if (!applied) return;
+    if (assetId) {
+      await recordAssetUsage({
+        assetId,
+        usageType:
+          aiImageTarget.kind === "cover" ? "itinerary-cover" : "itinerary-day",
+        entityId: itinerary.id,
+        fieldPath:
+          aiImageTarget.kind === "cover"
+            ? "itineraries[].coverImage"
+            : `itineraries[].days[${aiImageTarget.index}].image`,
+      }).catch(() => undefined);
     }
     const mutation = useProjectsStore.getState().update(project.id, {
       aiRuns: appendAiRun(
@@ -71,16 +129,54 @@ export function PdfThemeControls({
       ),
     });
     if (!mutation.ok) setError(mutation.error);
+    void markAiRunApplied({
+      aiRunId: result.aiRunId,
+      projectId: project.id,
+      assetId,
+    });
   }
 
   async function handleUpload(
     file: File | undefined,
-    apply: (dataUrl: string) => void,
+    apply: (url: string) => boolean,
+    options: {
+      assetType: "cover-image" | "day-image";
+      usageType: "itinerary-cover" | "itinerary-day";
+      fieldPath: string;
+      dayIndex?: number;
+    },
   ) {
     if (!file) return;
     setError(null);
     try {
-      apply(await compressImageFile(file));
+      const compressed = await compressImageFile(file);
+      if (!isCloudPersistenceEnabled()) {
+        apply(compressed);
+        return;
+      }
+      const asset = await captureAsset({
+        projectId: project.id,
+        assetType: options.assetType,
+        source: "upload",
+        file: dataUrlToBlob(compressed),
+        filename:
+          options.dayIndex === undefined
+            ? file.name || `${project.country || "project"}-cover.jpg`
+            : file.name || `${project.country || "project"}-day-${options.dayIndex + 1}.jpg`,
+        usageType: options.usageType,
+        entityId: itinerary.id,
+        fieldPath: options.fieldPath,
+        editionLabel: itinerary.duration,
+      });
+      const applied = apply(asset.blobUrl);
+      if (applied) {
+        await recordAssetUsage({
+          assetId: asset.id,
+          usageType: options.usageType,
+          entityId: itinerary.id,
+          fieldPath: options.fieldPath,
+        }).catch(() => undefined);
+      }
     } catch (uploadError) {
       setError(
         uploadError instanceof Error
@@ -182,7 +278,11 @@ export function PdfThemeControls({
           <ImageField
             value={itinerary.coverImage ?? ""}
             onUpload={(file) =>
-              handleUpload(file, (url) => applyPatch({ coverImage: url }))
+              handleUpload(file, (url) => applyPatch({ coverImage: url }), {
+                assetType: "cover-image",
+                usageType: "itinerary-cover",
+                fieldPath: "itineraries[].coverImage",
+              })
             }
             onUrl={(url) => applyPatch({ coverImage: url })}
             onClear={() => applyPatch({ coverImage: "" })}
@@ -244,7 +344,12 @@ export function PdfThemeControls({
                     value={day.image ?? ""}
                     compact
                     onUpload={(file) =>
-                      handleUpload(file, (url) => patchDay(index, url))
+                      handleUpload(file, (url) => patchDay(index, url), {
+                        assetType: "day-image",
+                        usageType: "itinerary-day",
+                        fieldPath: `itineraries[].days[${index}].image`,
+                        dayIndex: index,
+                      })
                     }
                     onUrl={(url) => patchDay(index, url)}
                     onClear={() => patchDay(index, "")}
@@ -257,9 +362,9 @@ export function PdfThemeControls({
 
         {error ? <p className="text-xs text-terracotta">{error}</p> : null}
         <p className="text-[11px] leading-relaxed text-ink-muted">
-          Uploaded images are compressed and stored in your browser. Remote URLs
-          work in preview and native printing, but must allow cross-origin canvas
-          access to appear in a downloaded PDF.
+          Uploaded and AI-generated images are saved to the cloud asset library.
+          Remote URLs work in preview and native printing, but must allow
+          cross-origin canvas access to appear in a downloaded PDF.
         </p>
         <AiRunSheet
           open={Boolean(aiImageTarget)}
@@ -270,6 +375,7 @@ export function PdfThemeControls({
           title={aiImageTarget?.title ?? "AI create itinerary image"}
           description="Image models may be more expensive than text. Preview the generated visual before applying it to the PDF."
           taskType="imageGeneration"
+          projectId={project.id}
           sourceLabel={aiImageTarget?.kind === "cover" ? "PDF cover" : "Day image"}
           prompt={aiImageTarget?.prompt ?? ""}
           onApplyImage={recordImageRun}

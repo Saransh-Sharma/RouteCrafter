@@ -58,7 +58,7 @@ export function ExportPanel({ project }: { project: Project }) {
       <SectionHeader
         eyebrow="Export"
         title="Export your work"
-        subtitle="Download individual artifacts or the full project. Everything is generated locally in your browser."
+        subtitle="Download individual artifacts or the full project. Cloud storage remains the source of truth; exports are portable backups and delivery files."
       />
 
       {/* Export everything */}

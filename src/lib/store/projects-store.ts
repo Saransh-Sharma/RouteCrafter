@@ -19,11 +19,27 @@ import { seedProjects } from "../seed-projects";
 import { logActivity } from "./activity-store";
 import { useAuthStore } from "./auth-store";
 import { readinessFingerprint } from "../workflow";
+import { isCloudPersistenceEnabled } from "../persistence/config";
+import type { CloudProject } from "../persistence/types";
 
 export const MAX_PERSISTED_STATE_CHARS = 4_000_000;
 const PROJECTS_STORAGE_KEY = "routecrafter:v1";
 const HYDRATION_ERROR_MESSAGE =
   "RouteCrafter reset your local project cache because the saved browser data could not be loaded.";
+type ProjectSyncMethod = "POST" | "PUT";
+
+interface ProjectSyncQueueItem {
+  inFlight: boolean;
+  pending:
+    | {
+        project: Project;
+        activityDetail: string;
+        method: ProjectSyncMethod;
+      }
+    | null;
+}
+
+const projectSyncQueue = new Map<string, ProjectSyncQueueItem>();
 
 export type MutationResult =
   | { ok: true }
@@ -120,8 +136,13 @@ interface PersistedSlice {
 
 interface ProjectsState extends PersistedSlice {
   hasHydrated: boolean;
+  cloudHydrated: boolean;
+  syncStatus: "idle" | "syncing" | "synced" | "error";
+  syncError: string | null;
+  lastCloudRevisionByProject: Record<string, number>;
   persistenceError: string | null;
   setHasHydrated: (value: boolean) => void;
+  hydrateCloudProjects: () => Promise<void>;
   hydrateSeeds: () => void;
   create: (input: CreateProjectInput) => Project;
   update: (id: string, patch: Partial<Project>) => MutationResult;
@@ -188,6 +209,65 @@ function clearPersistedProjectsStorage(): void {
   }
 }
 
+function dispatchSaveState(
+  status: "saving" | "saved" | "error",
+  error?: string | null,
+): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("routecrafter:save-state", {
+      detail: { status, error },
+    }),
+  );
+}
+
+function cloudProjectsToRevisionMap(projects: CloudProject[]): Record<string, number> {
+  return Object.fromEntries(
+    projects.map((item) => [item.project.id, item.revision]),
+  );
+}
+
+function mergeLocalAndCloudProjects({
+  localProjects,
+  cloudProjects,
+}: {
+  localProjects: Project[];
+  cloudProjects: CloudProject[];
+}): Project[] {
+  const cloudById = new Map(
+    cloudProjects.map((item) => [item.project.id, normalizeProject(item.project)]),
+  );
+  const merged = localProjects.map((local) => cloudById.get(local.id) ?? local);
+  const localIds = new Set(localProjects.map((project) => project.id));
+  for (const cloud of cloudProjects) {
+    if (!localIds.has(cloud.project.id)) {
+      merged.push(normalizeProject(cloud.project));
+    }
+  }
+  return merged.sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
+}
+
+function isSeedOnly(projects: Project[]): boolean {
+  if (projects.length !== seedProjects.length) return false;
+  const seedIds = new Set(seedProjects.map((project) => project.id));
+  return projects.every((project) => seedIds.has(project.id));
+}
+
+async function readCloudResponse(response: Response): Promise<{
+  error?: string;
+  project?: CloudProject;
+  projects?: CloudProject[];
+}> {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
 export const useProjectsStore = createZustand<ProjectsState>()(
   persist(
     (set, get) => {
@@ -229,12 +309,100 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         projects: [],
         initialized: false,
         hasHydrated: false,
+        cloudHydrated: false,
+        syncStatus: "idle",
+        syncError: null,
+        lastCloudRevisionByProject: {},
         persistenceError: null,
         expandHint: null,
 
         setHasHydrated: (value) => set({ hasHydrated: value }),
         setExpandHint: (hint) => set({ expandHint: hint }),
         clearPersistenceError: () => set({ persistenceError: null }),
+
+        hydrateCloudProjects: async () => {
+          if (!isCloudPersistenceEnabled()) {
+            set({ cloudHydrated: true, syncStatus: "idle", syncError: null });
+            return;
+          }
+          const user = useAuthStore.getState().user;
+          if (!user) {
+            set({ cloudHydrated: true, syncStatus: "idle", syncError: null });
+            return;
+          }
+          set({ syncStatus: "syncing", syncError: null });
+          dispatchSaveState("saving");
+          try {
+            const response = await fetch("/api/projects", {
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            });
+            const body = await readCloudResponse(response);
+            if (!response.ok) throw new Error(body.error ?? "Could not load cloud projects.");
+            const localProjects = get().projects;
+            const cloudProjects = body.projects ?? [];
+            if (localProjects.length > 0 && !isSeedOnly(localProjects)) {
+              const syncResponse = await fetch("/api/projects/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ projects: localProjects }),
+              });
+              const syncBody = await readCloudResponse(syncResponse);
+              if (!syncResponse.ok) {
+                throw new Error(syncBody.error ?? "Could not migrate local projects.");
+              }
+              const synced = syncBody.projects ?? [];
+              set({
+                projects: mergeLocalAndCloudProjects({
+                  localProjects,
+                  cloudProjects: synced,
+                }),
+                initialized: true,
+                cloudHydrated: true,
+                syncStatus: "synced",
+                syncError: null,
+                lastCloudRevisionByProject: cloudProjectsToRevisionMap(synced),
+              });
+              dispatchSaveState("saved");
+              return;
+            }
+
+            if (cloudProjects.length > 0) {
+              set({
+                projects: mergeLocalAndCloudProjects({
+                  localProjects,
+                  cloudProjects,
+                }),
+                initialized: true,
+                cloudHydrated: true,
+                syncStatus: "synced",
+                syncError: null,
+                lastCloudRevisionByProject: cloudProjectsToRevisionMap(cloudProjects),
+              });
+              dispatchSaveState("saved");
+              return;
+            }
+
+            set({
+              cloudHydrated: true,
+              syncStatus: "synced",
+              syncError: null,
+              lastCloudRevisionByProject: {},
+            });
+            dispatchSaveState("saved");
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Cloud sync failed.";
+            set({
+              cloudHydrated: true,
+              syncStatus: "error",
+              syncError: message,
+              persistenceError: message,
+            });
+            dispatchSaveState("error", message);
+          }
+        },
 
         hydrateSeeds: () => {
           if (!get().initialized) {
@@ -277,6 +445,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (!result.ok) throw new Error(result.error);
           const user = useAuthStore.getState().user;
           logActivity(project.id, "created", `Created project "${project.name}"`, user);
+          enqueueProjectSync(project.id, `Created project "${project.name}"`, "POST");
           return project;
         },
 
@@ -318,7 +487,9 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (result.ok) {
             const user = useAuthStore.getState().user;
             const project = get().projects.find((p) => p.id === id);
-            logActivity(id, "updated", projectUpdateDetail(previousProject, project), user);
+            const detail = projectUpdateDetail(previousProject, project);
+            logActivity(id, "updated", detail, user);
+            if (project) enqueueProjectSync(project.id, detail, "PUT");
           }
           return result;
         },
@@ -342,6 +513,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (result.ok) {
             const user = useAuthStore.getState().user;
             logActivity(id, "deleted", `Deleted project "${project?.name ?? id}"`, user);
+            void syncDeleteProject(id);
           }
           return result;
         },
@@ -370,6 +542,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (result.ok) {
             const user = useAuthStore.getState().user;
             logActivity(copy.id, "duplicated", `Duplicated from "${original.name}"`, user);
+            enqueueProjectSync(copy.id, `Duplicated from "${original.name}"`, "POST");
           }
           return result.ok ? copy : undefined;
         },
@@ -389,6 +562,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           if (!result.ok) throw new Error(result.error);
           const user = useAuthStore.getState().user;
           logActivity(project.id, "imported", `Imported project "${project.name}"`, user);
+          enqueueProjectSync(project.id, `Imported project "${project.name}"`, "POST");
           return project;
         },
       };
@@ -440,3 +614,156 @@ export const useProjectsStore = createZustand<ProjectsState>()(
     },
   ),
 );
+
+function enqueueProjectSync(
+  projectId: string,
+  activityDetail: string,
+  method: ProjectSyncMethod,
+): void {
+  if (!isCloudPersistenceEnabled()) return;
+  const project = useProjectsStore
+    .getState()
+    .projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const item = projectSyncQueue.get(projectId) ?? {
+    inFlight: false,
+    pending: null,
+  };
+  item.pending = {
+    project,
+    activityDetail:
+      activityDetail || item.pending?.activityDetail || "updated project details",
+    method: method === "POST" || item.pending?.method === "POST" ? "POST" : "PUT",
+  };
+  projectSyncQueue.set(projectId, item);
+  if (!item.inFlight) {
+    void processProjectSyncQueue(projectId);
+  }
+}
+
+async function processProjectSyncQueue(projectId: string): Promise<void> {
+  const item = projectSyncQueue.get(projectId);
+  if (!item || item.inFlight) return;
+  item.inFlight = true;
+  let activeSnapshot: ProjectSyncQueueItem["pending"] = null;
+  let failed = false;
+  try {
+    while (item.pending) {
+      const next = item.pending;
+      activeSnapshot = next;
+      item.pending = null;
+      await syncProjectSnapshot(next.project, next.activityDetail, next.method);
+      activeSnapshot = null;
+    }
+  } catch {
+    // Keep the latest pending snapshot queued so a later edit or retry can sync it.
+    item.pending = item.pending ?? activeSnapshot;
+    failed = true;
+  } finally {
+    item.inFlight = false;
+    if (item.pending && !failed) {
+      void processProjectSyncQueue(projectId);
+    } else if (!item.pending) {
+      projectSyncQueue.delete(projectId);
+    }
+  }
+}
+
+async function syncProjectSnapshot(
+  project: Project,
+  activityDetail: string,
+  method: ProjectSyncMethod,
+): Promise<void> {
+  if (!isCloudPersistenceEnabled()) return;
+  const user = useAuthStore.getState().user;
+  if (!user || typeof fetch === "undefined") return;
+  const state = useProjectsStore.getState();
+  const expectedRevision = state.lastCloudRevisionByProject[project.id];
+  useProjectsStore.setState({ syncStatus: "syncing", syncError: null });
+  dispatchSaveState("saving");
+  try {
+    const url = method === "POST" ? "/api/projects" : `/api/projects/${project.id}`;
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ project, expectedRevision, activityDetail }),
+    });
+    const body = await readCloudResponse(response);
+    if (response.status === 409) {
+      await fetch(`/api/projects/${project.id}`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      }).catch(() => undefined);
+      throw new Error(
+        "Cloud has newer changes for this project. Review the latest cloud version before saving again.",
+      );
+    }
+    if (!response.ok || !body.project) {
+      throw new Error(body.error ?? "Could not sync project to cloud.");
+    }
+    useProjectsStore.setState((current) => ({
+      syncStatus: "synced",
+      syncError: null,
+      lastCloudRevisionByProject: {
+        ...current.lastCloudRevisionByProject,
+        [body.project!.project.id]: body.project!.revision,
+      },
+    }));
+    dispatchSaveState("saved");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Cloud sync failed.";
+    useProjectsStore.setState({
+      syncStatus: "error",
+      syncError: message,
+      persistenceError: message,
+    });
+    dispatchSaveState("error", message);
+    throw error;
+  }
+}
+
+async function syncDeleteProject(projectId: string): Promise<void> {
+  if (!isCloudPersistenceEnabled()) return;
+  const user = useAuthStore.getState().user;
+  if (!user || typeof fetch === "undefined") return;
+  useProjectsStore.setState({ syncStatus: "syncing", syncError: null });
+  dispatchSaveState("saving");
+  try {
+    const expectedRevision =
+      useProjectsStore.getState().lastCloudRevisionByProject[projectId];
+    if (expectedRevision === undefined) {
+      throw new Error(
+        "Cloud revision is unavailable for this project. Refresh before deleting.",
+      );
+    }
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ expectedRevision }),
+    });
+    if (!response.ok) {
+      const body = await readCloudResponse(response);
+      throw new Error(body.error ?? "Could not delete cloud project.");
+    }
+    useProjectsStore.setState((current) => {
+      const next = { ...current.lastCloudRevisionByProject };
+      delete next[projectId];
+      return {
+        syncStatus: "synced",
+        syncError: null,
+        lastCloudRevisionByProject: next,
+      };
+    });
+    dispatchSaveState("saved");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Cloud sync failed.";
+    useProjectsStore.setState({
+      syncStatus: "error",
+      syncError: message,
+      persistenceError: message,
+    });
+    dispatchSaveState("error", message);
+  }
+}

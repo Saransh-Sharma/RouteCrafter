@@ -3,6 +3,7 @@
 import { create as createZustand } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { AI_PROVIDERS, AI_PROVIDER_IDS } from "@/lib/ai/providers";
+import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import type {
   AiImageDefaults,
   AiProviderId,
@@ -61,7 +62,9 @@ export interface AiSettingsState {
   requirePreviewBeforeApply: true;
   showBillableConfirmation: true;
   hasHydrated: boolean;
+  cloudHydrated: boolean;
   setHasHydrated: (value: boolean) => void;
+  hydrateCloudPreferences: () => Promise<void>;
   setProviderKey: (provider: AiProviderId, apiKey: string) => void;
   removeProviderKey: (provider: AiProviderId) => void;
   setProviderCustomModel: (
@@ -113,8 +116,50 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
       requirePreviewBeforeApply: true,
       showBillableConfirmation: true,
       hasHydrated: false,
+      cloudHydrated: false,
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
+
+      hydrateCloudPreferences: async () => {
+        if (!isCloudPersistenceEnabled()) {
+          set({ cloudHydrated: true });
+          return;
+        }
+        try {
+          const response = await fetch("/api/preferences", {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) {
+            set({ cloudHydrated: true });
+            return;
+          }
+          const body = await response.json();
+          const preferences = body.preferences as
+            | {
+                aiDefaults?: { text?: AiTextDefaults; image?: AiImageDefaults };
+                customModels?: Partial<
+                  Record<
+                    AiProviderId,
+                    { customTextModel?: string; customImageModel?: string }
+                  >
+                >;
+              }
+            | undefined;
+          if (!preferences) {
+            set({ cloudHydrated: true });
+            return;
+          }
+          set((state) => ({
+            text: preferences.aiDefaults?.text ?? state.text,
+            image: preferences.aiDefaults?.image ?? state.image,
+            providers: mergeCustomModels(state.providers, preferences.customModels),
+            cloudHydrated: true,
+          }));
+        } catch {
+          set({ cloudHydrated: true });
+        }
+      },
 
       setProviderKey: (provider, apiKey) =>
         set((state) => ({
@@ -144,16 +189,20 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
         })),
 
       setProviderCustomModel: (provider, kind, model) =>
-        set((state) => ({
-          providers: {
-            ...state.providers,
-            [provider]: {
-              ...state.providers[provider],
-              [kind === "text" ? "customTextModel" : "customImageModel"]:
-                model.trim(),
+        set((state) => {
+          const next = {
+            providers: {
+              ...state.providers,
+              [provider]: {
+                ...state.providers[provider],
+                [kind === "text" ? "customTextModel" : "customImageModel"]:
+                  model.trim(),
+              },
             },
-          },
-        })),
+          };
+          void syncCloudPreferences({ ...state, ...next });
+          return next;
+        }),
 
       setProviderTestResult: (provider, result) =>
         set((state) => ({
@@ -169,28 +218,36 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
         })),
 
       setTextDefaults: (patch) =>
-        set((state) => ({
-          text: {
+        set((state) => {
+          const next = {
+            text: {
             ...state.text,
             ...patch,
             model:
               patch.provider && !patch.model
                 ? AI_PROVIDERS[patch.provider].defaultTextModel
                 : patch.model ?? state.text.model,
-          },
-        })),
+            },
+          };
+          void syncCloudPreferences({ ...state, ...next });
+          return next;
+        }),
 
       setImageDefaults: (patch) =>
-        set((state) => ({
-          image: {
+        set((state) => {
+          const next = {
+            image: {
             ...state.image,
             ...patch,
             model:
               patch.provider && !patch.model
                 ? AI_PROVIDERS[patch.provider].defaultImageModel
                 : patch.model ?? state.image.model,
-          },
-        })),
+            },
+          };
+          void syncCloudPreferences({ ...state, ...next });
+          return next;
+        }),
 
       getApiKey: (provider) => get().providers[provider]?.apiKey ?? "",
       hasAnyKey: () => configuredProviders(get().providers).length > 0,
@@ -229,3 +286,61 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
     },
   ),
 );
+
+function mergeCustomModels(
+  providers: Record<AiProviderId, AiProviderSettings>,
+  customModels:
+    | Partial<
+        Record<AiProviderId, { customTextModel?: string; customImageModel?: string }>
+      >
+    | undefined,
+): Record<AiProviderId, AiProviderSettings> {
+  if (!customModels) return providers;
+  return AI_PROVIDER_IDS.reduce(
+    (next, provider) => ({
+      ...next,
+      [provider]: {
+        ...providers[provider],
+        customTextModel:
+          customModels[provider]?.customTextModel ??
+          providers[provider].customTextModel,
+        customImageModel:
+          customModels[provider]?.customImageModel ??
+          providers[provider].customImageModel,
+      },
+    }),
+    providers,
+  );
+}
+
+async function syncCloudPreferences(state: Pick<
+  AiSettingsState,
+  "text" | "image" | "providers"
+>): Promise<void> {
+  if (!isCloudPersistenceEnabled()) return;
+  if (typeof fetch === "undefined") return;
+  const customModels = AI_PROVIDER_IDS.reduce(
+    (acc, provider) => ({
+      ...acc,
+      [provider]: {
+        customTextModel: state.providers[provider].customTextModel,
+        customImageModel: state.providers[provider].customImageModel,
+      },
+    }),
+    {} as Record<
+      AiProviderId,
+      { customTextModel: string; customImageModel: string }
+    >,
+  );
+  await fetch("/api/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      aiDefaults: { text: state.text, image: state.image },
+      customModels,
+      dismissedCoachMarks: [],
+      libraryView: {},
+    }),
+  }).catch(() => undefined);
+}

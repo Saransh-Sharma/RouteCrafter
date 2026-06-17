@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   FolderOpen,
   LibraryBig,
+  Images,
   BookOpen,
   Settings,
   type LucideIcon,
@@ -33,6 +34,12 @@ export const navItems: NavItem[] = [
     href: "/templates",
     icon: LibraryBig,
     match: (p) => p.startsWith("/templates"),
+  },
+  {
+    label: "Asset Library",
+    href: "/library",
+    icon: Images,
+    match: (p) => p.startsWith("/library"),
   },
   {
     label: "Guide",

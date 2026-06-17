@@ -5,7 +5,7 @@ import { History, Clock, ChevronDown } from "lucide-react";
 import { useActivityStore } from "@/lib/store/activity-store";
 import { useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import type { ActivityAction } from "@/lib/schemas/activity";
+import type { ActivityAction, ActivityLogEntry } from "@/lib/schemas/activity";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,6 +77,18 @@ function formatRelativeTime(isoString: string): string {
   });
 }
 
+function mergeActivityEntries(
+  localEntries: ActivityLogEntry[],
+  cloudEntries: ActivityLogEntry[] | null,
+) {
+  const byId = new Map<string, (typeof localEntries)[number]>();
+  for (const entry of cloudEntries ?? []) byId.set(entry.id, entry);
+  for (const entry of localEntries) byId.set(entry.id, entry);
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -84,7 +96,7 @@ function formatRelativeTime(isoString: string): string {
 export function ActivityLog({ projectId }: { projectId: string }) {
   const mounted = useMounted();
   const allEntries = useActivityStore((s) => s.entries);
-  const entries = React.useMemo(
+  const localEntries = React.useMemo(
     () =>
       allEntries
         .filter((entry) => entry.projectId === projectId)
@@ -95,7 +107,32 @@ export function ActivityLog({ projectId }: { projectId: string }) {
         ),
     [allEntries, projectId],
   );
+  const [cloudEntries, setCloudEntries] = React.useState<typeof localEntries | null>(
+    null,
+  );
   const [expanded, setExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!mounted) return;
+    let active = true;
+    fetch(`/api/projects/${projectId}/activity?limit=100`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Activity unavailable.");
+        return (await response.json()) as { entries?: typeof localEntries };
+      })
+      .then((body) => {
+        if (active) setCloudEntries(body.entries ?? []);
+      })
+      .catch(() => {
+        if (active) setCloudEntries(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [localEntries, mounted, projectId]);
 
   // Hydration guard — render nothing on the server / first client render
   if (!mounted) {
@@ -123,6 +160,7 @@ export function ActivityLog({ projectId }: { projectId: string }) {
     );
   }
 
+  const entries = mergeActivityEntries(localEntries, cloudEntries);
   const visible = expanded ? entries : entries.slice(0, VISIBLE_LIMIT);
   const hasMore = entries.length > VISIBLE_LIMIT;
 

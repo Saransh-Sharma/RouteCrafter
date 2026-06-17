@@ -15,6 +15,7 @@ export function createAiRunMetadata({
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
+    aiRunId: result.aiRunId,
     provider: result.provider,
     model: result.model,
     taskType,

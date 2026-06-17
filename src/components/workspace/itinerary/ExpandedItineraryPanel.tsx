@@ -21,7 +21,7 @@ import {
   buildContext,
   buildItinerary,
 } from "@/lib/generation";
-import { dayPlanSchema, enumValues, itineraryOutputSchema } from "@/lib/schemas";
+import { dayPlanSchema, enumValues } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -32,8 +32,14 @@ import {
   buildDayPrompt,
   buildItineraryPrompt,
 } from "@/lib/ai/tasks";
-import { parseJsonObject } from "@/lib/ai/parse";
+import { isLikelyTruncatedJson, parseJsonObject } from "@/lib/ai/parse";
+import {
+  normalizeAiDayPlan,
+  normalizeAiItinerary,
+} from "@/lib/ai/itinerary-normalization";
+import { requestStructuredItineraryDraft } from "@/lib/ai/itinerary-draft-client";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
+import { markAiRunApplied } from "@/lib/assets/capture";
 import { cn } from "@/lib/utils";
 import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
@@ -200,29 +206,25 @@ export function ExpandedItineraryPanel({
   }
 
   function normalizeItinerary(raw: unknown): ItineraryOutput {
-    const candidate = raw as Partial<ItineraryOutput>;
-    return itineraryOutputSchema.parse({
-      ...candidate,
-      id: candidate.id || selected?.id || crypto.randomUUID(),
-      country: candidate.country || project.country,
-      duration: candidate.duration || selected?.duration || creator.duration,
-      travelerType:
-        candidate.travelerType ||
-        selected?.travelerType ||
-        creator.travelerType,
-      createdAt: candidate.createdAt || selected?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      days: (candidate.days ?? []).map((day, index) => ({
-        ...day,
-        day: day?.day || index + 1,
-      })),
+    return normalizeAiItinerary(raw, {
+      project,
+      current: selected,
+      fallback: {
+        id: crypto.randomUUID(),
+        duration: creator.duration,
+        travelerType: creator.travelerType,
+        createdAt: new Date().toISOString(),
+      },
     });
   }
 
   function validateItineraryAi(text: string): string | null {
     try {
+      if (isLikelyTruncatedJson(text)) {
+        return "The model response was cut off before the itinerary JSON finished. Retry the run; RouteCrafter did not apply anything.";
+      }
       if (aiTarget?.kind === "day") {
-        dayPlanSchema.parse(parseJsonObject(text));
+        normalizeAiDayPlan(parseJsonObject(text), selected?.days[aiTarget.index]);
       } else {
         normalizeItinerary(parseJsonObject(text));
       }
@@ -313,7 +315,10 @@ export function ExpandedItineraryPanel({
   ) {
     if (!aiTarget) return;
     if (aiTarget.kind === "day" && selected) {
-      const incoming = dayPlanSchema.parse(parseJsonObject(text));
+      const incoming = normalizeAiDayPlan(
+        parseJsonObject(text),
+        selected.days[aiTarget.index],
+      );
       const nextDays = selected.days.map((day, index) =>
         index === aiTarget.index ? mergeDay(day, incoming, mode) : day,
       );
@@ -341,6 +346,11 @@ export function ExpandedItineraryPanel({
           source: "expanded-itinerary",
         }),
       ),
+    });
+    void markAiRunApplied({
+      aiRunId: result.aiRunId,
+      aiRunIds: result.aiRunIds,
+      projectId: project.id,
     });
   }
 
@@ -700,6 +710,7 @@ export function ExpandedItineraryPanel({
         title={aiTarget?.title ?? "AI itinerary assist"}
         description="Creates structured itinerary JSON and previews it before applying. Existing edits are preserved unless you choose replace."
         taskType={aiTarget?.kind === "day" ? "rewrite" : "itinerary"}
+        projectId={project.id}
         sourceLabel={
           aiTarget?.kind === "day"
             ? `Day ${selected?.days[aiTarget.index]?.day ?? ""}`
@@ -715,6 +726,18 @@ export function ExpandedItineraryPanel({
         }
         responseFormat="json"
         validateText={validateItineraryAi}
+        requestText={
+          aiTarget?.kind === "itinerary" && selected
+            ? (request, signal) =>
+                requestStructuredItineraryDraft({
+                  request,
+                  signal,
+                  project,
+                  current: selected,
+                  focus: aiTarget.focus,
+                })
+            : undefined
+        }
         onApplyText={applyItineraryAi}
         applyLabel={aiTarget?.kind === "day" ? "Replace day" : "Replace itinerary"}
         fillEmptyLabel="Fill empty fields"

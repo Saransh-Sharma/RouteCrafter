@@ -19,6 +19,7 @@ import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import { cn } from "@/lib/utils";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { buildPromptRunPrompt } from "@/lib/ai/tasks";
+import { markAiRunApplied } from "@/lib/assets/capture";
 
 export function PromptStudioPanel({ project }: { project: Project }) {
   const update = useProjectsStore((s) => s.update);
@@ -87,6 +88,7 @@ export function PromptStudioPanel({ project }: { project: Project }) {
         }),
       ),
     });
+    void markAiRunApplied({ aiRunId: result.aiRunId, projectId: project.id });
   }
 
   return (
@@ -200,6 +202,7 @@ export function PromptStudioPanel({ project }: { project: Project }) {
                 title={`Run ${active.label} with AI`}
                 description="This sends the generated RouteCrafter prompt to your selected text provider and previews the response before saving."
                 taskType="prompt"
+                projectId={project.id}
                 sourceLabel={active.label}
                 prompt={buildPromptRunPrompt(
                   project,

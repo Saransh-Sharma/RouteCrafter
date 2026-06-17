@@ -8,7 +8,11 @@ import type {
   SalesChannel,
 } from "@/lib/types";
 import { useProjectsStore } from "@/lib/store/projects-store";
-import { OUTPUT_LABELS, type WorkflowStageId } from "@/lib/workflow";
+import {
+  getProjectWorkflow,
+  OUTPUT_LABELS,
+  type WorkflowStageId,
+} from "@/lib/workflow";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import {
@@ -85,6 +89,8 @@ export function DefineStage({
 }) {
   const update = useProjectsStore((state) => state.update);
   const plan = project.productionPlan;
+  const workflow = getProjectWorkflow(project);
+  const stage = workflow.stages.find((item) => item.id === "define");
 
   function patchProject(patch: Partial<Project>) {
     update(project.id, patch);
@@ -123,6 +129,9 @@ export function DefineStage({
         eyebrow="Stage 1 · Define"
         title="Decide what you are selling"
         description="Start with the commercial promise, then shape the trip brief behind it. These choices control which assets RouteCrafter expects before launch."
+        completed={stage?.completed}
+        total={stage?.total}
+        blockers={workflow.blockers.filter((issue) => issue.stage === "define")}
         aside={
           <div className="text-right">
             <p className="text-sm font-semibold text-ink">
