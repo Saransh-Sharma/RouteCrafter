@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Project } from "@/lib/types";
 import { getDb } from "./index";
 import { projectVersions } from "./schema";
@@ -36,21 +36,14 @@ export async function createProjectVersion({
 }
 
 export async function listProjectVersions({
-  userId,
   projectId,
 }: {
-  userId: string;
   projectId: string;
 }) {
   return getDb()
     .select()
     .from(projectVersions)
-    .where(
-      and(
-        eq(projectVersions.userId, userId),
-        eq(projectVersions.projectId, projectId),
-      ),
-    )
+    .where(eq(projectVersions.projectId, projectId))
     .orderBy(desc(projectVersions.createdAt))
     .limit(50);
 }

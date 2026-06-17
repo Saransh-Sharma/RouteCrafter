@@ -31,7 +31,6 @@ export async function createActivity(input: CreateActivityInput): Promise<void> 
       .from(activityLogs)
       .where(
         and(
-          eq(activityLogs.userId, input.ownerUserId),
           eq(activityLogs.projectId, input.projectId),
           sql`${activityLogs.metadata} @> ${JSON.stringify({
             clientEventId: input.clientEventId,
@@ -57,12 +56,10 @@ export async function createActivity(input: CreateActivityInput): Promise<void> 
 }
 
 export async function listProjectActivity({
-  userId,
   projectId,
   limit = 50,
   cursor,
 }: {
-  userId: string;
   projectId: string;
   limit?: number;
   cursor?: string | null;
@@ -74,14 +71,10 @@ export async function listProjectActivity({
     .where(
       createdBefore
         ? and(
-            eq(activityLogs.userId, userId),
             eq(activityLogs.projectId, projectId),
             lt(activityLogs.createdAt, createdBefore),
           )
-        : and(
-            eq(activityLogs.userId, userId),
-            eq(activityLogs.projectId, projectId),
-          ),
+        : eq(activityLogs.projectId, projectId),
     )
     .orderBy(desc(activityLogs.createdAt))
     .limit(limit);
