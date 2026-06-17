@@ -65,6 +65,7 @@ export async function PUT(
       project: { ...(parsed.data.project as object), id },
       expectedRevision: parsed.data.expectedRevision,
       activityDetail: parsed.data.activityDetail,
+      restore: parsed.data.restore,
     });
     return NextResponse.json({ project });
   } catch (error) {
