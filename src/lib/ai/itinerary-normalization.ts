@@ -90,6 +90,8 @@ export function normalizeAiItinerary(
     budget: enumValue(candidate.budget, enumValues.budget) ?? currentBudget,
     pdfTheme: current?.pdfTheme ?? candidate.pdfTheme,
     coverImage: current?.coverImage ?? candidate.coverImage,
+    hiddenElements: current?.hiddenElements ?? candidate.hiddenElements,
+    customBlocks: current?.customBlocks ?? candidate.customBlocks,
     createdAt: current?.createdAt || fallback.createdAt,
     updatedAt: new Date().toISOString(),
     days: (candidate.days ?? []).map((day, index) =>

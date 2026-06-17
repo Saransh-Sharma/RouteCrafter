@@ -9,6 +9,7 @@ export type {
   BrandStyle,
   TripConfiguration,
   DayPlan,
+  CustomBlock,
   ItineraryOutput,
   ItineraryMatrix,
   MatrixCell,
