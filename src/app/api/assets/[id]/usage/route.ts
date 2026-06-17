@@ -5,7 +5,7 @@ import { errorResponse } from "@/lib/api/errors";
 import {
   clearAssetUsage,
   createAssetUsage,
-  getAssetForUser,
+  getAsset,
 } from "@/lib/db/assets";
 import { ensureRequestUser } from "@/lib/db/request-user";
 import { assetUsageTypeSchema } from "@/lib/persistence/types";
@@ -21,7 +21,7 @@ export async function POST(
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
     const { id } = await context.params;
-    const asset = await getAssetForUser({ userId: requestUser.id, assetId: id });
+    const asset = await getAsset(id);
     if (!asset) {
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
     }
@@ -57,11 +57,10 @@ export async function DELETE(
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     const { id } = await context.params;
     const body = await request.json().catch(() => ({}));
     await clearAssetUsage({
-      userId: requestUser.id,
       assetId: id,
       fieldPath: typeof body.fieldPath === "string" ? body.fieldPath : undefined,
     });

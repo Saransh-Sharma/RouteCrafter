@@ -137,11 +137,16 @@ load, persisted data is re-validated and migrated through the schema.
    prompts and disclaimers, and surfaced as "verify before delivery" reminders.
 6. **Preview-before-apply for AI.** No AI output mutates a project until the user
    reviews and confirms it.
-7. **Local-first persistence.** All user data is in the browser; portability is via
-   JSON import/export.
-8. **Shared browser workspace.** Authenticated accounts using the same browser
-   profile intentionally share projects, activity, and AI settings. Roles are
-   labels and do not currently enforce permissions.
+7. **Cloud-authoritative persistence.** The cloud (Postgres + Vercel Blob) is the
+   source of truth; the browser's `localStorage` is a fast local cache. Portability
+   is still available via JSON import/export.
+8. **Single shared workspace.** All authenticated accounts read and write the same
+   projects, draft state, and assets — there is one global workspace, not private
+   per-user workspaces. `user_id` columns are creator/actor attribution only;
+   queries are not scoped by user. Concurrent edits use last-write-wins guarded by
+   a per-project `revision`, with a conflict prompt (reload or overwrite). Personal
+   AI keys, AI provider settings, and UI preferences stay private per user. Roles
+   are labels and do not currently enforce permissions.
 
 ## Where to go next
 

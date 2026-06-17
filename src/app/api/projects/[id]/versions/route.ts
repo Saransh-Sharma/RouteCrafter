@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
 import { errorResponse } from "@/lib/api/errors";
-import { getProjectForUser } from "@/lib/db/projects";
+import { getProject } from "@/lib/db/projects";
 import { ensureRequestUser } from "@/lib/db/request-user";
 import {
   createProjectVersion,
@@ -33,14 +33,14 @@ export async function GET(
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     const { id } = await context.params;
-    const project = await getProjectForUser({ userId: requestUser.id, projectId: id });
+    const project = await getProject(id);
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }
     return NextResponse.json({
-      versions: await listProjectVersions({ userId: requestUser.id, projectId: id }),
+      versions: await listProjectVersions({ projectId: id }),
     });
   } catch (error) {
     return errorResponse(error);
@@ -56,7 +56,7 @@ export async function POST(
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
     const { id } = await context.params;
-    const project = await getProjectForUser({ userId: requestUser.id, projectId: id });
+    const project = await getProject(id);
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }

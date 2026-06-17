@@ -66,14 +66,12 @@ export async function createAsset(input: {
 }
 
 export async function listAssets({
-  userId,
   limit = 60,
   cursor,
   projectId,
   country,
   assetType,
 }: {
-  userId: string;
   limit?: number;
   cursor?: string | null;
   projectId?: string | null;
@@ -82,7 +80,6 @@ export async function listAssets({
 }): Promise<AssetDTO[]> {
   const createdBefore = cursor ? new Date(cursor) : null;
   const filters = [
-    eq(assets.userId, userId),
     isNull(assets.deletedAt),
     createdBefore ? lt(assets.createdAt, createdBefore) : undefined,
     projectId ? eq(assets.projectId, projectId) : undefined,
@@ -98,19 +95,9 @@ export async function listAssets({
   return rows.map(toAssetDTO);
 }
 
-export async function getAssetForUser({
-  userId,
-  assetId,
-}: {
-  userId: string;
-  assetId: string;
-}) {
+export async function getAsset(assetId: string) {
   const row = await getDb().query.assets.findFirst({
-    where: and(
-      eq(assets.userId, userId),
-      eq(assets.id, assetId),
-      isNull(assets.deletedAt),
-    ),
+    where: and(eq(assets.id, assetId), isNull(assets.deletedAt)),
   });
   return row ? toAssetDTO(row) : null;
 }
@@ -127,7 +114,6 @@ export async function createAssetUsage(input: {
 }) {
   if (input.replaceExisting) {
     await clearProjectAssetUsage({
-      userId: input.userId,
       projectId: input.projectId,
       usageType: input.usageType,
       entityId: input.entityId,
@@ -148,13 +134,11 @@ export async function createAssetUsage(input: {
 }
 
 export async function clearProjectAssetUsage({
-  userId,
   projectId,
   usageType,
   entityId,
   fieldPath,
 }: {
-  userId: string;
   projectId: string;
   usageType: AssetUsageType;
   entityId?: string | null;
@@ -165,7 +149,6 @@ export async function clearProjectAssetUsage({
     .set({ clearedAt: new Date() })
     .where(
       and(
-        eq(assetUsages.userId, userId),
         eq(assetUsages.projectId, projectId),
         eq(assetUsages.usageType, usageType),
         eq(assetUsages.fieldPath, fieldPath),
@@ -175,7 +158,7 @@ export async function clearProjectAssetUsage({
     );
 }
 
-export async function getAssetFacets(userId: string): Promise<{
+export async function getAssetFacets(): Promise<{
   countries: string[];
   assetTypes: AssetType[];
 }> {
@@ -185,7 +168,7 @@ export async function getAssetFacets(userId: string): Promise<{
       assetType: assets.assetType,
     })
     .from(assets)
-    .where(and(eq(assets.userId, userId), isNull(assets.deletedAt)));
+    .where(isNull(assets.deletedAt));
   return {
     countries: Array.from(
       new Set(rows.map((row) => row.country).filter(Boolean)),
@@ -197,11 +180,9 @@ export async function getAssetFacets(userId: string): Promise<{
 }
 
 export async function clearAssetUsage({
-  userId,
   assetId,
   fieldPath,
 }: {
-  userId: string;
   assetId: string;
   fieldPath?: string;
 }) {
@@ -210,7 +191,6 @@ export async function clearAssetUsage({
     .set({ clearedAt: new Date() })
     .where(
       and(
-        eq(assetUsages.userId, userId),
         eq(assetUsages.assetId, assetId),
         isNull(assetUsages.clearedAt),
         fieldPath ? eq(assetUsages.fieldPath, fieldPath) : undefined,
@@ -219,34 +199,22 @@ export async function clearAssetUsage({
 }
 
 export async function countActiveAssetUsages({
-  userId,
   assetId,
 }: {
-  userId: string;
   assetId: string;
 }): Promise<number> {
   const rows = await getDb()
     .select({ id: assetUsages.id })
     .from(assetUsages)
     .where(
-      and(
-        eq(assetUsages.userId, userId),
-        eq(assetUsages.assetId, assetId),
-        isNull(assetUsages.clearedAt),
-      ),
+      and(eq(assetUsages.assetId, assetId), isNull(assetUsages.clearedAt)),
     );
   return rows.length;
 }
 
-export async function softDeleteAsset({
-  userId,
-  assetId,
-}: {
-  userId: string;
-  assetId: string;
-}) {
+export async function softDeleteAsset({ assetId }: { assetId: string }) {
   await getDb()
     .update(assets)
     .set({ deletedAt: new Date() })
-    .where(and(eq(assets.userId, userId), eq(assets.id, assetId)));
+    .where(eq(assets.id, assetId));
 }

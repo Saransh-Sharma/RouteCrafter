@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
 import { errorResponse } from "@/lib/api/errors";
 import { createActivity, listProjectActivity } from "@/lib/db/activity";
-import { getProjectForUser } from "@/lib/db/projects";
+import { getProject } from "@/lib/db/projects";
 import { ensureRequestUser } from "@/lib/db/request-user";
 import { activityCreateSchema } from "@/lib/persistence/types";
 
@@ -16,9 +16,9 @@ export async function GET(
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     const { id } = await context.params;
-    const project = await getProjectForUser({ userId: requestUser.id, projectId: id });
+    const project = await getProject(id);
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }
@@ -28,7 +28,6 @@ export async function GET(
       Math.max(1, Number(url.searchParams.get("limit") ?? 50)),
     );
     const entries = await listProjectActivity({
-      userId: requestUser.id,
       projectId: id,
       limit,
       cursor: url.searchParams.get("cursor"),
@@ -48,7 +47,7 @@ export async function POST(
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
     const { id } = await context.params;
-    const project = await getProjectForUser({ userId: requestUser.id, projectId: id });
+    const project = await getProject(id);
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }

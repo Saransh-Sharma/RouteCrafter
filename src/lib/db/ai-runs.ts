@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AiResult, AiTaskType, AiUsage } from "@/lib/ai/types";
 import { getDb } from "./index";
 import { aiRuns } from "./schema";
@@ -81,13 +81,11 @@ export async function createFailedAiRun({
 }
 
 export async function markAiRunApplied({
-  userId,
   aiRunId,
   projectId,
   projectRevision,
   assetId,
 }: {
-  userId: string;
   aiRunId: string;
   projectId?: string;
   projectRevision?: number;
@@ -101,7 +99,7 @@ export async function markAiRunApplied({
       assetId,
       appliedAt: new Date(),
     })
-    .where(and(eq(aiRuns.userId, userId), eq(aiRuns.id, aiRunId)))
+    .where(eq(aiRuns.id, aiRunId))
     .returning({ id: aiRuns.id });
   return rows.length > 0;
 }

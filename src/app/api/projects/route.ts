@@ -4,7 +4,7 @@ import { unauthorizedResponse } from "@/lib/auth/http";
 import { errorResponse } from "@/lib/api/errors";
 import { ensureRequestUser } from "@/lib/db/request-user";
 import {
-  listProjectsForUser,
+  listProjects,
   upsertProjectForUser,
 } from "@/lib/db/projects";
 import { projectMutationSchema } from "@/lib/persistence/types";
@@ -15,9 +15,9 @@ export async function GET() {
   try {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
+    await ensureRequestUser(user);
     return NextResponse.json(
-      { projects: await listProjectsForUser(requestUser.id) },
+      { projects: await listProjects() },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

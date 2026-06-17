@@ -11,9 +11,16 @@ requires an explicit opt-in.
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `ROUTECRAFTER_PROD_AUDIT` | **Yes** | — | Must be `1` or the suite refuses to start |
-| `ROUTECRAFTER_PROD_PASSWORD` | **Yes** | — | Production account password |
-| `ROUTECRAFTER_PROD_USERNAME` | No | `saransh` | Login username |
+| `ROUTECRAFTER_PROD_PASSWORD` | **Yes** | — | Production account password (user A) |
+| `ROUTECRAFTER_PROD_USERNAME` | No | `saransh` | Login username (user A) |
+| `ROUTECRAFTER_SECOND_PASSWORD` | For shared-workspace test | — | Second account password (user B) |
+| `ROUTECRAFTER_SECOND_USERNAME` | No | `saumya` | Second login username (user B), must differ from user A |
 | `ROUTECRAFTER_PROD_BASE_URL` | No | `https://route-crafter.vercel.app` | Target deployment |
+
+The `shared-workspace.spec.ts` test additionally requires `ROUTECRAFTER_SECOND_PASSWORD`
+(and optionally `ROUTECRAFTER_SECOND_USERNAME`) to prove that a project created by
+user A is visible and editable by user B, and that a stale write returns `409`.
+`production-ai.spec.ts` only needs user A.
 
 ## Run
 

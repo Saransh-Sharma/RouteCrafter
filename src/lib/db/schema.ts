@@ -3,7 +3,6 @@ import {
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uuid,
@@ -22,7 +21,9 @@ export const users = pgTable("users", {
 export const projects = pgTable(
   "projects",
   {
-    id: text("id").notNull(),
+    // Project ids are globally unique in the shared workspace; one canonical row per id.
+    id: text("id").primaryKey(),
+    // Creator attribution only. Data is shared across all users; queries are NOT scoped by this.
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -38,19 +39,9 @@ export const projects = pgTable(
     updatedByUserId: text("updated_by_user_id"),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.userId, table.id] }),
-    userUpdatedIdx: index("projects_user_updated_idx").on(
-      table.userId,
-      table.updatedAt,
-    ),
-    userCountryIdx: index("projects_user_country_idx").on(
-      table.userId,
-      table.country,
-    ),
-    userStatusIdx: index("projects_user_status_idx").on(
-      table.userId,
-      table.status,
-    ),
+    updatedIdx: index("projects_updated_idx").on(table.updatedAt),
+    countryIdx: index("projects_country_idx").on(table.country),
+    statusIdx: index("projects_status_idx").on(table.status),
   }),
 );
 
@@ -126,6 +117,9 @@ export const assets = pgTable(
       table.userId,
       table.projectId,
     ),
+    // Shared workspace lists assets by project without a user filter, so a
+    // project-leading index matches the de-scoped query in listAssets.
+    projectIdx: index("assets_project_idx").on(table.projectId),
   }),
 );
 
@@ -188,7 +182,9 @@ export const aiRuns = pgTable(
       table.userId,
       table.createdAt,
     ),
-    projectIdx: index("ai_runs_project_idx").on(table.userId, table.projectId),
+    // De-scoped from the workspace: project-scoped lookups no longer filter by
+    // user, so lead the index with project_id.
+    projectIdx: index("ai_runs_project_idx").on(table.projectId),
   }),
 );
 

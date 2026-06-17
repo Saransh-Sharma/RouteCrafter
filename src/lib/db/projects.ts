@@ -9,6 +9,7 @@ import {
 } from "@/lib/schemas";
 import { normalizeProject } from "@/lib/project-normalization";
 import type { CloudProject } from "@/lib/persistence/types";
+import { findUserById } from "@/lib/auth/users";
 import { ensureUser } from "./users";
 import { createActivity } from "./activity";
 import { createProjectVersion } from "./project-versions";
@@ -31,6 +32,10 @@ function rowToCloudProject(row: typeof projects.$inferSelect): CloudProject {
   return {
     project: normalizeProject(row.data),
     revision: row.revision,
+    updatedByUserId: row.updatedByUserId,
+    updatedByName: row.updatedByUserId
+      ? (findUserById(row.updatedByUserId)?.displayName ?? null)
+      : null,
   };
 }
 
@@ -52,28 +57,46 @@ function projectValues(project: Project, userId: string, revision: number) {
   };
 }
 
-export async function listProjectsForUser(userId: string): Promise<CloudProject[]> {
+export async function listProjects(): Promise<CloudProject[]> {
   const rows = await getDb()
     .select()
     .from(projects)
-    .where(and(eq(projects.userId, userId), isNull(projects.deletedAt)))
+    .where(isNull(projects.deletedAt))
     .orderBy(desc(projects.updatedAt));
   return rows.map(rowToCloudProject);
 }
 
-export async function getProjectForUser({
-  userId,
-  projectId,
-}: {
-  userId: string;
-  projectId: string;
-}): Promise<CloudProject | null> {
+export interface ProjectRevisionSummary {
+  id: string;
+  revision: number;
+  updatedAt: string;
+}
+
+/**
+ * Lightweight projection used by the cheap poll: returns only the id, revision,
+ * and updatedAt for every live project so the client can decide which bodies to
+ * fetch without transferring the full payloads.
+ */
+export async function listProjectRevisions(): Promise<ProjectRevisionSummary[]> {
+  const rows = await getDb()
+    .select({
+      id: projects.id,
+      revision: projects.revision,
+      updatedAt: projects.updatedAt,
+    })
+    .from(projects)
+    .where(isNull(projects.deletedAt))
+    .orderBy(desc(projects.updatedAt));
+  return rows.map((row) => ({
+    id: row.id,
+    revision: row.revision,
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+}
+
+export async function getProject(projectId: string): Promise<CloudProject | null> {
   const row = await getDb().query.projects.findFirst({
-    where: and(
-      eq(projects.userId, userId),
-      eq(projects.id, projectId),
-      isNull(projects.deletedAt),
-    ),
+    where: and(eq(projects.id, projectId), isNull(projects.deletedAt)),
   });
   return row ? rowToCloudProject(row) : null;
 }
@@ -84,21 +107,49 @@ export async function upsertProjectForUser({
   expectedRevision,
   activityDetail,
   activityAction = "updated",
+  restore = false,
 }: {
   user: User;
   project: unknown;
   expectedRevision?: number;
   activityDetail?: string;
   activityAction?: "created" | "updated" | "imported" | "duplicated";
+  restore?: boolean;
 }): Promise<CloudProject> {
   await ensureUser(user);
   const normalized = projectSchema.parse(normalizeProject(project));
   const existing = await getDb().query.projects.findFirst({
-    where: and(eq(projects.userId, user.id), eq(projects.id, normalized.id)),
+    where: eq(projects.id, normalized.id),
   });
 
   if (existing?.deletedAt) {
-    throw new ProjectNotFoundError("Project was deleted.");
+    if (!restore) {
+      throw new ProjectNotFoundError("Project was deleted.");
+    }
+    // Revive a soft-deleted project: clear the tombstone and bump the revision,
+    // preserving original creator attribution.
+    const reviveValues = projectValues(normalized, user.id, existing.revision + 1);
+    const [revived] = await getDb()
+      .update(projects)
+      .set({
+        ...reviveValues,
+        userId: existing.userId,
+        createdAt: existing.createdAt,
+        deletedAt: null,
+        revision: existing.revision + 1,
+      })
+      .where(eq(projects.id, normalized.id))
+      .returning();
+    if (activityDetail) {
+      await createActivity({
+        projectId: normalized.id,
+        ownerUserId: existing.userId,
+        actor: user,
+        action: activityAction,
+        detail: activityDetail,
+      });
+    }
+    return rowToCloudProject(revived);
   }
   if (existing) {
     if (expectedRevision === undefined) {
@@ -111,12 +162,13 @@ export async function upsertProjectForUser({
       .update(projects)
       .set({
         ...updateValues,
+        // Preserve original creator attribution; only updatedByUserId tracks the actor.
+        userId: existing.userId,
         createdAt: existing.createdAt,
         revision: sql`${projects.revision} + 1`,
       })
       .where(
         and(
-          eq(projects.userId, user.id),
           eq(projects.id, normalized.id),
           eq(projects.revision, expectedRevision),
           isNull(projects.deletedAt),
@@ -125,7 +177,7 @@ export async function upsertProjectForUser({
       .returning();
     if (!updated) {
       const latest = await getDb().query.projects.findFirst({
-        where: and(eq(projects.userId, user.id), eq(projects.id, normalized.id)),
+        where: eq(projects.id, normalized.id),
       });
       if (!latest || latest.deletedAt) {
         throw new ProjectNotFoundError("Project not found.");
@@ -135,7 +187,7 @@ export async function upsertProjectForUser({
     if (activityDetail) {
       await createActivity({
         projectId: normalized.id,
-        ownerUserId: user.id,
+        ownerUserId: existing.userId,
         actor: user,
         action: activityAction,
         detail: activityDetail,
@@ -168,7 +220,7 @@ export async function bulkSyncProjectsForUser({
   incoming: unknown[];
 }): Promise<CloudProject[]> {
   await ensureUser(user);
-  const existing = await listProjectsForUser(user.id);
+  const existing = await listProjects();
   const existingIds = new Set(existing.map((item) => item.project.id));
 
   const synced: CloudProject[] = [];
@@ -189,7 +241,7 @@ export async function bulkSyncProjectsForUser({
     });
     synced.push(syncedProject);
   }
-  return listProjectsForUser(user.id);
+  return listProjects();
 }
 
 export async function softDeleteProjectForUser({
@@ -201,7 +253,7 @@ export async function softDeleteProjectForUser({
   projectId: string;
   expectedRevision?: number;
 }): Promise<void> {
-  const existing = await getProjectForUser({ userId: user.id, projectId });
+  const existing = await getProject(projectId);
   if (!existing) throw new ProjectNotFoundError("Project not found.");
   if (expectedRevision === undefined) {
     throw new ProjectRevisionRequiredError(
@@ -218,7 +270,6 @@ export async function softDeleteProjectForUser({
     })
     .where(
       and(
-        eq(projects.userId, user.id),
         eq(projects.id, projectId),
         eq(projects.revision, expectedRevision),
         isNull(projects.deletedAt),
