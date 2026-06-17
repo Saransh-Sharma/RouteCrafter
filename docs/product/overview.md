@@ -126,8 +126,10 @@ These principles are enforced throughout the product and codebase:
 
 ## Where data lives
 
-RouteCrafter is a client-side app. Your projects are stored in the browser's
-`localStorage` (key `routecrafter:v1`), and AI settings under a separate key. There
-is no server-side database and no account system. You can move work between browsers
-or back it up using JSON from Project actions or Review and Publish. See
+RouteCrafter is a single shared workspace. Projects and assets are stored in the
+cloud (Postgres + Vercel Blob) and shared across all signed-in accounts; the
+browser keeps a local cache (key `routecrafter:v1`) and your private AI settings
+under a separate key. Concurrent edits use last-write-wins with a conflict prompt.
+You can still move work between deployments or back it up using JSON from Project
+actions or Review and Publish. See
 [State & persistence](../architecture/state-and-persistence.md).

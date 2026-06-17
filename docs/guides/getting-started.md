@@ -43,23 +43,30 @@ npx vitest
 
 ## Where your data lives
 
-RouteCrafter uses server-side authentication, while project and AI settings stay
-in the browser:
+RouteCrafter is a single shared workspace backed by the cloud. Projects, their
+draft/final state, and uploaded assets live in cloud storage (Postgres + Vercel
+Blob) and are shared across every account. The browser keeps a local cache and
+your personal AI settings:
 
-| Data | Storage key | Notes |
+| Data | Storage | Notes |
 | --- | --- | --- |
-| Projects (all your work) | `routecrafter:v1` | Managed by the Zustand projects store. |
-| Personal AI keys + defaults | `routecrafter:ai-settings:v1` | Personal keys are stored in plaintext locally; the server `OPEN_AI_KEY` is never stored here. See the [AI setup guide](ai-setup.md#security). |
+| Projects + assets (shared by everyone) | Cloud (Postgres + Vercel Blob) | Authoritative source of truth; mirrored to the `routecrafter:v1` local cache. |
+| Local project cache | `routecrafter:v1` | Zustand projects store; reconciled against the cloud on focus and a short poll. |
+| Personal AI keys + defaults | `routecrafter:ai-settings:v1` | Private per user. Personal keys are stored in plaintext locally; the server `OPEN_AI_KEY` is never stored here. See the [AI setup guide](ai-setup.md#security). |
 
 Implications:
 
-- The three configured accounts share the same browser-local projects, activity,
-  and AI settings when they use the same browser profile. Accounts provide access
-  control and activity attribution, not private per-user workspaces.
+- Every account sees and can edit the same projects and assets. There are no
+  private per-user workspaces; `user_id` is creator/actor attribution only.
+- When two people edit the same project, the later save is rejected if it is based
+  on a stale revision. A conflict prompt lets you reload the latest version or
+  overwrite it with your changes (last-write-wins).
+- Personal AI keys, AI provider settings, and UI preferences remain private per
+  user and are not shared.
 - The displayed `admin` and `editor` roles are descriptive labels only; they do
   not currently grant different permissions.
-- Clearing site data, using a different browser, or a private window will lose or
-  hide your projects.
+- Clearing site data only clears the local cache; your shared projects reload from
+  the cloud on next sign-in.
 - To back up or transfer work, use **JSON export/import** in the workspace
   (see [Local data and backup](user-guide.md#local-data-and-backup)).
 - There is a size guard: persisted state is capped (around 4M characters) to avoid

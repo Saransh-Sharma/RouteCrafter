@@ -1,13 +1,51 @@
 # State & Persistence
 
-RouteCrafter has **no backend**. All application state lives in the browser, managed
-by two [Zustand](https://zustand.docs.pmnd.rs) stores backed by `localStorage`. The
-data model is validated and migrated through Zod on every read and write.
+RouteCrafter is a **single shared workspace**. The cloud (Postgres + Vercel Blob)
+is the authoritative source of truth for projects, their draft/final state, and
+assets, and that data is shared across every authenticated account. The browser
+keeps a [Zustand](https://zustand.docs.pmnd.rs) store backed by `localStorage` as a
+fast local cache that is reconciled against the cloud. The data model is validated
+and migrated through Zod on every read and write.
 
-| Store | File | localStorage key |
-| --- | --- | --- |
-| Projects | [`src/lib/store/projects-store.ts`](../../src/lib/store/projects-store.ts) | `routecrafter:v1` |
-| AI settings | [`src/lib/store/ai-settings-store.ts`](../../src/lib/store/ai-settings-store.ts) | `routecrafter:ai-settings:v1` |
+| Store | File | localStorage key | Shared? |
+| --- | --- | --- | --- |
+| Projects | [`src/lib/store/projects-store.ts`](../../src/lib/store/projects-store.ts) | `routecrafter:v1` | Cloud-shared (global) |
+| AI settings | [`src/lib/store/ai-settings-store.ts`](../../src/lib/store/ai-settings-store.ts) | `routecrafter:ai-settings:v1` | Private per user |
+
+> `user_id` columns across the database (`projects`, `assets`, `activity_logs`,
+> etc.) are **creator/actor attribution only** — repository queries are not scoped
+> by user. The `projects` table uses an `id`-only primary key so each project is
+> globally unique. AI keys, AI provider settings, and UI preferences stay private.
+
+## Cloud authority, freshness, and conflicts
+
+- **Authoritative cloud.** `isCloudPersistenceEnabled()` defaults to `true`; it is
+  only disabled when `NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED="false"` (local-only dev).
+- **Freshness.** The client reconciles the shared list on tab focus/visibility and
+  a light ~20s poll (`refreshFromCloud`), and refetches a single project when its
+  workspace opens (`refreshProject`). Dirty projects (pending/in-flight local edits)
+  are never clobbered by a background refresh; clean projects missing from the cloud
+  were deleted by another user and are dropped locally.
+- **Cheap polling.** `refreshFromCloud` first hits `GET /api/projects/revisions`
+  (a lightweight `{ id, revision, updatedAt }[]` projection) and only fetches the
+  full bodies that actually changed. When nothing changed it skips the body fetch,
+  the merge, and the localStorage rewrite entirely. A module-level in-flight guard
+  prevents overlapping polls from stacking, so a slow refresh never doubles request
+  load.
+- **No regressions.** Merge and `refreshProject` never adopt a cloud copy whose
+  revision is *below* the last known revision, and never lower a tracked revision.
+  This guards against read-replica lag / in-flight writes overwriting fresher local
+  state. Single-project reads (`/api/projects/[id]`) are served `Cache-Control:
+  no-store` so the 409 refetch and `refreshProject` always read fresh.
+- **Concurrency.** Writes carry an `expectedRevision`; the server rejects stale
+  writes with `409`. The store records a structured conflict and surfaces a banner
+  with **Reload latest** (`resolveConflictReload`) or **Overwrite**
+  (`resolveConflictOverwrite`, re-sends using the latest revision). A pre-overwrite
+  `project_versions` snapshot is taken server-side, so nothing is silently lost.
+- **Delete conflicts.** A `DELETE` that fails the revision guard (`409`) reverts the
+  optimistic local delete by re-adding the latest cloud copy, then records a
+  `kind: "delete"` conflict. The banner offers **Keep it** (adopt the cloud copy) or
+  **Delete anyway** (retry the delete at the latest revision).
 
 ## Projects store
 
@@ -26,9 +64,13 @@ The full runtime state adds non-persisted fields:
 
 | Field | Persisted? | Purpose |
 | --- | --- | --- |
-| `projects` | yes | All projects (Zod-normalized). |
+| `projects` | yes | All projects (Zod-normalized) — the shared global list. |
 | `initialized` | yes | Whether seeds have been applied. |
 | `hasHydrated` | no | Rehydration-complete flag (for SSR gating). |
+| `cloudHydrated` | no | Whether the global cloud list has been loaded. |
+| `syncStatus` / `syncError` | no | Cloud write status and last error. |
+| `lastCloudRevisionByProject` | no | Latest known cloud revision per project (drives `expectedRevision`). |
+| `conflictByProject` | no | Structured 409 conflicts awaiting reload/overwrite. |
 | `persistenceError` | no | User-facing storage error message. |
 | `expandHint` | no | `{ duration, travelerType }` handoff from the matrix tab to the itinerary tab. |
 
@@ -45,6 +87,10 @@ The full runtime state adds non-persisted fields:
 | `getById(id)` | Lookup by id. |
 | `importProject(raw)` | Normalize; assign a new id on collision. |
 | `hydrateSeeds()` | Load demo projects if not yet initialized. |
+| `hydrateCloudProjects()` | Initial load of the shared cloud list; migrates local-only projects up. |
+| `refreshFromCloud()` | Dirty-aware reconcile of the shared list (focus/visibility/poll). |
+| `refreshProject(id)` | Refetch one project when its workspace opens. |
+| `resolveConflictReload(id)` / `resolveConflictOverwrite(id)` | Resolve a 409 conflict. |
 | `setExpandHint` / `clearPersistenceError` | UI coordination. |
 
 ### `commitProjects`: the single write path
