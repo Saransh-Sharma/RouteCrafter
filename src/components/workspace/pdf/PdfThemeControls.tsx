@@ -271,6 +271,7 @@ export function PdfThemeControls({
                   ),
                   "Premium itinerary PDF cover image",
                   editionExtraCities(project, itinerary),
+                  "portrait",
                 ),
               })
             }
@@ -337,6 +338,7 @@ export function PdfThemeControls({
                           JSON.stringify(day, null, 2),
                           `Day ${day.day} itinerary illustration`,
                           editionExtraCities(project, itinerary),
+                          "landscape",
                         ),
                       })
                     }
@@ -380,6 +382,9 @@ export function PdfThemeControls({
           taskType="imageGeneration"
           projectId={project.id}
           sourceLabel={aiImageTarget?.kind === "cover" ? "PDF cover" : "Day image"}
+          imageSize={
+            aiImageTarget?.kind === "cover" ? "1024x1536" : "1536x1024"
+          }
           prompt={aiImageTarget?.prompt ?? ""}
           onApplyImage={recordImageRun}
         />

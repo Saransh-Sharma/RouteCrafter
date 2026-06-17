@@ -314,11 +314,23 @@ Rules:
 ${jsonOnly("PortfolioImagePrompt")}`;
 }
 
+export type ImageOrientation = "portrait" | "landscape" | "square";
+
+const IMAGE_FORMAT_GUIDANCE: Record<ImageOrientation, string> = {
+  portrait:
+    "Vertical portrait, 2:3 ratio (1024x1536), full-bleed to all edges. Compose like a premium magazine/book cover: place the hero subject in the upper two-thirds and keep the LOWER THIRD calm and uncluttered (open sky, water, wall, or soft gradient) as negative space reserved for an overlaid title. Do not render any text, logos, or busy detail in the bottom third.",
+  landscape:
+    "Horizontal landscape, 3:2 ratio (1536x1024), full-bleed edge-to-edge. A single cinematic editorial travel photograph that fills the entire frame. No borders, frames, captions, collage panels, or text.",
+  square:
+    "Square, 1:1 ratio (1024x1024), full-bleed. Clean centered editorial composition.",
+};
+
 export function buildImageGenerationPrompt(
   project: Project,
   source: string,
   purpose: string,
   extraCities: string[] = [],
+  orientation: ImageOrientation = "square",
 ): string {
   const ctx = buildContext(project, { extraCities });
   const brief =
@@ -335,6 +347,9 @@ ${configBlock(ctx)}
 
 Visual brief:
 ${brief}
+
+Format & composition:
+${IMAGE_FORMAT_GUIDANCE[orientation]}
 
 Style:
 Warm ivory editorial travel-studio aesthetic, sage and forest green, terracotta, muted gold, premium PDF mockup energy, clean composition, crisp readable short text only if needed.
