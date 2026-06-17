@@ -121,9 +121,36 @@ Per-provider specifics:
 
 Notable behaviors: OpenAI text uses the Responses API (not Chat Completions);
 Anthropic Opus models omit temperature/top-p; Gemini image responses extract
-`inlineData` as a base64 data URL. Errors are normalized (401/403 -> auth failed,
+`inlineData` as a base64 data URL. Errors are normalized via
+[`src/lib/ai/errors.ts`](../../src/lib/ai/errors.ts) (401/403 -> auth failed,
 429 -> rate limit, 5xx -> provider unavailable, `AbortError` -> cancelled), and
 provider-specific token counts are mapped into a unified `AiUsage`.
+
+### Retries and timeouts
+
+`provider-adapters.ts` wraps every provider HTTP call in
+`providerFetchWithRetry`:
+
+- Up to **3 attempts** with exponential backoff (1s base + jitter)
+- Retries HTTP **429** and **5xx**, plus transient timeout/network failures
+- Does **not** retry user cancellation, auth failures, or other 4xx errors
+- Per-attempt timeout defaults to **90s** (`AI_PROVIDER_TIMEOUT_MS`)
+- Image calls may override with `AI_IMAGE_PROVIDER_TIMEOUT_MS`
+
+Successful responses include `providerAttempts` on `AiResult`. API routes also
+return `X-AI-Provider-Attempts` and set `export const maxDuration = 300`.
+[`vercel.json`](../../vercel.json) mirrors the same limit for deployment.
+
+The browser client uses `AI_CLIENT_TIMEOUT_MS = 330_000` so it outlasts the
+server retry budget.
+
+**Retry stacking and billing:** Each API request may retry up to 3 times on the
+server. The AI run sheet also offers a client **Retry** button for transient
+failures (not rate limits). A single user action can therefore trigger up to
+~6 provider calls. POST retries on ambiguous timeouts may bill twice if the
+provider accepted a request but the connection dropped before the response
+returned. Treat this as an accepted tradeoff for resilience; prefer waiting on
+rate limits rather than hammering the provider from the UI.
 
 ## Task types
 
@@ -296,6 +323,15 @@ on bad JSON/schema before anything touches the project.
 `AiRunSheet` enforces preview-before-apply. State machine:
 `idle -> running -> result | error`.
 
+The sheet is rendered with `createPortal(..., document.body)` at `z-[60]` so it
+escapes sticky/transform ancestors (for example the PDF preview column). It
+locks body scroll, supports backdrop dismiss, Escape to close/cancel, focus
+trap, and return-focus to the trigger.
+
+On transient provider failures the error state shows the preserved prompt plus
+**Retry** and **Discard**. Server-funded portfolio image runs (not cover/hero)
+default to `quality: "low"` to reduce timeout risk.
+
 1. Show the prompt preview, provider/model, and a **Billable** warning.
 2. User confirms; the fetch is abortable.
 3. For text: side-by-side current vs editable proposal. For image: a preview.
@@ -359,6 +395,27 @@ See [State & persistence](state-and-persistence.md) for the persistence mechanic
 
 The Settings page distinguishes RouteCrafter server OpenAI from personal-key
 overrides and retains the shared-device warning for browser-stored personal keys.
+
+## Deployment
+
+| Setting | Location | Default |
+| --- | --- | --- |
+| Route `maxDuration` | `src/app/api/ai/*/route.ts`, `vercel.json` | 300s |
+| Provider attempt timeout | `AI_PROVIDER_TIMEOUT_MS` | 90s |
+| Image attempt timeout | `AI_IMAGE_PROVIDER_TIMEOUT_MS` | falls back to shared env |
+| Client fetch timeout | `src/lib/ai/client.ts` | 330s |
+
+If the Vercel plan caps functions below ~270s, lower `AI_PROVIDER_TIMEOUT_MS`
+and/or `PROVIDER_MAX_ATTEMPTS` in `provider-adapters.ts` so the retry loop fits
+inside the deployment ceiling.
+
+### Production verification (manual)
+
+The opt-in Playwright audit in [`prod-e2e/`](../../prod-e2e/) signs into live
+deployments, upserts kept audit projects, and runs real billed AI flows. It is
+**not** part of CI. Set `ROUTECRAFTER_PROD_AUDIT=1` and follow
+[`prod-e2e/README.md`](../../prod-e2e/README.md) for env vars, cost estimate,
+and cleanup of `Prod E2E Keep - *` projects.
 
 ## Gaps / reserved code
 

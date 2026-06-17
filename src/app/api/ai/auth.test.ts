@@ -6,6 +6,7 @@ import { POST as textPost } from "./text/route";
 import { POST as imagePost } from "./image/route";
 import { GET as configGet } from "./config/route";
 import { signToken } from "@/lib/auth/jwt";
+import { AI_ERROR } from "@/lib/ai/errors";
 
 describe("AI route authentication", () => {
   beforeEach(() => {
@@ -230,28 +231,54 @@ describe("AI route authentication", () => {
       taskType: "itinerary",
       maxOutputTokens: 4000,
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        (_url: string, init?: RequestInit) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(new DOMException("Aborted", "AbortError")),
-              { once: true },
-            );
-          }),
-      ),
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const response = await textPost(request);
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error:
-        "The provider request timed out. Try again or reduce the request size.",
+      error: AI_ERROR.PROVIDER_TIMEOUT,
     });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(response.headers.get("X-AI-Provider-Attempts")).toBe("3");
   });
+
+  it("retries image provider failures before succeeding", async () => {
+    vi.stubEnv("OPEN_AI_KEY", "sk-server-secret");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(
+        Response.json({ data: [{ b64_json: "YWJj" }] }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = await authenticatedRequest("/api/ai/image", {
+      provider: "openai",
+      model: "gpt-image-2",
+      prompt: "Cover image",
+      taskType: "imageGeneration",
+    });
+    const response = await imagePost(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-AI-Provider-Attempts")).toBe("3");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const body = await response.json();
+    expect(body.image).toBe("data:image/png;base64,YWJj");
+    expect(body.providerAttempts).toBe(3);
+  }, 15_000);
 });
 
 async function authenticatedRequest(

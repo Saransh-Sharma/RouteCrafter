@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/ai/image/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/ai/text/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

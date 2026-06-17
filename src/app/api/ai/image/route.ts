@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { aiImageRequestSchema } from "@/lib/ai/schemas";
-import { generateImage, normalizeProviderError } from "@/lib/ai/provider-adapters";
+import { generateImage, normalizeProviderError, readProviderAttempts } from "@/lib/ai/provider-adapters";
+import { aiResponseHeaders } from "@/lib/ai/http";
 import { getRequestUser } from "@/lib/auth/session";
 import { unauthorizedResponse } from "@/lib/auth/http";
 import type { User } from "@/lib/schemas/auth";
@@ -13,6 +14,7 @@ import { ensureRequestUser } from "@/lib/db/request-user";
 import { getProjectForUser } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   let ledgerUser: User | null = null;
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
       parsed.data.projectId,
     );
     return NextResponse.json({ ...result, aiRunId }, {
-      headers: { "Cache-Control": "no-store" },
+      headers: aiResponseHeaders(result.providerAttempts),
     });
   } catch (error) {
     await recordFailedAiRun(ledgerUser, requestSummary, error);
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
       { error: normalizeProviderError(error) },
       {
         status: error instanceof AiConfigurationError ? error.status : 500,
-        headers: { "Cache-Control": "no-store" },
+        headers: aiResponseHeaders(readProviderAttempts(error)),
       },
     );
   }

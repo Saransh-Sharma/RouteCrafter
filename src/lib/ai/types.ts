@@ -61,6 +61,7 @@ export interface AiResult {
   credentialSource: AiCredentialSource;
   aiRunId?: string;
   aiRunIds?: string[];
+  providerAttempts?: number;
 }
 
 export interface ResolvedAiTextRequest extends AiTextRequest {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -24,6 +25,8 @@ import { AiCostBadge } from "./AiCostButton";
 import { useAiConfig } from "./AiConfigProvider";
 import { resolveClientAiRun } from "@/lib/ai/runtime";
 import { estimateAiRunCost, formatCostEstimate } from "@/lib/ai/pricing";
+import { isRetryableErrorMessage } from "@/lib/ai/errors";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 type RunState = "idle" | "running" | "result" | "error";
 
@@ -62,8 +65,33 @@ const progressByMode = {
 
 const STRUCTURED_ITINERARY_OUTPUT_TOKENS = 12000;
 
-export function AiRunSheet({
-  open,
+export function AiRunSheet(props: AiRunSheetProps) {
+  const { open, mode, title, taskType, prompt } = props;
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+
+  React.useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open || !mounted) return null;
+
+  const sessionKey = `${mode}:${taskType}:${title}:${prompt}`;
+  return createPortal(
+    <AiRunSheetDialog key={sessionKey} {...props} />,
+    document.body,
+  );
+}
+
+function AiRunSheetDialog({
   onOpenChange,
   mode,
   title,
@@ -124,6 +152,14 @@ export function AiRunSheet({
           quality: imageDefaults.quality,
         });
   const estimateLabel = formatCostEstimate(estimate);
+  const imageQuality =
+    mode === "image" &&
+    taskType === "imageGeneration" &&
+    selection.credentialSource === "server" &&
+    sourceLabel !== "PDF cover" &&
+    !/cover|hero/i.test(title)
+      ? "low"
+      : imageDefaults.quality;
 
   const [state, setState] = React.useState<RunState>("idle");
   const [result, setResult] = React.useState<AiResult | null>(null);
@@ -134,18 +170,20 @@ export function AiRunSheet({
   const [draft, setDraft] = React.useState("");
   const abortRef = React.useRef<AbortController | null>(null);
 
-  if (!open) return null;
-
-  function close() {
+  const close = React.useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    setState("idle");
-    setResult(null);
-    setError(null);
-    setValidationError(null);
-    setDraft("");
     onOpenChange(false);
-  }
+  }, [onOpenChange]);
+
+  const panelRef = useDialogFocus({
+    open: true,
+    onClose: close,
+    onCancel:
+      state === "running"
+        ? () => abortRef.current?.abort()
+        : undefined,
+  });
 
   async function run() {
     if (!selection.available) {
@@ -204,7 +242,7 @@ export function AiRunSheet({
                 label: title,
                 source: sourceLabel,
                 size: imageDefaults.size,
-                quality: imageDefaults.quality,
+                quality: imageQuality,
                 aspectRatio: imageDefaults.aspectRatio,
               },
               controller.signal,
@@ -248,8 +286,22 @@ export function AiRunSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/35 px-3 py-4 sm:items-center">
-      <div className="max-h-[92dvh] w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)] shadow-[var(--shadow-lift)]">
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/35 px-3 py-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ai-run-sheet-title"
+      aria-describedby="ai-run-sheet-description"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="max-h-[92dvh] w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)] shadow-[var(--shadow-lift)] outline-none"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/50 px-5 py-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -260,10 +312,14 @@ export function AiRunSheet({
                   <Sparkles className="size-4" />
                 )}
               </span>
-              <h2 className="text-lg font-semibold text-ink">{title}</h2>
+              <h2 id="ai-run-sheet-title" className="text-lg font-semibold text-ink">
+                {title}
+              </h2>
               <AiCostBadge estimate={estimate} />
             </div>
-            <p className="max-w-2xl text-sm text-ink-soft">{description}</p>
+            <p id="ai-run-sheet-description" className="max-w-2xl text-sm text-ink-soft">
+              {description}
+            </p>
           </div>
           <button
             type="button"
@@ -389,7 +445,40 @@ export function AiRunSheet({
                 </div>
               ) : null}
 
-              {state === "error" && error ? <InlineError message={error} /> : null}
+              {state === "error" && error ? (
+                <div className="space-y-4">
+                  <InlineError message={error} />
+                  <details
+                    open
+                    className="rounded-2xl border border-border-soft bg-paper p-4"
+                  >
+                    <summary className="cursor-pointer text-sm font-semibold text-ink">
+                      Prompt that will be retried
+                    </summary>
+                    <Textarea value={prompt} readOnly rows={6} className="mt-3" />
+                  </details>
+                  {isRetryableErrorMessage(error) ? (
+                    <p className="text-sm text-ink-muted">
+                      This looks temporary. Retry without re-entering your prompt.
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button variant="ghost" onClick={close}>
+                      Discard
+                    </Button>
+                    {isRetryableErrorMessage(error) ? (
+                      <Button
+                        onClick={() => {
+                          void run();
+                        }}
+                      >
+                        <Sparkles className="size-4" />
+                        Retry
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
 
               {state === "result" && result ? (
                 <div className="space-y-4">
