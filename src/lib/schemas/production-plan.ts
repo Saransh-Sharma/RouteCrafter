@@ -26,6 +26,7 @@ export const plannedEditionSchema = z.object({
   duration: durationEnum,
   customDays: z.number().int().positive().max(60).optional(),
   travelerType: travelerTypeEnum,
+  cities: z.array(z.string()).default([]),
   itineraryId: z.string().optional(),
   createdAt: z.string(),
 });
