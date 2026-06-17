@@ -24,7 +24,6 @@ export function isRetryableErrorMessage(message: string): boolean {
   return (
     normalized.includes(AI_ERROR.PROVIDER_UNAVAILABLE.toLowerCase()) ||
     normalized.includes("timed out") ||
-    normalized.includes("rate limit") ||
     normalized.includes(AI_ERROR.DID_NOT_COMPLETE.toLowerCase()) ||
     normalized.includes("fetch failed") ||
     normalized.includes("network")
@@ -37,6 +36,8 @@ export function isRetryableThrownError(error: unknown): boolean {
   }
   if (error instanceof Error) {
     if (error.name === "AbortError") return false;
+    const normalized = error.message.toLowerCase();
+    if (normalized.includes("rate limit")) return true;
     return isRetryableErrorMessage(error.message);
   }
   return false;

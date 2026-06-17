@@ -26,11 +26,15 @@ describe("AI error helpers", () => {
   it("detects retryable user-facing messages", () => {
     expect(isRetryableErrorMessage(AI_ERROR.PROVIDER_UNAVAILABLE)).toBe(true);
     expect(isRetryableErrorMessage(AI_ERROR.PROVIDER_TIMEOUT)).toBe(true);
-    expect(isRetryableErrorMessage(AI_ERROR.RATE_LIMIT)).toBe(true);
+    expect(isRetryableErrorMessage(AI_ERROR.RATE_LIMIT)).toBe(false);
     expect(isRetryableErrorMessage(AI_ERROR.AUTH_FAILED)).toBe(false);
     expect(isRetryableErrorMessage("This provider does not support image generation here.")).toBe(
       false,
     );
+  });
+
+  it("still retries rate limits on the server thrown-error path", () => {
+    expect(isRetryableThrownError(new Error(AI_ERROR.RATE_LIMIT))).toBe(true);
   });
 
   it("does not retry abort or unknown thrown values", () => {
