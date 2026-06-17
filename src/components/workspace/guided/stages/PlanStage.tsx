@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, Lightbulb, Plus, Route, Trash2 } from "lucide-react";
+import { ArrowRight, Lightbulb, MapPin, Plus, Route, Trash2 } from "lucide-react";
 import type {
   Duration,
   PlannedEdition,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/workflow";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input, Select } from "@/components/ui/field";
+import { TagInput } from "@/components/workspace/trip-config/TagInput";
 import { StageHeader } from "./StageHeader";
 
 export function PlanStage({
@@ -42,6 +43,10 @@ export function PlanStage({
       project.travelerTypes[0] ??
       "Couple",
   );
+  const [cities, setCities] = React.useState<string[]>([]);
+  const baseCities = project.tripConfigs[0]?.cities.length
+    ? project.tripConfigs[0].cities
+    : project.regions;
   const editions = project.productionPlan.editions;
   const workflow = getProjectWorkflow(project);
   const stage = workflow.stages.find((item) => item.id === "plan");
@@ -74,9 +79,19 @@ export function PlanStage({
       duration,
       customDays,
       travelerType,
+      cities,
       createdAt: new Date().toISOString(),
     } satisfies PlannedEdition;
     setEditions([...editions, edition], edition);
+    setCities([]);
+  }
+
+  function updateEditionCities(edition: PlannedEdition, next: string[]) {
+    setEditions(
+      editions.map((item) =>
+        item.id === edition.id ? { ...item, cities: next } : item,
+      ),
+    );
   }
 
   function removeEdition(edition: PlannedEdition) {
@@ -172,6 +187,16 @@ export function PlanStage({
                 ))}
               </Select>
             </FormField>
+            <FormField
+              label="Add cities / regions (optional)"
+              hint="Extra stops for this edition, on top of the brief cities."
+            >
+              <TagInput
+                value={cities}
+                onChange={setCities}
+                placeholder="Type a city and press Enter"
+              />
+            </FormField>
             <p className="border-y border-border-soft py-3 text-xs leading-5 text-ink-soft">
               Adding this creates another{" "}
               <strong className="text-ink">
@@ -241,6 +266,34 @@ export function PlanStage({
                           </p>
                         </div>
                       ))}
+                    </div>
+                    <div className="mt-5">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                        <MapPin className="size-3.5 text-terracotta" />
+                        Cities for this edition
+                      </div>
+                      {baseCities.length ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {baseCities.map((city) => (
+                            <span
+                              key={city}
+                              className="inline-flex items-center rounded-full border border-border-soft bg-paper-2/60 px-2.5 py-1 text-xs font-medium text-ink-muted"
+                            >
+                              {city}
+                            </span>
+                          ))}
+                          <span className="text-[11px] text-ink-soft">
+                            from brief
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="mt-2">
+                        <TagInput
+                          value={edition.cities}
+                          onChange={(next) => updateEditionCities(edition, next)}
+                          placeholder="Add a city for this edition"
+                        />
+                      </div>
                     </div>
                     <button
                       type="button"

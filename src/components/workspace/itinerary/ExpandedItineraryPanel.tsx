@@ -135,14 +135,17 @@ export function ExpandedItineraryPanel({
   }
 
   function createItinerary() {
-    const itinerary = buildItinerary(buildContext(project), {
-      duration: selectedEdition?.duration ?? (creator.duration as Duration),
-      customDays: selectedEdition?.customDays ?? creator.customDays,
-      travelerType:
-        selectedEdition?.travelerType ??
-        (creator.travelerType as TravelerType),
-      style: creator.style ? (creator.style as TravelStyle) : undefined,
-    });
+    const itinerary = buildItinerary(
+      buildContext(project, { extraCities: selectedEdition?.cities }),
+      {
+        duration: selectedEdition?.duration ?? (creator.duration as Duration),
+        customDays: selectedEdition?.customDays ?? creator.customDays,
+        travelerType:
+          selectedEdition?.travelerType ??
+          (creator.travelerType as TravelerType),
+        style: creator.style ? (creator.style as TravelStyle) : undefined,
+      },
+    );
     itinerary.plannedEditionId = selectedEdition?.id;
     update(project.id, {
       itineraries: [...itineraries, itinerary],
@@ -601,12 +604,13 @@ export function ExpandedItineraryPanel({
               ))}
             </div> : null}
 
-            {activeSection === "overview" ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {activeSection === "overview" ? <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
               {TOP_FIELDS.map((f) => (
                 <FormField key={f.key} label={f.label}>
                   <Textarea
                     value={selected[f.key] as string}
-                    rows={2}
+                    rows={3}
+                    autoSize
                     onChange={(e) => setField(f.key, e.target.value)}
                   />
                 </FormField>
@@ -664,7 +668,7 @@ export function ExpandedItineraryPanel({
                     : ["expanded-itinerary"]
                 }
               />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
               {GUIDE_FIELDS.filter((field) =>
                 activeSection === "quality"
                   ? ["etiquetteSafety", "verificationNotes"].includes(field.key)
@@ -673,7 +677,8 @@ export function ExpandedItineraryPanel({
                 <FormField key={f.key} label={f.label}>
                   <Textarea
                     value={selected[f.key] as string}
-                    rows={3}
+                    rows={4}
+                    autoSize
                     onChange={(e) => setField(f.key, e.target.value)}
                   />
                 </FormField>
