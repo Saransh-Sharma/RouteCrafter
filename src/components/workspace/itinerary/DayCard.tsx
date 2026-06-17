@@ -104,7 +104,7 @@ export function DayCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
           {TEXT_FIELDS.map((f) => (
             <div key={f.key} className="space-y-1">
               <label className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -113,6 +113,7 @@ export function DayCard({
               <Textarea
                 value={day[f.key] as string}
                 rows={2}
+                autoSize
                 onChange={(e) => set(f.key, e.target.value)}
               />
             </div>
