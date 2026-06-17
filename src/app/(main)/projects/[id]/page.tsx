@@ -39,6 +39,11 @@ export default function ProjectWorkspacePage() {
   );
   const duplicate = useProjectsStore((s) => s.duplicate);
   const remove = useProjectsStore((s) => s.remove);
+  const refreshProject = useProjectsStore((s) => s.refreshProject);
+
+  React.useEffect(() => {
+    if (params.id) void refreshProject(params.id);
+  }, [params.id, refreshProject]);
   const [saveState, setSaveState] = React.useState<{
     status: "idle" | "saving" | "saved" | "error";
     error?: string | null;
