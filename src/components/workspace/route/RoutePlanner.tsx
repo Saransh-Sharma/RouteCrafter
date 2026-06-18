@@ -140,11 +140,17 @@ export function RoutePlanner({
         return null;
       });
     }
+    function onCancel() {
+      setDragId(null);
+      setDropIndex(null);
+    }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragId, route]);
