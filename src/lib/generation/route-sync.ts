@@ -77,9 +77,7 @@ export function syncItineraryToRoute(
         ...existing,
         day: dayNumber,
         base,
-        transportNotes: arriveBy
-          ? transitionNote(base, arriveBy)
-          : existing.transportNotes,
+        transportNotes: arriveBy ? transitionNote(base, arriveBy) : "",
         needsRefresh: existing.needsRefresh || baseChanged,
       });
       if (baseChanged) changedDays.push(dayNumber);
