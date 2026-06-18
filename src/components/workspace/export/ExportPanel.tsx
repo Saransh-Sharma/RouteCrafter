@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { useToast } from "@/components/ui";
 import { downloadProjectJson } from "@/lib/io/project-io";
 import {
   downloadMatrixCsv,
@@ -37,6 +38,7 @@ import {
 
 export function ExportPanel({ project }: { project: Project }) {
   const slug = projectSlug(project);
+  const { toast } = useToast();
   const [includeAiUsage, setIncludeAiUsage] = React.useState(false);
 
   function exportBundle() {
@@ -45,10 +47,12 @@ export function ExportPanel({ project }: { project: Project }) {
       buildMarkdownBundle(project, { includeAiUsage }),
       "text/markdown",
     );
+    toast("Markdown bundle downloaded");
   }
 
   function exportPrompts() {
     downloadText(`${slug}-prompts.md`, promptsToMarkdown(project), "text/markdown");
+    toast("Prompts exported");
   }
 
   const promptCount = Object.keys(project.generated ?? {}).length;

@@ -17,9 +17,10 @@ import {
   type WorkflowStageId,
 } from "@/lib/workflow";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui";
 import { FormField, Input, Select } from "@/components/ui/field";
 import { TagInput } from "@/components/workspace/trip-config/TagInput";
-import { StageHeader } from "./StageHeader";
+import { StageShell } from "../StageShell";
 
 export function PlanStage({
   project,
@@ -118,27 +119,29 @@ export function PlanStage({
   }
 
   return (
-    <div className="space-y-9">
-      <StageHeader
-        eyebrow="Stage 2 · Plan"
-        title="Commit to the editions you will ship"
-        description="Possible durations and audiences are ideas. Planned editions are promises: each one needs a finished itinerary and the selected package assets."
-        completed={stage?.completed}
-        total={stage?.total}
-        blockers={workflow.blockers.filter((issue) => issue.stage === "plan")}
-        aside={
-          <div className="min-w-40 border-l border-border-strong pl-5">
-            <p className="text-2xl font-semibold text-ink">{editions.length}</p>
-            <p className="text-xs text-ink-muted">
-              {editions.length === 1 ? "committed edition" : "committed editions"}
-            </p>
-          </div>
-        }
-      />
-
+    <StageShell
+      eyebrow="Stage 2 · Plan"
+      title="Commit to the editions you will ship"
+      description="Possible durations and audiences are ideas. Planned editions are promises: each one needs a finished itinerary and the selected package assets."
+      progress={
+        stage ? { completed: stage.completed, total: stage.total } : undefined
+      }
+      blockers={workflow.blockers.filter((issue) => issue.stage === "plan")}
+      onBlockerNavigate={(issue) =>
+        onNavigate(issue.stage, { tool: issue.tool })
+      }
+      aside={
+        <div className="min-w-40 border-l border-border-strong pl-5">
+          <p className="rc-display text-3xl">{editions.length}</p>
+          <p className="text-xs text-ink-muted">
+            {editions.length === 1 ? "committed edition" : "committed editions"}
+          </p>
+        </div>
+      }
+    >
       <section className="grid gap-7 lg:grid-cols-[340px_1fr]">
-        <div className="border border-border-strong bg-paper/55 p-5">
-          <p className="text-sm font-semibold text-ink">Add an edition</p>
+        <div className="rounded-2xl border border-border-strong bg-paper/55 p-5">
+          <p className="rc-label">Add an edition</p>
           <p className="mt-1 text-xs leading-5 text-ink-muted">
             Start with the combination most likely to sell. Add more only when
             you intend to complete them.
@@ -227,7 +230,7 @@ export function PlanStage({
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <div>
-                        <h3 className="text-xl font-semibold text-ink">
+                        <h3 className="rc-section-title">
                           {editionLabel(edition)}
                         </h3>
                         <p className="mt-1 text-sm text-ink-soft">
@@ -315,34 +318,14 @@ export function PlanStage({
               );
             })
           ) : (
-            <div className="flex min-h-80 flex-col items-center justify-center border border-dashed border-border-strong px-8 text-center">
-              <Route className="size-7 text-terracotta" />
-              <h3 className="mt-4 text-xl font-semibold text-ink">
-                Plan the first product edition
-              </h3>
-              <p className="mt-2 max-w-md text-sm leading-6 text-ink-soft">
-                A single strong edition is enough to launch. Additional
-                combinations can be added after the core product is complete.
-              </p>
-            </div>
+            <EmptyState
+              icon={Route}
+              title="Plan the first product edition"
+              description="A single strong edition is enough to launch. Additional combinations can be added after the core product is complete."
+            />
           )}
         </div>
       </section>
-
-      <div className="flex justify-end">
-        <Button
-          disabled={!editions.length}
-          onClick={() =>
-            onNavigate("build", {
-              edition: editions[0]?.id,
-              tool: "overview",
-            })
-          }
-        >
-          Build the itineraries
-          <ArrowRight className="size-4" />
-        </Button>
-      </div>
-    </div>
+    </StageShell>
   );
 }

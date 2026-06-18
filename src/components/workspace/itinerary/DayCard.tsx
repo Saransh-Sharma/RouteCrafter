@@ -1,11 +1,19 @@
 "use client";
 
-import { ChevronUp, ChevronDown, Trash2 } from "lucide-react";
+import * as React from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Trash2,
+} from "lucide-react";
 import type { DayPlan } from "@/lib/types";
 import { enumValues } from "@/lib/schemas";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
+import { cn } from "@/lib/utils";
 
 const TEXT_FIELDS: { key: keyof DayPlan; label: string }[] = [
   { key: "morning", label: "Morning" },
@@ -41,30 +49,82 @@ export function DayCard({
   canMoveDown: boolean;
   onAiImprove?: () => void;
 }) {
+  const [open, setOpen] = React.useState(false);
+
   function set<K extends keyof DayPlan>(key: K, value: DayPlan[K]) {
     onChange({ ...day, [key]: value });
   }
+
+  const complete = Boolean(
+    day.title?.trim() &&
+      day.base?.trim() &&
+      [day.morning, day.lunch, day.afternoon, day.evening, day.dinner].some(
+        (value) => value?.trim(),
+      ),
+  );
+  const summary =
+    [day.base, day.morning, day.afternoon, day.evening]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join(" · ") || "No activities yet";
 
   return (
     <Card>
       <CardContent className="space-y-4 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-soft text-sm font-semibold text-forest">
-            {day.day}
-          </span>
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              value={day.title}
-              onChange={(e) => set("title", e.target.value)}
-              placeholder="Day title"
-            />
-            <Input
-              value={day.base}
-              onChange={(e) => set("base", e.target.value)}
-              placeholder="Base / city"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-label={open ? `Collapse day ${day.day}` : `Expand day ${day.day}`}
+            className={cn(
+              "relative flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors",
+              complete
+                ? "bg-forest text-paper"
+                : "bg-sage-soft text-forest hover:bg-sage-soft/70",
+            )}
+          >
+            {complete ? <Check className="size-4" /> : day.day}
+          </button>
+          {open ? (
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                value={day.title}
+                onChange={(e) => set("title", e.target.value)}
+                placeholder="Day title"
+              />
+              <Input
+                value={day.base}
+                onChange={(e) => set("base", e.target.value)}
+                placeholder="Base / city"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <p className="truncate rc-label">
+                {day.title?.trim() || `Day ${day.day}`}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-ink-muted">{summary}</p>
+            </button>
+          )}
           <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setOpen((value) => !value)}
+              aria-label={open ? "Collapse day" : "Expand day"}
+              className="rounded-lg p-1.5 text-ink-soft hover:bg-paper-2/70 hover:text-ink"
+            >
+              <ChevronRight
+                className={cn(
+                  "size-4 transition-transform",
+                  open && "rotate-90",
+                )}
+              />
+            </button>
             {onAiImprove ? (
               <AiCostButton
                 size="sm"
@@ -104,7 +164,12 @@ export function DayCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+        <div
+          className={cn(
+            "grid grid-cols-1 items-start gap-3 sm:grid-cols-2",
+            !open && "hidden",
+          )}
+        >
           {TEXT_FIELDS.map((f) => (
             <div key={f.key} className="space-y-1">
               <label className="text-xs font-semibold uppercase tracking-wide text-ink-muted">

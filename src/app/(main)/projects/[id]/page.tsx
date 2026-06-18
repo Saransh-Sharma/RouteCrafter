@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { useMounted } from "@/lib/hooks";
@@ -61,7 +62,13 @@ export default function ProjectWorkspacePage() {
   }, []);
 
   if (!mounted) {
-    return <div className="h-64 animate-pulse rounded-[var(--radius-card)] bg-paper-2/40" />;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-2/3" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   if (!project) {
@@ -194,11 +201,7 @@ export default function ProjectWorkspacePage() {
         </div>
       </div>
 
-      <React.Suspense
-        fallback={
-          <div className="h-96 animate-pulse bg-paper-2/40" />
-        }
-      >
+      <React.Suspense fallback={<Skeleton className="h-96 w-full" />}>
         <GuidedWorkspace project={project} />
       </React.Suspense>
 
