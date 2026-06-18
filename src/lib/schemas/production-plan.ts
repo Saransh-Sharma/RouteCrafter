@@ -34,7 +34,7 @@ export const transportModeEnum = z.enum([
 /** One stop on an edition's route: a city and the nights spent there. */
 export const routeStopSchema = z.object({
   id: z.string(),
-  city: z.string().min(1),
+  city: z.string().trim().min(1),
   nights: z.number().int().min(0).max(60).default(1),
   /** Transport used to ARRIVE here from the previous stop. Omit on the first stop. */
   arriveBy: transportModeEnum.optional(),
