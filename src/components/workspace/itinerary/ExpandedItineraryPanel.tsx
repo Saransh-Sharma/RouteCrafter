@@ -45,7 +45,7 @@ import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
 import { downloadItineraryMarkdown } from "./export-itinerary";
 import type { ExpandHint } from "@/lib/store/projects-store";
-import { itineraryBlockers, itineraryForEdition } from "@/lib/workflow";
+import { editionRoute, itineraryBlockers, itineraryForEdition } from "@/lib/workflow";
 
 const TOP_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -131,6 +131,9 @@ export function ExpandedItineraryPanel({
   }
 
   function createItinerary() {
+    const route = selectedEdition
+      ? editionRoute(project, selectedEdition)
+      : undefined;
     const itinerary = buildItinerary(
       buildContext(project, { extraCities: selectedEdition?.cities }),
       {
@@ -140,6 +143,7 @@ export function ExpandedItineraryPanel({
           selectedEdition?.travelerType ??
           (creator.travelerType as TravelerType),
         style: creator.style ? (creator.style as TravelStyle) : undefined,
+        route,
       },
     );
     itinerary.plannedEditionId = selectedEdition?.id;
