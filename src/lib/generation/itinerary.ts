@@ -4,11 +4,13 @@ import {
   type Budget,
   type Duration,
   type ItineraryOutput,
+  type RouteStop,
   type TravelStyle,
   type TravelerType,
 } from "../schemas";
 import type { GenerationContext } from "./types";
 import { list } from "./context";
+import { routeDayMap, routeSummaryText, transitionNote } from "./route-sync";
 
 export interface BuildItineraryOptions {
   duration?: Duration;
@@ -16,6 +18,8 @@ export interface BuildItineraryOptions {
   travelerType?: TravelerType;
   style?: TravelStyle;
   budget?: Budget;
+  /** Ordered, time-aware route. When set, day bases/summary follow it. */
+  route?: RouteStop[];
 }
 
 export interface ResolvedDuration {
@@ -60,10 +64,13 @@ export function buildItinerary(
 
   const cities = config.cities.length ? config.cities : project.regions;
   const country = project.country || "the country";
+  const routeMap = opts.route?.length ? routeDayMap(opts.route) : null;
 
   const days = Array.from({ length: resolvedDuration.dayCount }, (_, i) => {
     const dayNumber = i + 1;
-    const base = cities.length ? cities[i % cities.length] : country;
+    const routeDay = routeMap?.[i];
+    const base =
+      routeDay?.city ?? (cities.length ? cities[i % cities.length] : country);
     const isArrival = dayNumber === 1;
     const isDeparture = dayNumber === resolvedDuration.dayCount;
     const title = isArrival
@@ -76,6 +83,9 @@ export function buildItinerary(
       title,
       base,
       pace: config.pace,
+      transportNotes: routeDay?.arriveBy
+        ? transitionNote(base, routeDay.arriveBy)
+        : "",
       whyThisWorks: isArrival
         ? "Light first day to account for travel and jet lag."
         : "Grouped nearby sights to reduce backtracking.",
@@ -100,7 +110,11 @@ export function buildItinerary(
       style?.toLowerCase() ??
       list(config.travelStyles, "a balanced trip").toLowerCase()
     }.`,
-    routeSummary: cities.length ? cities.join(" -> ") : country,
+    routeSummary: opts.route?.length
+      ? routeSummaryText(opts.route)
+      : cities.length
+        ? cities.join(" -> ")
+        : country,
     bestStayAreas: list(config.accommodation, "central, well-connected areas"),
     days,
     createdAt: now,

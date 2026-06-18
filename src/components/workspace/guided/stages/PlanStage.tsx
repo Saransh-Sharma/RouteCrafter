@@ -1,25 +1,41 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, Lightbulb, MapPin, Plus, Route, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Lightbulb,
+  Plus,
+  Route,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import type {
   Duration,
+  ItineraryOutput,
   PlannedEdition,
   Project,
+  RouteStop,
   TravelerType,
 } from "@/lib/types";
 import { enumValues } from "@/lib/schemas";
-import { buildContext, buildMatrix } from "@/lib/generation";
+import { buildContext, buildMatrix, syncItineraryToRoute } from "@/lib/generation";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import {
+  defaultRoute,
+  editionDayCount,
   editionLabel,
+  editionRoute,
   getProjectWorkflow,
+  itineraryForEdition,
+  routeToCities,
   type WorkflowStageId,
 } from "@/lib/workflow";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, useToast } from "@/components/ui";
 import { FormField, Input, Select } from "@/components/ui/field";
 import { TagInput } from "@/components/workspace/trip-config/TagInput";
+import { RoutePlanner } from "@/components/workspace/route/RoutePlanner";
 import { StageShell } from "../StageShell";
 
 export function PlanStage({
@@ -33,6 +49,10 @@ export function PlanStage({
   ) => void;
 }) {
   const update = useProjectsStore((state) => state.update);
+  const { toast } = useToast();
+  const [confirmEditionId, setConfirmEditionId] = React.useState<string | null>(
+    null,
+  );
   const [duration, setDuration] = React.useState<Duration>(
     project.tripConfigs[0]?.duration ?? project.durations[0] ?? "7 days",
   );
@@ -75,24 +95,41 @@ export function PlanStage({
 
   function addEdition() {
     if (duplicate) return;
+    const dayCount = customDays ?? Number.parseInt(duration, 10);
     const edition = {
       id: crypto.randomUUID(),
       duration,
       customDays,
       travelerType,
       cities,
+      route: defaultRoute(baseCities, cities, dayCount),
       createdAt: new Date().toISOString(),
     } satisfies PlannedEdition;
     setEditions([...editions, edition], edition);
     setCities([]);
   }
 
-  function updateEditionCities(edition: PlannedEdition, next: string[]) {
+  function updateEditionRoute(edition: PlannedEdition, next: RouteStop[]) {
     setEditions(
       editions.map((item) =>
-        item.id === edition.id ? { ...item, cities: next } : item,
+        item.id === edition.id
+          ? { ...item, route: next, cities: routeToCities(next, baseCities) }
+          : item,
       ),
     );
+  }
+
+  function applyRouteToItinerary(
+    linked: ItineraryOutput,
+    next: ItineraryOutput,
+  ) {
+    update(project.id, {
+      itineraries: project.itineraries.map((item) =>
+        item.id === linked.id ? next : item,
+      ),
+    });
+    setConfirmEditionId(null);
+    toast("Itinerary updated to match the route");
   }
 
   function removeEdition(edition: PlannedEdition) {
@@ -219,6 +256,21 @@ export function PlanStage({
           {editions.length ? (
             editions.map((edition, index) => {
               const concepts = conceptsFor(edition).slice(0, 4);
+              const route = editionRoute(project, edition);
+              const linked = itineraryForEdition(project, edition);
+              const sync = linked ? syncItineraryToRoute(linked, route) : null;
+              const outOfSync = Boolean(
+                sync &&
+                  linked &&
+                  (sync.changedDays.length ||
+                    sync.removedDays.length ||
+                    sync.next.routeSummary !== linked.routeSummary ||
+                    sync.next.duration !== linked.duration),
+              );
+              const refreshCount = linked
+                ? linked.days.filter((day) => day.needsRefresh).length
+                : 0;
+              const showConfirm = confirmEditionId === edition.id;
               return (
                 <article
                   key={edition.id}
@@ -272,32 +324,91 @@ export function PlanStage({
                     </div>
                     <div className="mt-5">
                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                        <MapPin className="size-3.5 text-terracotta" />
-                        Cities for this edition
+                        <Route className="size-3.5 text-terracotta" />
+                        Route &amp; nights per city
                       </div>
-                      {baseCities.length ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {baseCities.map((city) => (
-                            <span
-                              key={city}
-                              className="inline-flex items-center rounded-full border border-border-soft bg-paper-2/60 px-2.5 py-1 text-xs font-medium text-ink-muted"
-                            >
-                              {city}
-                            </span>
-                          ))}
-                          <span className="text-[11px] text-ink-soft">
-                            from brief
-                          </span>
-                        </div>
-                      ) : null}
                       <div className="mt-2">
-                        <TagInput
-                          value={edition.cities}
-                          onChange={(next) => updateEditionCities(edition, next)}
-                          placeholder="Add a city for this edition"
+                        <RoutePlanner
+                          baseCities={baseCities}
+                          route={route}
+                          dayCount={editionDayCount(edition)}
+                          onChange={(next) => updateEditionRoute(edition, next)}
                         />
                       </div>
                     </div>
+
+                    {outOfSync && sync && linked ? (
+                      <div className="mt-4 rounded-2xl border border-gold/40 bg-gold-soft/30 p-4">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-gold" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-ink">
+                              This route no longer matches the itinerary
+                            </p>
+                            {showConfirm ? (
+                              <ul className="mt-2 space-y-1 text-xs leading-5 text-ink-soft">
+                                {linked.days.length !==
+                                sync.next.days.length ? (
+                                  <li>
+                                    • Day count {linked.days.length} →{" "}
+                                    {sync.next.days.length}
+                                    {sync.removedDays.length
+                                      ? ` (removes Day ${sync.removedDays.join(", ")})`
+                                      : ""}
+                                  </li>
+                                ) : null}
+                                {sync.changedDays.length ? (
+                                  <li>
+                                    • Re-bases Day{" "}
+                                    {sync.changedDays.join(", ")} to new cities
+                                  </li>
+                                ) : null}
+                                <li>• Updates route summary and transport notes</li>
+                                <li className="text-ink-muted">
+                                  Hand-written days you didn&apos;t move are kept.
+                                </li>
+                              </ul>
+                            ) : (
+                              <p className="mt-1 text-xs leading-5 text-ink-soft">
+                                Apply the route to update day count, bases,
+                                transport, and the route summary. Edited days you
+                                didn&apos;t move are preserved.
+                              </p>
+                            )}
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              {showConfirm ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      applyRouteToItinerary(linked, sync.next)
+                                    }
+                                  >
+                                    Apply changes
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setConfirmEditionId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setConfirmEditionId(edition.id)}
+                                >
+                                  Apply to itinerary
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() =>
@@ -311,6 +422,12 @@ export function PlanStage({
                       {edition.itineraryId
                         ? "Continue itinerary"
                         : "Start itinerary"}
+                      {refreshCount ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-brown">
+                          <Sparkles className="size-3" />
+                          {refreshCount} to refresh
+                        </span>
+                      ) : null}
                       <ArrowRight className="size-4" />
                     </button>
                   </div>

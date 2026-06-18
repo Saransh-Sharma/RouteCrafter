@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import type { DayPlan } from "@/lib/types";
@@ -52,7 +53,8 @@ export function DayCard({
   const [open, setOpen] = React.useState(false);
 
   function set<K extends keyof DayPlan>(key: K, value: DayPlan[K]) {
-    onChange({ ...day, [key]: value });
+    // A manual edit reconciles the day with its new city, so clear the flag.
+    onChange({ ...day, [key]: value, needsRefresh: false });
   }
 
   const complete = Boolean(
@@ -69,8 +71,26 @@ export function DayCard({
       .join(" · ") || "No activities yet";
 
   return (
-    <Card>
+    <Card className={cn(day.needsRefresh && "border-gold/50")}>
       <CardContent className="space-y-4 p-5">
+        {day.needsRefresh ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-gold-soft bg-gold-soft/40 px-3 py-2 text-xs text-ink-soft sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="size-3.5 shrink-0 text-gold" />
+              Re-based to <strong className="text-ink">{day.base || "a new city"}</strong> — the
+              text below may still reference the previous city.
+            </span>
+            {onAiImprove ? (
+              <button
+                type="button"
+                onClick={onAiImprove}
+                className="shrink-0 self-start font-semibold text-forest hover:text-forest-deep sm:self-auto"
+              >
+                Refresh with AI
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <button
             type="button"

@@ -32,6 +32,11 @@ export const dayPlanSchema = z.object({
   whyThisWorks: z.string().default(""),
   /** Optional illustration for this day (data URL or remote URL). */
   image: z.string().default(""),
+  /**
+   * Set true when a route change re-based this day to a new city, so its prose
+   * may still reference the old one. Cleared after an AI refresh or manual edit.
+   */
+  needsRefresh: z.boolean().default(false),
 });
 
 export type DayPlan = z.infer<typeof dayPlanSchema>;

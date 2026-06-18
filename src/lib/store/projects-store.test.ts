@@ -111,6 +111,7 @@ describe("projects store mutations", () => {
               rainyDayAlternative: "",
               whyThisWorks: "",
               image: "",
+              needsRefresh: false,
             },
           ],
           foodGuide: "",

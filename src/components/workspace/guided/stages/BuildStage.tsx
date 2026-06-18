@@ -7,6 +7,7 @@ import { buildContext, buildItinerary } from "@/lib/generation";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import {
   editionLabel,
+  editionRoute,
   getProjectWorkflow,
   itineraryBlockers,
   itineraryForEdition,
@@ -58,6 +59,7 @@ export function BuildStage({
           duration: edition.duration,
           customDays: edition.customDays,
           travelerType: edition.travelerType,
+          route: editionRoute(project, edition),
         },
       );
       itinerary.plannedEditionId = edition.id;
