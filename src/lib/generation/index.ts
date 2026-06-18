@@ -33,4 +33,11 @@ export type {
   BuildItineraryOptions,
   ResolvedDuration,
 } from "./itinerary";
+export {
+  routeDayMap,
+  routeSummaryText,
+  syncItineraryToRoute,
+  transitionNote,
+} from "./route-sync";
+export type { RouteDay, RouteSyncResult } from "./route-sync";
 export { buildListing } from "./listing";
