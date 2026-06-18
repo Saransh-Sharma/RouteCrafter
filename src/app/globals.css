@@ -148,6 +148,75 @@
     );
   }
 
+  /*
+    Type scale — a single source of truth for headings so titles stop
+    ranging arbitrarily between text-xl and text-4xl across stages.
+    Headings already inherit the serif display face from the base layer.
+  */
+  .rc-eyebrow {
+    font-size: 0.6875rem; /* 11px */
+    line-height: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--rc-terracotta);
+  }
+
+  .rc-display {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 1.4rem + 2.4vw, 2.75rem);
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--rc-ink);
+  }
+
+  .rc-stage-title {
+    font-family: var(--font-serif);
+    font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.25rem);
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    color: var(--rc-ink);
+  }
+
+  .rc-section-title {
+    font-family: var(--font-serif);
+    font-size: 1.25rem; /* 20px */
+    line-height: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--rc-ink);
+  }
+
+  .rc-label {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.25rem;
+    font-weight: 600;
+    color: var(--rc-ink);
+  }
+
+  /* Shimmer used by the Skeleton loading primitive */
+  .rc-skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--rc-paper-2);
+  }
+
+  .rc-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(251, 248, 241, 0.65),
+      transparent
+    );
+    animation: rc-shimmer 1.4s ease-in-out infinite;
+  }
+
   /* Animation utilities */
   .animate-in {
     animation-duration: 150ms;
@@ -204,6 +273,12 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes rc-shimmer {
+  100% {
+    transform: translateX(100%);
   }
 }
 

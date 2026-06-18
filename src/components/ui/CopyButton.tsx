@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "./Toast";
 
 export interface CopyButtonProps {
   value: string;
@@ -12,14 +13,16 @@ export interface CopyButtonProps {
 
 export function CopyButton({ value, label = "Copy", className }: CopyButtonProps) {
   const [copied, setCopied] = React.useState(false);
+  const { toast } = useToast();
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      toast("Copied to clipboard");
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Clipboard can fail in restricted contexts; fail silently for now.
+      toast("Couldn't copy to clipboard", "error");
     }
   }
 

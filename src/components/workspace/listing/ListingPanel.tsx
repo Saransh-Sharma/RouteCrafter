@@ -16,6 +16,7 @@ import { marketplaceListingSchema } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui";
 import { FormField, Input, Select, Textarea } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
 import { AiRunSheet } from "@/components/ai/AiRunSheet";
@@ -36,6 +37,7 @@ export function ListingPanel({
   showReadyAction?: boolean;
 }) {
   const update = useProjectsStore((s) => s.update);
+  const { toast } = useToast();
   const listing = project.listing;
   const [aiOpen, setAiOpen] = React.useState(false);
   const [aiFocus, setAiFocus] = React.useState("Improve the complete listing.");
@@ -61,6 +63,7 @@ export function ListingPanel({
 
   function markReadyToSell() {
     update(project.id, { status: "Ready to sell" });
+    toast("Marked ready to sell 🎉");
   }
 
   function normalizeListing(text: string): MarketplaceListing {
