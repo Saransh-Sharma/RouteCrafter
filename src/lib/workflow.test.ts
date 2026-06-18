@@ -3,9 +3,14 @@ import { buildContext, buildItinerary, buildListing } from "./generation";
 import { normalizeProject } from "./project-normalization";
 import { createEmptyTripConfig, projectSchema } from "./schemas";
 import {
+  dayRangeForStop,
+  defaultRoute,
   getProjectWorkflow,
   itineraryBlockers,
+  normalizeRoute,
   readinessFingerprint,
+  routeNights,
+  routeToCities,
 } from "./workflow";
 
 const now = "2026-06-13T10:00:00.000Z";
@@ -152,5 +157,51 @@ describe("project workflow", () => {
     expect(
       readinessFingerprint({ ...reviewed, positioning: "A different promise." }),
     ).not.toBe(readinessFingerprint(project));
+  });
+});
+
+describe("route helpers", () => {
+  it("defaultRoute spreads nights evenly, remainder to earliest stops", () => {
+    const route = defaultRoute(["Tokyo", "Kyoto", "Osaka"], [], 7);
+    expect(route.map((s) => s.city)).toEqual(["Tokyo", "Kyoto", "Osaka"]);
+    expect(route.map((s) => s.nights)).toEqual([3, 2, 2]);
+    expect(routeNights(route)).toBe(7);
+    expect(route[0].arriveBy).toBeUndefined();
+    expect(route[1].arriveBy).toBe("train");
+  });
+
+  it("defaultRoute merges brief cities with extras and de-dupes", () => {
+    const route = defaultRoute(["Tokyo"], ["Tokyo", "Kyoto"], 4);
+    expect(route.map((s) => s.city)).toEqual(["Tokyo", "Kyoto"]);
+    expect(routeNights(route)).toBe(4);
+  });
+
+  it("dayRangeForStop is cumulative (2+2+1 => 1-2 / 3-4 / 5)", () => {
+    const route = [
+      { id: "a", city: "Tokyo", nights: 2 },
+      { id: "b", city: "Kyoto", nights: 2, arriveBy: "train" as const },
+      { id: "c", city: "Osaka", nights: 1, arriveBy: "flight" as const },
+    ];
+    expect(dayRangeForStop(route, 0)).toEqual({ start: 1, end: 2 });
+    expect(dayRangeForStop(route, 1)).toEqual({ start: 3, end: 4 });
+    expect(dayRangeForStop(route, 2)).toEqual({ start: 5, end: 5 });
+  });
+
+  it("routeToCities returns only stops beyond the brief", () => {
+    const route = [
+      { id: "a", city: "Tokyo", nights: 2 },
+      { id: "b", city: "Kyoto", nights: 2 },
+      { id: "c", city: "Hakone", nights: 1 },
+    ];
+    expect(routeToCities(route, ["Tokyo", "Kyoto"])).toEqual(["Hakone"]);
+  });
+
+  it("normalizeRoute clears the first leg and back-fills the rest", () => {
+    const route = normalizeRoute([
+      { id: "a", city: "Tokyo", nights: 2, arriveBy: "flight" as const },
+      { id: "b", city: "Kyoto", nights: 2 },
+    ]);
+    expect(route[0].arriveBy).toBeUndefined();
+    expect(route[1].arriveBy).toBe("train");
   });
 });
