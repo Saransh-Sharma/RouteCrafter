@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, CircleAlert } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CircleAlert,
+  Loader2,
+} from "lucide-react";
 import type { Project } from "@/lib/types";
 import {
   WORKFLOW_STAGE_ORDER,
@@ -15,7 +22,6 @@ import { PlanStage } from "./stages/PlanStage";
 import { BuildStage } from "./stages/BuildStage";
 import { PackageStage } from "./stages/PackageStage";
 import { PublishStage } from "./stages/PublishStage";
-import { NextActionCard } from "./NextActionCard";
 
 const VALID_STAGES = new Set<WorkflowStageId>(WORKFLOW_STAGE_ORDER);
 
@@ -36,35 +42,34 @@ export function GuidedWorkspace({ project }: { project: Project }) {
       stage: WorkflowStageId,
       params: Record<string, string | undefined> = {},
     ) => {
+      const previousStage = searchParams.get("stage");
       const next = new URLSearchParams(searchParams.toString());
       next.set("stage", stage);
       for (const [key, value] of Object.entries(params)) {
         if (value) next.set(key, value);
         else next.delete(key);
       }
-      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      // Real history entries so browser Back/Forward traverse stages.
+      router.push(`${pathname}?${next.toString()}`, { scroll: false });
+      // Only jump to the top when the stage itself changes, not when
+      // switching editions/tools within a stage.
+      if (previousStage !== stage) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     },
     [pathname, router, searchParams],
   );
 
-  const goNext = () => {
-    const nextStage =
-      activeStage === workflow.recommendedStage
-        ? workflow.recommendedStage
-        : WORKFLOW_STAGE_ORDER[Math.min(activeIndex + 1, 4)];
-    navigate(nextStage);
-  };
+  const goNext = () =>
+    navigate(WORKFLOW_STAGE_ORDER[Math.min(activeIndex + 1, 4)]);
 
   return (
     <div className="space-y-7">
-      <RouteLine
+      <StageRail
         activeStage={activeStage}
         project={project}
         onNavigate={navigate}
       />
-
-      <NextActionCard project={project} workflow={workflow} onNavigate={navigate} />
 
       <div key={activeStage} className="animate-in fade-in slide-in-from-bottom-2">
         {activeStage === "define" ? (
@@ -101,10 +106,11 @@ export function GuidedWorkspace({ project }: { project: Project }) {
         </button>
         <button
           type="button"
+          disabled={activeIndex === 4}
           onClick={goNext}
-          className="inline-flex h-11 items-center gap-2 rounded-full bg-forest px-6 text-sm font-semibold text-paper hover:bg-forest-deep"
+          className="inline-flex h-11 items-center gap-2 rounded-full bg-forest px-6 text-sm font-semibold text-paper hover:bg-forest-deep disabled:opacity-40"
         >
-          {activeIndex === 4 ? "Review readiness" : "Continue"}
+          {activeIndex === 4 ? "Final stage" : "Continue"}
           <ArrowRight className="size-4" />
         </button>
       </div>
@@ -121,7 +127,11 @@ export function GuidedWorkspace({ project }: { project: Project }) {
         </button>
         <button
           type="button"
-          onClick={goNext}
+          onClick={() =>
+            activeStage === workflow.recommendedStage
+              ? navigate(workflow.recommendedStage)
+              : goNext()
+          }
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-forest px-5 text-sm font-semibold text-paper"
         >
           {activeStage === workflow.recommendedStage
@@ -134,7 +144,7 @@ export function GuidedWorkspace({ project }: { project: Project }) {
   );
 }
 
-function RouteLine({
+function StageRail({
   project,
   activeStage,
   onNavigate,
@@ -145,90 +155,150 @@ function RouteLine({
 }) {
   const workflow = getProjectWorkflow(project);
   const activeIndex = WORKFLOW_STAGE_ORDER.indexOf(activeStage);
+  const onRecommended = activeStage === workflow.recommendedStage;
 
   return (
-    <>
-      <div className="sm:hidden">
-        <label
-          htmlFor="workspace-stage"
-          className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted"
-        >
-          Stage {activeIndex + 1} of 5
-        </label>
-        <select
-          id="workspace-stage"
-          value={activeStage}
-          onChange={(event) =>
-            onNavigate(event.target.value as WorkflowStageId)
-          }
-          className="h-12 w-full rounded-xl border border-border-strong bg-paper px-4 text-sm font-semibold text-ink outline-none focus:border-forest"
-        >
-          {workflow.stages.map((stage, index) => (
-            <option key={stage.id} value={stage.id}>
-              {index + 1}. {stage.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="sticky top-0 z-30 -mx-5 border-b border-border-soft bg-ivory/85 px-5 backdrop-blur sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+      <div className="flex items-center gap-4 py-3">
+        {/* Mobile: stage select */}
+        <div className="flex-1 sm:hidden">
+          <label htmlFor="workspace-stage" className="sr-only">
+            Current stage
+          </label>
+          <select
+            id="workspace-stage"
+            value={activeStage}
+            onChange={(event) =>
+              onNavigate(event.target.value as WorkflowStageId)
+            }
+            className="h-10 w-full rounded-xl border border-border-strong bg-paper px-3 text-sm font-semibold text-ink outline-none focus:border-forest"
+          >
+            {workflow.stages.map((stage, index) => (
+              <option key={stage.id} value={stage.id}>
+                {index + 1}. {stage.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <nav aria-label="Production stages" className="hidden sm:block">
-        <ol className="grid grid-cols-5">
-          {workflow.stages.map((stage, index) => {
-            const active = stage.id === activeStage;
-            const complete = stage.status === "complete";
-            const attention = stage.status === "needs-attention";
-            return (
-              <li key={stage.id} className="relative">
-                {index < workflow.stages.length - 1 ? (
-                  <span
-                    className={cn(
-                      "absolute left-1/2 right-[-50%] top-5 h-px",
-                      complete ? "bg-forest/60" : "bg-border-strong",
-                    )}
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => onNavigate(stage.id)}
-                  className="group relative flex w-full flex-col items-center px-2 text-center"
-                >
-                  <span
-                    className={cn(
-                      "relative z-10 flex size-10 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
-                      active
-                        ? "border-forest bg-forest text-paper"
-                        : complete
-                          ? "border-forest bg-sage-soft text-forest"
-                          : attention
-                            ? "border-terracotta/60 bg-terracotta-soft text-terracotta"
-                            : "border-border-strong bg-ivory text-ink-muted group-hover:border-forest/40",
-                    )}
+        {/* Desktop: compact stepper */}
+        <nav aria-label="Production stages" className="hidden flex-1 sm:block">
+          <ol role="tablist" className="flex items-center">
+            {workflow.stages.map((stage, index) => {
+              const active = stage.id === activeStage;
+              const complete = stage.status === "complete";
+              const attention = stage.status === "needs-attention";
+              return (
+                <li key={stage.id} className="flex flex-1 items-center last:flex-none">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => onNavigate(stage.id)}
+                    className="group flex items-center gap-2 rounded-full px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage"
                   >
-                    {complete ? (
-                      <Check className="size-4" />
-                    ) : attention ? (
-                      <CircleAlert className="size-4" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "mt-2 text-xs font-semibold",
-                      active ? "text-ink" : "text-ink-soft",
-                    )}
-                  >
-                    {stage.shortLabel}
-                  </span>
-                  <span className="mt-0.5 text-[10px] capitalize text-ink-muted">
-                    {stage.status.replace("-", " ")}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-    </>
+                    <span
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+                        active
+                          ? "border-forest bg-forest text-paper"
+                          : complete
+                            ? "border-forest bg-sage-soft text-forest"
+                            : attention
+                              ? "border-terracotta/60 bg-terracotta-soft text-terracotta"
+                              : "border-border-strong bg-paper text-ink-muted group-hover:border-forest/40",
+                      )}
+                    >
+                      {complete ? (
+                        <Check className="size-4" />
+                      ) : attention ? (
+                        <CircleAlert className="size-4" />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "hidden text-sm font-semibold lg:inline",
+                        active ? "text-ink" : "text-ink-soft",
+                      )}
+                    >
+                      {stage.shortLabel}
+                    </span>
+                  </button>
+                  {index < workflow.stages.length - 1 ? (
+                    <span
+                      className={cn(
+                        "mx-2 h-px flex-1",
+                        complete ? "bg-forest/50" : "bg-border-strong",
+                      )}
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <div className="flex shrink-0 items-center gap-3">
+          <SaveChip />
+          {!onRecommended ? (
+            <button
+              type="button"
+              onClick={() => onNavigate(workflow.recommendedStage)}
+              className="hidden items-center gap-1.5 rounded-full bg-forest px-3.5 py-1.5 text-xs font-semibold text-paper transition-colors hover:bg-forest-deep lg:inline-flex"
+            >
+              Next: {workflow.recommendedAction}
+              <ArrowRight className="size-3.5" />
+            </button>
+          ) : activeIndex < 4 ? (
+            <span className="hidden text-xs font-medium text-ink-muted lg:inline">
+              {workflow.progress}% to launch
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+function SaveChip() {
+  const [status, setStatus] = React.useState<SaveStatus>("saved");
+
+  React.useEffect(() => {
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent<{ status: SaveStatus }>).detail;
+      setStatus(detail?.status ?? "saved");
+    };
+    window.addEventListener("routecrafter:save-state", handle);
+    return () =>
+      window.removeEventListener("routecrafter:save-state", handle);
+  }, []);
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium",
+        status === "error" ? "text-terracotta" : "text-ink-muted",
+      )}
+      aria-live="polite"
+    >
+      {status === "saving" ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : status === "error" ? (
+        <AlertCircle className="size-3.5" />
+      ) : (
+        <Check className="size-3.5 text-forest" />
+      )}
+      <span className="hidden sm:inline">
+        {status === "saving"
+          ? "Saving"
+          : status === "error"
+            ? "Save failed"
+            : "Saved"}
+      </span>
+    </span>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import type {
   OfferModel,
   OutputRequirement,
@@ -13,8 +13,7 @@ import {
   OUTPUT_LABELS,
   type WorkflowStageId,
 } from "@/lib/workflow";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import { CheckRow, SelectableCard } from "@/components/ui";
 import {
   CheckboxChip,
   FormField,
@@ -23,7 +22,7 @@ import {
   Textarea,
 } from "@/components/ui/field";
 import { TripConfigForm } from "../../trip-config/TripConfigForm";
-import { StageHeader } from "./StageHeader";
+import { StageShell } from "../StageShell";
 
 const OFFER_MODELS: {
   id: OfferModel;
@@ -85,7 +84,10 @@ export function DefineStage({
   onNavigate,
 }: {
   project: Project;
-  onNavigate: (stage: WorkflowStageId) => void;
+  onNavigate: (
+    stage: WorkflowStageId,
+    params?: Record<string, string | undefined>,
+  ) => void;
 }) {
   const update = useProjectsStore((state) => state.update);
   const plan = project.productionPlan;
@@ -124,75 +126,52 @@ export function DefineStage({
   }
 
   return (
-    <div className="space-y-9">
-      <StageHeader
-        eyebrow="Stage 1 · Define"
-        title="Decide what you are selling"
-        description="Start with the commercial promise, then shape the trip brief behind it. These choices control which assets RouteCrafter expects before launch."
-        completed={stage?.completed}
-        total={stage?.total}
-        blockers={workflow.blockers.filter((issue) => issue.stage === "define")}
-        aside={
-          <div className="text-right">
-            <p className="text-sm font-semibold text-ink">
-              {OFFER_MODELS.find((model) => model.id === plan.offerModel)?.label}
-            </p>
-            <p className="mt-1 text-xs text-ink-muted">
-              {plan.outputs.length} launch outputs selected
-            </p>
-          </div>
-        }
-      />
-
+    <StageShell
+      eyebrow="Stage 1 · Define"
+      title="Decide what you are selling"
+      description="Start with the commercial promise, then shape the trip brief behind it. These choices control which assets RouteCrafter expects before launch."
+      progress={
+        stage ? { completed: stage.completed, total: stage.total } : undefined
+      }
+      blockers={workflow.blockers.filter((issue) => issue.stage === "define")}
+      onBlockerNavigate={(issue) =>
+        onNavigate(issue.stage, { tool: issue.tool })
+      }
+      aside={
+        <div className="text-right">
+          <p className="rc-label">
+            {OFFER_MODELS.find((model) => model.id === plan.offerModel)?.label}
+          </p>
+          <p className="mt-1 text-xs text-ink-muted">
+            {plan.outputs.length} launch outputs selected
+          </p>
+        </div>
+      }
+    >
+      <div className="space-y-9">
       <section className="space-y-4">
         <div>
-          <h3 className="text-xl font-semibold text-ink">Offer model</h3>
+          <h3 className="rc-section-title">Offer model</h3>
           <p className="mt-1 text-sm text-ink-soft">
             Pick the closest business model. You can change it later.
           </p>
         </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {OFFER_MODELS.map((model) => {
-            const selected = plan.offerModel === model.id;
-            return (
-              <button
-                key={model.id}
-                type="button"
-                onClick={() => chooseOfferModel(model.id)}
-                className={cn(
-                  "min-h-36 border px-5 py-5 text-left transition-colors",
-                  selected
-                    ? "border-forest bg-sage-soft/70"
-                    : "border-border-soft bg-paper/35 hover:border-forest/35 hover:bg-paper/70",
-                )}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-base font-semibold text-ink">
-                    {model.label}
-                  </span>
-                  <span
-                    className={cn(
-                      "flex size-5 items-center justify-center rounded-full border",
-                      selected
-                        ? "border-forest bg-forest text-paper"
-                        : "border-border-strong",
-                    )}
-                  >
-                    {selected ? <Check className="size-3" /> : null}
-                  </span>
-                </span>
-                <span className="mt-3 block text-sm leading-6 text-ink-soft">
-                  {model.description}
-                </span>
-              </button>
-            );
-          })}
+        <div className="grid gap-3 lg:grid-cols-3" role="radiogroup" aria-label="Offer model">
+          {OFFER_MODELS.map((model) => (
+            <SelectableCard
+              key={model.id}
+              title={model.label}
+              description={model.description}
+              selected={plan.offerModel === model.id}
+              onSelect={() => chooseOfferModel(model.id)}
+            />
+          ))}
         </div>
       </section>
 
       <section className="grid gap-8 border-y border-border-soft py-8 lg:grid-cols-[1fr_1.4fr]">
         <div>
-          <h3 className="text-xl font-semibold text-ink">Where it will sell</h3>
+          <h3 className="rc-section-title">Where it will sell</h3>
           <p className="mt-2 max-w-md text-sm leading-6 text-ink-soft">
             Channel choices tune package and intake requirements without locking
             the project to one marketplace.
@@ -278,7 +257,7 @@ export function DefineStage({
 
       <section className="space-y-5">
         <div>
-          <h3 className="text-xl font-semibold text-ink">Output package</h3>
+          <h3 className="rc-section-title">Output package</h3>
           <p className="mt-1 text-sm text-ink-soft">
             Select only what you intend to finish. Every selected output becomes
             part of the publish review.
@@ -287,7 +266,7 @@ export function DefineStage({
         <div className="grid gap-x-10 gap-y-7 lg:grid-cols-3">
           {OUTPUT_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="text-sm font-semibold text-ink">{group.label}</p>
+              <p className="rc-label">{group.label}</p>
               <p className="mt-1 text-xs leading-5 text-ink-muted">
                 {group.description}
               </p>
@@ -296,29 +275,13 @@ export function DefineStage({
                   const selected = plan.outputs.includes(output);
                   const required = output === "marketplace-listing";
                   return (
-                    <button
+                    <CheckRow
                       key={output}
-                      type="button"
+                      label={OUTPUT_LABELS[output]}
+                      selected={selected}
                       disabled={required}
-                      aria-pressed={selected}
-                      onClick={() => toggleOutput(output)}
-                      className={cn(
-                        "flex w-full items-center justify-between border-b border-border-soft py-2 text-left text-sm",
-                        selected ? "text-ink" : "text-ink-muted",
-                      )}
-                    >
-                      <span>{OUTPUT_LABELS[output]}</span>
-                      <span
-                        className={cn(
-                          "flex size-5 items-center justify-center rounded-sm border",
-                          selected
-                            ? "border-forest bg-forest text-paper"
-                            : "border-border-strong",
-                        )}
-                      >
-                        {selected ? <Check className="size-3" /> : null}
-                      </span>
-                    </button>
+                      onToggle={() => toggleOutput(output)}
+                    />
                   );
                 })}
               </div>
@@ -348,13 +311,7 @@ export function DefineStage({
           <TripConfigForm project={project} showDeliverables={false} />
         </div>
       </details>
-
-      <div className="flex justify-end">
-        <Button onClick={() => onNavigate("plan")}>
-          Plan the editions
-          <ArrowRight className="size-4" />
-        </Button>
       </div>
-    </div>
+    </StageShell>
   );
 }

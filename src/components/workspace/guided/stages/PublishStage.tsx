@@ -10,8 +10,9 @@ import {
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui";
 import { downloadProjectJson } from "@/lib/io/project-io";
-import { StageHeader } from "./StageHeader";
+import { StageShell } from "../StageShell";
 
 export function PublishStage({
   project,
@@ -24,7 +25,9 @@ export function PublishStage({
   ) => void;
 }) {
   const update = useProjectsStore((state) => state.update);
+  const { toast } = useToast();
   const workflow = getProjectWorkflow(project);
+  const publishStage = workflow.stages.find((item) => item.id === "publish");
   const review = project.productionPlan.review;
   const confirmationsComplete =
     review.liveDataVerified &&
@@ -54,27 +57,26 @@ export function PublishStage({
         },
       },
     });
+    toast("Marked ready to sell 🎉");
   }
 
   return (
-    <div className="space-y-9">
-      <StageHeader
-        eyebrow="Stage 5 · Publish"
-        title="Review the launch package"
-        description="RouteCrafter separates launch blockers from useful improvements. Resolve the essentials, make the final confirmations, then publish with confidence."
-        completed={workflow.stages.find((item) => item.id === "publish")?.completed}
-        total={workflow.stages.find((item) => item.id === "publish")?.total}
-        blockers={workflow.blockers.filter((issue) => issue.stage === "publish")}
-        aside={
-          <div className="min-w-44 text-right">
-            <p className="text-3xl font-semibold text-ink">
-              {workflow.progress}%
-            </p>
-            <p className="text-xs text-ink-muted">launch checks complete</p>
-          </div>
-        }
-      />
-
+    <StageShell
+      eyebrow="Stage 5 · Publish"
+      title="Review the launch package"
+      description="RouteCrafter separates launch blockers from useful improvements. Resolve the essentials, make the final confirmations, then publish with confidence."
+      progress={
+        publishStage
+          ? { completed: publishStage.completed, total: publishStage.total }
+          : undefined
+      }
+      aside={
+        <div className="min-w-44 text-right">
+          <p className="rc-display text-4xl">{workflow.progress}%</p>
+          <p className="text-xs text-ink-muted">launch checks complete</p>
+        </div>
+      }
+    >
       <div className="grid gap-7 lg:grid-cols-[1fr_340px]">
         <div className="space-y-8">
           <ReviewSection
@@ -98,7 +100,7 @@ export function PublishStage({
         <aside className="border border-border-strong bg-paper/55 p-5 lg:sticky lg:top-6 lg:self-start">
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-5 text-forest" />
-            <h3 className="text-lg font-semibold text-ink">Final confirmations</h3>
+            <h3 className="rc-section-title text-lg">Final confirmations</h3>
           </div>
           <p className="mt-2 text-xs leading-5 text-ink-muted">
             These checks are intentionally manual. RouteCrafter cannot verify live
@@ -153,7 +155,7 @@ export function PublishStage({
           ) : null}
         </aside>
       </div>
-    </div>
+    </StageShell>
   );
 }
 
@@ -178,7 +180,7 @@ function ReviewSection({
   return (
     <section>
       <div className="flex items-baseline justify-between border-b border-border-strong pb-3">
-        <h3 className="text-xl font-semibold text-ink">{title}</h3>
+        <h3 className="rc-section-title">{title}</h3>
         <span className="text-xs font-semibold text-ink-muted">{count}</span>
       </div>
       {issues.length ? (
