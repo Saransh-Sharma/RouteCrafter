@@ -38,6 +38,8 @@ export type {
   OfferModel,
   SalesChannel,
   OutputRequirement,
+  TransportMode,
+  RouteStop,
   PlannedEdition,
   PublishReview,
   ProductionPlan,
