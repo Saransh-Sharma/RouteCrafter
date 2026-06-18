@@ -45,11 +45,7 @@ import { PromptHelper } from "../PromptHelper";
 import { DayCard } from "./DayCard";
 import { downloadItineraryMarkdown } from "./export-itinerary";
 import type { ExpandHint } from "@/lib/store/projects-store";
-import {
-  editionLabel,
-  itineraryBlockers,
-  itineraryForEdition,
-} from "@/lib/workflow";
+import { itineraryBlockers, itineraryForEdition } from "@/lib/workflow";
 
 const TOP_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -367,63 +363,73 @@ export function ExpandedItineraryPanel({
         )
       : buildItineraryPrompt(project, selected, aiTarget?.focus);
 
+  const SECTIONS: [string, string][] = [
+    ["overview", "Overview"],
+    ["days", "Daily plan"],
+    ["guides", "Included guides"],
+    ["quality", "Quality notes"],
+  ];
+  const editionBlockers = selectedEdition
+    ? itineraryBlockers(project, selectedEdition)
+    : [];
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-      {/* Sidebar: itinerary list + creator */}
-      <aside className="space-y-3 lg:col-span-1">
-        {selectedEdition ? (
-          <>
-            <div className="border-b border-border-strong pb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-terracotta">
-                Current edition
-              </p>
-              <p className="mt-1 text-sm font-semibold text-ink">
-                {editionLabel(selectedEdition)}
-              </p>
-            </div>
-            <nav className="space-y-1" aria-label="Itinerary sections">
-              {[
-                ["overview", "Overview"],
-                ["days", "Daily plan"],
-                ["guides", "Included guides"],
-                ["quality", "Quality notes"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onSectionChange?.(id)}
-                  className={cn(
-                    "flex w-full items-center justify-between border-b border-border-soft px-2 py-3 text-left text-sm font-medium",
-                    activeSection === id
-                      ? "bg-sage-soft/70 text-forest"
-                      : "text-ink-soft hover:text-ink",
-                  )}
-                >
-                  {label}
-                  {id === "quality" &&
-                  itineraryBlockers(project, selectedEdition).length ? (
-                    <CircleAlert className="size-3.5 text-terracotta" />
-                  ) : null}
-                </button>
-              ))}
-            </nav>
-            <div className="mt-5 border border-border-soft bg-paper/45 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                Launch checklist
-              </p>
+    <div className="space-y-6">
+      {selectedEdition ? (
+        <div className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-border-soft bg-paper/90 p-2 backdrop-blur">
+          <div
+            role="tablist"
+            aria-label="Itinerary sections"
+            className="flex flex-1 flex-wrap gap-1"
+          >
+            {SECTIONS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={activeSection === id}
+                onClick={() => onSectionChange?.(id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage",
+                  activeSection === id
+                    ? "bg-sage-soft/80 text-forest"
+                    : "text-ink-soft hover:bg-paper-2/60 hover:text-ink",
+                )}
+              >
+                {label}
+                {id === "quality" && editionBlockers.length ? (
+                  <CircleAlert className="size-3.5 text-terracotta" />
+                ) : null}
+              </button>
+            ))}
+          </div>
+          <details className="group relative">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-paper-2/60">
+              {editionBlockers.length ? (
+                <>
+                  <CircleAlert className="size-3.5 text-terracotta" />
+                  {editionBlockers.length} to finish
+                </>
+              ) : (
+                <>
+                  <Check className="size-3.5 text-forest" />
+                  Edition complete
+                </>
+              )}
+            </summary>
+            <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-border-strong bg-paper p-4 shadow-[var(--shadow-lift)]">
+              <p className="rc-eyebrow text-ink-muted">Launch checklist</p>
               <div className="mt-3 space-y-2">
-                {itineraryBlockers(project, selectedEdition).length ? (
-                  itineraryBlockers(project, selectedEdition)
-                    .slice(0, 5)
-                    .map((blocker) => (
-                      <p
-                        key={blocker}
-                        className="flex items-start gap-2 text-xs leading-5 text-ink-soft"
-                      >
-                        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-terracotta" />
-                        {blocker}
-                      </p>
-                    ))
+                {editionBlockers.length ? (
+                  editionBlockers.map((blocker) => (
+                    <p
+                      key={blocker}
+                      className="flex items-start gap-2 text-xs leading-5 text-ink-soft"
+                    >
+                      <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-terracotta" />
+                      {blocker}
+                    </p>
+                  ))
                 ) : (
                   <p className="flex items-center gap-2 text-xs text-forest">
                     <Check className="size-3.5" />
@@ -432,19 +438,28 @@ export function ExpandedItineraryPanel({
                 )}
               </div>
             </div>
-          </>
-        ) : (
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => setCreator((c) => ({ ...c, open: !c.open }))}
-          >
-            <Plus className="size-4" />
-            New itinerary
-          </Button>
-        )}
+          </details>
+        </div>
+      ) : null}
 
-        {!selectedEdition && creator.open ? (
+      <div
+        className={cn(
+          selectedEdition ? "" : "grid grid-cols-1 gap-6 lg:grid-cols-4",
+        )}
+      >
+        {/* Standalone sidebar: itinerary list + creator (hidden in edition mode) */}
+        {!selectedEdition ? (
+          <aside className="space-y-3 lg:col-span-1">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => setCreator((c) => ({ ...c, open: !c.open }))}
+            >
+              <Plus className="size-4" />
+              New itinerary
+            </Button>
+
+            {creator.open ? (
           <Card>
             <CardContent className="space-y-3 p-4">
               <FormField label="Duration">
@@ -504,30 +519,33 @@ export function ExpandedItineraryPanel({
               </Button>
             </CardContent>
           </Card>
+            ) : null}
+
+            <div className="space-y-1.5">
+              {itineraries.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => setSelectedId(it.id)}
+                  className={cn(
+                    "flex w-full flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
+                    it.id === selected?.id
+                      ? "bg-sage-soft text-forest"
+                      : "text-ink-soft hover:bg-paper-2/70 hover:text-ink",
+                  )}
+                >
+                  <span className="font-medium">{it.duration}</span>
+                  <span className="text-xs text-ink-muted">
+                    {it.travelerType}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
         ) : null}
 
-        {!selectedEdition ? <div className="space-y-1.5">
-          {itineraries.map((it) => (
-            <button
-              key={it.id}
-              type="button"
-              onClick={() => setSelectedId(it.id)}
-              className={cn(
-                "flex w-full flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
-                it.id === selected?.id
-                  ? "bg-sage-soft text-forest"
-                  : "text-ink-soft hover:bg-paper-2/70 hover:text-ink",
-              )}
-            >
-              <span className="font-medium">{it.duration}</span>
-              <span className="text-xs text-ink-muted">{it.travelerType}</span>
-            </button>
-          ))}
-        </div> : null}
-      </aside>
-
-      {/* Editor */}
-      <div className="lg:col-span-3">
+        {/* Editor */}
+        <div className={cn(selectedEdition ? "" : "lg:col-span-3")}>
         {selected ? (
           <div className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -705,6 +723,7 @@ export function ExpandedItineraryPanel({
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
       <AiRunSheet
         open={Boolean(aiTarget)}
