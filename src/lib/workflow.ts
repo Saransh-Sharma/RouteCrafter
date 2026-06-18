@@ -154,7 +154,9 @@ export function defaultRoute(
   extra: string[],
   dayCount: number,
 ): RouteStop[] {
-  const cities = [...new Set([...baseCities, ...extra].filter(Boolean))];
+  const cities = [
+    ...new Set([...baseCities, ...extra].map((c) => c.trim()).filter(Boolean)),
+  ];
   const count = cities.length;
   if (!count) return [];
   const each = Math.floor(dayCount / count);
