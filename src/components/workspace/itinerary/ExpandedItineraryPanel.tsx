@@ -770,6 +770,23 @@ export function ExpandedItineraryPanel({
         applyLabel={aiTarget?.kind === "day" ? "Replace day" : "Replace itinerary"}
         fillEmptyLabel="Fill empty fields"
         appendLabel="Append to fields"
+        instructionsPlaceholder={
+          aiTarget?.kind === "day"
+            ? "e.g. Make the afternoon less walking-heavy and add a vegetarian dinner option"
+            : undefined
+        }
+        instructionsSuggestions={
+          aiTarget?.kind === "day"
+            ? [
+                "Less walking",
+                "More food spots",
+                "Add a rainy-day backup",
+                "More relaxed pace",
+                "Family-friendly",
+                "Lower budget",
+              ]
+            : undefined
+        }
       />
     </div>
   );
