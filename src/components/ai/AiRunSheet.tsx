@@ -19,7 +19,7 @@ import { AI_PROVIDERS, providerSupports } from "@/lib/ai/providers";
 import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { Textarea } from "@/components/ui/field";
+import { CheckboxChip, Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { AiCostBadge } from "./AiCostButton";
 import { useAiConfig } from "./AiConfigProvider";
@@ -47,6 +47,10 @@ export interface AiRunSheetProps {
   applyLabel?: string;
   fillEmptyLabel?: string;
   appendLabel?: string;
+  /** When set, shows a "What should the AI change?" box appended to the prompt. */
+  instructionsPlaceholder?: string;
+  /** One-tap quick-tweak chips offered alongside the free-text instructions. */
+  instructionsSuggestions?: string[];
   validateText?: (text: string) => string | null;
   requestText?: (
     request: AiTextRequest,
@@ -108,6 +112,8 @@ function AiRunSheetDialog({
   applyLabel = "Replace selected fields",
   fillEmptyLabel = "Fill only empty fields",
   appendLabel = "Append as notes",
+  instructionsPlaceholder,
+  instructionsSuggestions,
   validateText,
   requestText,
   onApplyText,
@@ -128,6 +134,19 @@ function AiRunSheetDialog({
     serverConfig: config,
   });
   const info = AI_PROVIDERS[selection.provider];
+
+  // "What should the AI change?" — free text plus quick-tweak chips. Kept as
+  // internal state (not lifted to the prompt prop) so the dialog isn't re-keyed
+  // and remounted on every keystroke. See sessionKey in AiRunSheet.
+  const [instructions, setInstructions] = React.useState("");
+  const [tweaks, setTweaks] = React.useState<string[]>([]);
+  const changeRequest = [...tweaks, instructions.trim()]
+    .filter(Boolean)
+    .join("\n");
+  const effectivePrompt = changeRequest
+    ? `${prompt}\n\nUser change request (prioritize this over the default focus):\n${changeRequest}`
+    : prompt;
+
   const supported = providerSupports(
     selection.provider,
     mode === "text" ? "text" : "image",
@@ -142,7 +161,7 @@ function AiRunSheetDialog({
           mode,
           provider: selection.provider,
           model: selection.model,
-          prompt,
+          prompt: effectivePrompt,
           taskType,
           maxOutputTokens: textMaxOutputTokens,
         })
@@ -150,7 +169,7 @@ function AiRunSheetDialog({
           mode,
           provider: selection.provider,
           model: selection.model,
-          prompt,
+          prompt: effectivePrompt,
           taskType,
           size: effectiveImageSize,
           quality: imageDefaults.quality,
@@ -223,7 +242,7 @@ function AiRunSheetDialog({
                 provider: selection.provider,
                 apiKey: personalKey || undefined,
                 model: selection.model,
-                prompt,
+                prompt: effectivePrompt,
                 taskType,
                 projectId,
                 label: title,
@@ -391,11 +410,63 @@ function AiRunSheetDialog({
             <section className="space-y-4">
               {state === "idle" ? (
                 <div className="space-y-4">
+                  {instructionsPlaceholder ? (
+                    <div className="space-y-3 rounded-2xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/35 p-4">
+                      <div className="flex items-baseline gap-2">
+                        <Sparkles className="size-4 shrink-0 translate-y-0.5 text-[var(--rc-ai-brown)]" />
+                        <div>
+                          <label
+                            htmlFor="ai-change-request"
+                            className="rc-label"
+                          >
+                            What should the AI change?
+                          </label>
+                          <p className="text-xs text-ink-muted">
+                            Optional — we&apos;ll add this to the request below.
+                          </p>
+                        </div>
+                      </div>
+                      {instructionsSuggestions?.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {instructionsSuggestions.map((suggestion) => (
+                            <CheckboxChip
+                              key={suggestion}
+                              label={suggestion}
+                              selected={tweaks.includes(suggestion)}
+                              onToggle={(on) =>
+                                setTweaks((prev) =>
+                                  on
+                                    ? [...prev, suggestion]
+                                    : prev.filter((t) => t !== suggestion),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                      <Textarea
+                        id="ai-change-request"
+                        autoSize
+                        rows={3}
+                        placeholder={instructionsPlaceholder}
+                        value={instructions}
+                        onChange={(event) => setInstructions(event.target.value)}
+                      />
+                    </div>
+                  ) : null}
                   <div className="rounded-2xl border border-border-soft bg-paper p-4">
-                    <p className="mb-2 text-sm font-semibold text-ink">
-                      What will be sent
-                    </p>
-                    <Textarea value={prompt} readOnly rows={12} />
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-ink">
+                        What will be sent
+                      </p>
+                      {changeRequest ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/60 px-2.5 py-0.5 text-xs font-medium text-[var(--rc-ai-brown)]">
+                          <Sparkles className="size-3" />
+                          Includes your change request
+                        </span>
+                      ) : null}
+                    </div>
+                    <Textarea value={effectivePrompt} readOnly rows={12} />
                   </div>
                   {!supported ? (
                     <InlineError message="This provider does not support this AI action. Change provider in Settings." />
@@ -459,7 +530,12 @@ function AiRunSheetDialog({
                     <summary className="cursor-pointer text-sm font-semibold text-ink">
                       Prompt that will be retried
                     </summary>
-                    <Textarea value={prompt} readOnly rows={6} className="mt-3" />
+                    <Textarea
+                      value={effectivePrompt}
+                      readOnly
+                      rows={6}
+                      className="mt-3"
+                    />
                   </details>
                   {isRetryableErrorMessage(error) ? (
                     <p className="text-sm text-ink-muted">
