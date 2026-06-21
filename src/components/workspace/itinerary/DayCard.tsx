@@ -184,14 +184,16 @@ export function DayCard({
           </div>
         </div>
 
-        <div
-          className={cn(
-            "grid grid-cols-1 items-start gap-3 sm:grid-cols-2",
-            !open && "hidden",
-          )}
-        >
+        {open ? (
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
           {TEXT_FIELDS.map((f) => (
-            <div key={f.key} className="space-y-1">
+            <div
+              key={f.key}
+              className={cn(
+                "space-y-1",
+                f.key === "whyThisWorks" && "sm:col-span-2",
+              )}
+            >
               <label className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 {f.label}
               </label>
@@ -222,6 +224,7 @@ export function DayCard({
             </Select>
           </div>
         </div>
+        ) : null}
       </CardContent>
     </Card>
   );
