@@ -15,13 +15,31 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     const innerRef = React.useRef<HTMLTextAreaElement>(null);
     React.useImperativeHandle(ref, () => innerRef.current as HTMLTextAreaElement);
 
-    React.useLayoutEffect(() => {
-      if (!autoSize) return;
+    // Grow the element to fit its content. Reads scrollHeight, so it only
+    // produces a correct value when the textarea is actually laid out.
+    const resize = React.useCallback(() => {
       const el = innerRef.current;
       if (!el) return;
       el.style.height = "auto";
       el.style.height = `${el.scrollHeight}px`;
-    }, [autoSize, value]);
+    }, []);
+
+    // Runs on mount and whenever the value changes.
+    React.useLayoutEffect(() => {
+      if (autoSize) resize();
+    }, [autoSize, value, resize]);
+
+    // Re-measure when the textarea becomes visible (e.g. a collapsed day card
+    // expands) or its width changes (responsive re-wrap). A display:none →
+    // visible transition and any column re-wrap both fire the observer.
+    React.useEffect(() => {
+      if (!autoSize) return;
+      const el = innerRef.current;
+      if (!el || typeof ResizeObserver === "undefined") return;
+      const observer = new ResizeObserver(() => resize());
+      observer.observe(el);
+      return () => observer.disconnect();
+    }, [autoSize, resize]);
 
     return (
       <textarea
