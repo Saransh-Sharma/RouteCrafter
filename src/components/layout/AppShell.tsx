@@ -6,6 +6,7 @@ import { ConflictBanner } from "./ConflictBanner";
 import { AuthProvider } from "./AuthProvider";
 import { AiConfigProvider } from "@/components/ai/AiConfigProvider";
 import { ToastProvider } from "@/components/ui/Toast";
+import { CommandPalette } from "./CommandPalette";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </main>
             </div>
           </div>
+          <CommandPalette />
         </ToastProvider>
       </AiConfigProvider>
     </AuthProvider>
