@@ -38,6 +38,29 @@ describe("ItineraryDocument", () => {
     );
   });
 
+  it("renders route-map custom blocks in the PDF document", () => {
+    const project = structuredClone(seedProjects[0]);
+    const itinerary = {
+      ...buildItinerary(buildContext(project), { duration: "3 days" }),
+      customBlocks: [
+        {
+          id: "route-map",
+          anchor: "overview",
+          order: 0,
+          type: "route-map" as const,
+          variant: "",
+          text: "Tokyo to Kyoto route map",
+          image: "",
+        },
+      ],
+    };
+
+    render(<ItineraryDocument itinerary={itinerary} project={project} />);
+
+    expect(screen.getByText("Route map")).toBeTruthy();
+    expect(screen.getByText("Tokyo to Kyoto route map")).toBeTruthy();
+  });
+
   it("blocks PDF preparation when a remote image is not canvas-safe", async () => {
     class RejectedCorsImage {
       crossOrigin = "";
