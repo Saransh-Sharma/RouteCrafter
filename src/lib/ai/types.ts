@@ -12,6 +12,30 @@ export type AiTaskType =
   | "guide"
   | "rewrite";
 
+export type AiStreamEvent =
+  | { type: "phase"; phase: "preparing" | "calling-provider" | "validating" }
+  | { type: "delta"; text: string }
+  | { type: "result"; result: AiResult }
+  | { type: "error"; error: string };
+
+export type AiFieldReviewChoice = "keep" | "use-ai" | "merge";
+
+export interface BatchRunStep {
+  id: string;
+  label: string;
+  taskType: AiTaskType;
+  status: "pending" | "running" | "completed" | "error" | "cancelled";
+  costLabel?: string;
+  error?: string;
+}
+
+export interface BatchRunPlan {
+  id: string;
+  label: string;
+  steps: BatchRunStep[];
+  estimatedCostLabel?: string;
+}
+
 export interface AiUsage {
   inputTokens?: number;
   outputTokens?: number;

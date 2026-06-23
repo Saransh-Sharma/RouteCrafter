@@ -1,7 +1,12 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateImage, generateText } from "./provider-adapters";
+import {
+  generateImage,
+  generateText,
+  safeParseSseJson,
+  streamGenerateText,
+} from "./provider-adapters";
 import { AI_ERROR } from "./errors";
 
 const imageRequest = {
@@ -160,4 +165,102 @@ describe("provider fetch retries", () => {
     expect(result.text).toBe("Listing copy");
     expect(result.providerAttempts).toBe(2);
   });
+
+  it("reports streaming provider attempts after a transient OpenAI failure", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(
+        sseResponse([
+          {
+            type: "response.output_text.delta",
+            delta: "Hello",
+          },
+          {
+            type: "response.completed",
+            response: {
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            },
+          },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = collectStreamResult(streamGenerateText(textRequest));
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.text).toBe("Hello");
+    expect(result.providerAttempts).toBe(2);
+  });
+
+  it("throws a normalized streaming error for malformed OpenAI SSE JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("data: {not-json}\n\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+
+    await expect(
+      collectStreamResult(streamGenerateText(textRequest)),
+    ).rejects.toThrow("OpenAI returned a malformed streaming event.");
+  });
+
+  it("throws when a provider stream ends before completion", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([{ type: "response.output_text.delta", delta: "Partial" }]),
+      ),
+    );
+
+    await expect(
+      collectStreamResult(streamGenerateText(textRequest)),
+    ).rejects.toThrow("Provider stream ended before completion.");
+  });
+
+  it("does not retry streaming requests after a user abort", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      collectStreamResult(streamGenerateText(textRequest, controller.signal)),
+    ).rejects.toThrow("Aborted");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("parses valid SSE JSON and reports invalid JSON without throwing", () => {
+    expect(safeParseSseJson('{"ok":true}')).toEqual({
+      ok: true,
+      value: { ok: true },
+    });
+    expect(safeParseSseJson("{broken").ok).toBe(false);
+  });
 });
+
+function sseResponse(events: unknown[]): Response {
+  return new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
+async function collectStreamResult(
+  stream: AsyncGenerator<
+    { type: "delta"; text: string } | { type: "result"; result: Awaited<ReturnType<typeof generateText>> }
+  >,
+): Promise<Awaited<ReturnType<typeof generateText>>> {
+  let result: Awaited<ReturnType<typeof generateText>> | undefined;
+  for await (const event of stream) {
+    if (event.type === "result") result = event.result;
+  }
+  if (!result) throw new Error("No stream result.");
+  return result;
+}

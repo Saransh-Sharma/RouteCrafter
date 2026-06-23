@@ -4,6 +4,7 @@ import type {
   AiImageRequest,
   AiResult,
   AiServerConfig,
+  AiStreamEvent,
   AiTextRequest,
 } from "./types";
 import { AI_ERROR, normalizeThrownError } from "./errors";
@@ -63,6 +64,84 @@ export async function requestAiText(
       signal: timeoutSignal.signal,
     });
     return parseAiResponse(response);
+  } catch (error) {
+    throw normalizeClientFetchError(error, timeoutSignal.timedOut);
+  } finally {
+    timeoutSignal.cleanup();
+  }
+}
+
+export async function streamAiText(
+  request: AiTextRequest,
+  {
+    signal,
+    onEvent,
+    onToken,
+  }: {
+    signal?: AbortSignal;
+    onEvent?: (event: AiStreamEvent) => void;
+    onToken?: (token: string) => void;
+  } = {},
+): Promise<AiResult> {
+  const timeoutSignal = requestSignalWithTimeout(signal);
+  try {
+    const response = await fetch("/api/ai/text/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      signal: timeoutSignal.signal,
+    });
+    if (!response.ok && !response.body) return parseAiResponse(response);
+    if (!response.body) {
+      throw new Error("The AI stream did not return a readable response.");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: AiResult | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const raw = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const eventName = raw
+          .split(/\r?\n/)
+          .find((line) => line.startsWith("event:"))
+          ?.slice("event:".length)
+          .trim();
+        const dataText = raw
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice("data:".length).trim())
+          .join("\n");
+        const data = dataText ? JSON.parse(dataText) : {};
+        if (eventName === "phase") {
+          onEvent?.({ type: "phase", phase: data.phase });
+        } else if (eventName === "delta") {
+          const text = String(data.text ?? "");
+          onToken?.(text);
+          onEvent?.({ type: "delta", text });
+        } else if (eventName === "result") {
+          finalResult = data as AiResult;
+          onEvent?.({ type: "result", result: finalResult });
+        } else if (eventName === "error") {
+          const message =
+            typeof data.error === "string"
+              ? data.error
+              : "The AI stream did not complete.";
+          onEvent?.({ type: "error", error: message });
+          throw new Error(message);
+        }
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+    if (!finalResult) {
+      throw new Error("The AI stream ended without a final result.");
+    }
+    return finalResult;
   } catch (error) {
     throw normalizeClientFetchError(error, timeoutSignal.timedOut);
   } finally {
