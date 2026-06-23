@@ -15,27 +15,37 @@ function rowToTemplate(row: typeof templates.$inferSelect): Template {
   return normalizeTemplate(row.data);
 }
 
-function templateValues(template: Template, userId: string) {
+function templateValues(
+  template: Template,
+  userId: string,
+  timestamps: { createdAt: Date; updatedAt: Date },
+) {
   const normalized = normalizeTemplate(template);
+  const data = {
+    ...normalized,
+    createdAt: timestamps.createdAt.toISOString(),
+    updatedAt: timestamps.updatedAt.toISOString(),
+  };
   return {
     id: normalized.id,
     userId,
     name: normalized.name,
     category: normalized.category,
     accent: normalized.accent,
-    data: normalized,
-    createdAt: new Date(normalized.createdAt),
-    updatedAt: new Date(normalized.updatedAt),
+    data,
+    createdAt: timestamps.createdAt,
+    updatedAt: timestamps.updatedAt,
     deletedAt: null,
     updatedByUserId: userId,
   };
 }
 
-export async function listTemplates(): Promise<Template[]> {
+export async function listTemplates(user: User): Promise<Template[]> {
+  await ensureUser(user);
   const rows = await getDb()
     .select()
     .from(templates)
-    .where(isNull(templates.deletedAt))
+    .where(and(eq(templates.userId, user.id), isNull(templates.deletedAt)))
     .orderBy(desc(templates.updatedAt));
   return rows.map(rowToTemplate);
 }
@@ -50,23 +60,26 @@ export async function upsertTemplateForUser({
   await ensureUser(user);
   const normalized = normalizeTemplate(template);
   const existing = await getDb().query.templates.findFirst({
-    where: eq(templates.id, normalized.id),
+    where: and(eq(templates.id, normalized.id), eq(templates.userId, user.id)),
   });
+  const updatedAt = new Date();
   if (existing) {
     const [updated] = await getDb()
       .update(templates)
       .set({
-        ...templateValues(normalized, user.id),
-        userId: existing.userId,
-        createdAt: existing.createdAt,
+        ...templateValues(normalized, user.id, {
+          createdAt: existing.createdAt,
+          updatedAt,
+        }),
       })
-      .where(eq(templates.id, normalized.id))
+      .where(and(eq(templates.id, normalized.id), eq(templates.userId, user.id)))
       .returning();
     return rowToTemplate(updated);
   }
+  const createdAt = new Date();
   const [inserted] = await getDb()
     .insert(templates)
-    .values(templateValues(normalized, user.id))
+    .values(templateValues(normalized, user.id, { createdAt, updatedAt: createdAt }))
     .returning();
   return rowToTemplate(inserted);
 }
@@ -86,5 +99,11 @@ export async function deleteTemplateForUser({
       updatedAt: new Date(),
       updatedByUserId: user.id,
     })
-    .where(and(eq(templates.id, templateId), isNull(templates.deletedAt)));
+    .where(
+      and(
+        eq(templates.id, templateId),
+        eq(templates.userId, user.id),
+        isNull(templates.deletedAt),
+      ),
+    );
 }
