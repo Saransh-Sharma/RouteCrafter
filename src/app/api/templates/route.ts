@@ -14,7 +14,7 @@ export async function GET() {
     if (!user) return unauthorizedResponse();
     await ensureRequestUser(user);
     return NextResponse.json(
-      { templates: await listTemplates() },
+      { templates: await listTemplates(user) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -27,7 +27,16 @@ export async function POST(request: Request) {
     const user = await getSessionUser();
     if (!user) return unauthorizedResponse();
     const requestUser = await ensureRequestUser(user);
-    const parsed = templateSchema.safeParse(await request.json());
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Missing or invalid template payload." },
+        { status: 400 },
+      );
+    }
+    const parsed = templateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Missing or invalid template payload." },
