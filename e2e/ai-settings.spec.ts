@@ -61,9 +61,6 @@ test("uses RouteCrafter server OpenAI without a personal key", async ({
 
   await expect(page.getByText("AI request estimate")).toBeVisible();
   await expect(page.getByText("RouteCrafter server key")).toBeVisible();
-  await expect(
-    page.getByRole("main").getByText("RouteCrafter", { exact: true }),
-  ).toBeVisible();
   await expect(page.getByText("gpt-5.4", { exact: true })).toBeVisible();
   const confirm = page.getByRole("button", { name: /Confirm run/ });
   await expect(confirm).toBeEnabled();
@@ -97,10 +94,15 @@ test("previews and applies a mocked structured listing while recording usage", a
   await expect(page.getByText("Personal key override")).toBeVisible();
   await expect(page.getByText("Your provider account")).toBeVisible();
   await page.getByRole("button", { name: /Confirm run/ }).click();
-  await expect(page.getByText("AI proposal", { exact: true })).toBeVisible();
+  await expect(page.getByText("Field review", { exact: true })).toBeVisible();
   await expect(page.getByText("Ready to apply after your review.")).toBeVisible();
   await expect(shortDescription).not.toHaveValue(/Mocked AI proposal/);
-  await page.getByRole("button", { name: "Replace listing" }).click();
+  await page
+    .getByText("shortDescription", { exact: true })
+    .locator("xpath=ancestor::div[contains(@class, 'rounded-xl')]")
+    .getByRole("button", { name: "Use AI" })
+    .click();
+  await page.getByRole("button", { name: "Apply selected fields" }).click();
   await expect(shortDescription).toHaveValue(/Mocked AI proposal/);
 
   await page.goto(
@@ -128,8 +130,10 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
     ),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Replace listing" }),
-  ).toBeDisabled();
+    page.getByText(
+      "The model returned listing JSON RouteCrafter could not safely apply.",
+    ),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Discard" }).click();
 
   await page.unroute("**/api/ai/text");

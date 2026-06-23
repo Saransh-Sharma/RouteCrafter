@@ -25,7 +25,7 @@ test("navigates the complete authenticated application shell", async ({
 
   await page.getByRole("link", { name: "Templates" }).first().click();
   await expect(page).toHaveURL(/\/templates$/);
-  await expect(page.getByText("On the roadmap")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start closer to a sellable itinerary" })).toBeVisible();
 
   await page.getByRole("link", { name: "Guide" }).first().click();
   await expect(page).toHaveURL(/\/guide$/);
@@ -123,7 +123,7 @@ test("validates imports, resolves id collisions, and exports portable JSON", asy
   const exported = JSON.parse(await readFile(await download.path(), "utf8"));
   expect(exported.id).not.toBe(FULL_PROJECT_ID);
   expect(exported.name).toBe("Portugal Editorial Escape");
-  expect(exported.schemaVersion).toBe(3);
+  expect(exported.schemaVersion).toBe(4);
 });
 
 test("shows a recoverable not-found state for missing local projects", async ({

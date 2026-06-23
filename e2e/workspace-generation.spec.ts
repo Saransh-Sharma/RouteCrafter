@@ -13,10 +13,10 @@ test("renders the five-stage production route and recommended action", async ({
   await page.goto(`/projects/${FULL_PROJECT_ID}`);
   for (const stage of ["Define", "Plan", "Build", "Package", "Publish"]) {
     await expect(
-      page.getByRole("button", { name: new RegExp(stage) }).first(),
+      page.getByRole("tab", { name: new RegExp(stage) }).first(),
     ).toBeVisible();
   }
-  await expect(page.getByText("Recommended next move")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review the launch package" })).toBeVisible();
   await expect(page.getByText("Saved locally")).toBeVisible();
 });
 
@@ -64,8 +64,8 @@ test("plans a unique edition and creates its linked itinerary", async ({
   await page.getByRole("button", { name: "Create this itinerary" }).click();
 
   await expect(page).toHaveURL(/stage=build&edition=.+&tool=overview/);
-  await expect(page.getByText("Launch checklist")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Daily plan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Turn each edition into a complete itinerary" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Daily plan" })).toBeVisible();
 });
 
 test("shows portfolio visuals only when selected", async ({ page }) => {
