@@ -8,6 +8,7 @@ import {
   type OutputRequirement,
   type Project,
 } from "./schemas";
+import { realignItineraryDurationText } from "./generation/itinerary";
 
 export const persistedProjectsSchema = z.object({
   projects: z.array(z.unknown()).default([]),
@@ -102,15 +103,17 @@ function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Pr
         createdAt: itinerary.createdAt,
       }));
 
-  const editions = existingEditions.filter(
-    (edition, index, all) =>
-      all.findIndex(
-        (candidate) =>
-          candidate.duration === edition.duration &&
-          candidate.customDays === edition.customDays &&
-          candidate.travelerType === edition.travelerType,
-      ) === index,
-  );
+  const editions = hadProductionPlan
+    ? existingEditions
+    : existingEditions.filter(
+        (edition, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.duration === edition.duration &&
+              candidate.customDays === edition.customDays &&
+              candidate.travelerType === edition.travelerType,
+          ) === index,
+      );
 
   const itineraries = project.itineraries.map((itinerary) => {
     const edition =
@@ -122,10 +125,18 @@ function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Pr
           candidate.customDays === customDays(itinerary.duration) &&
           candidate.travelerType === itinerary.travelerType,
       );
-    return {
+    // The edition is authoritative for duration; align the itinerary's label to
+    // it, then repair any stale "N days" text left in the title/overview/etc.
+    const duration = edition
+      ? edition.customDays
+        ? `${edition.customDays} days`
+        : edition.duration
+      : itinerary.duration;
+    return realignItineraryDurationText({
       ...itinerary,
       plannedEditionId: itinerary.plannedEditionId ?? edition?.id,
-    };
+      duration,
+    });
   });
 
   const legacyDeliverables = outputs.flatMap((output) => {

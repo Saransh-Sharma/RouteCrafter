@@ -5,8 +5,11 @@ import { createEmptyTripConfig, projectSchema } from "./schemas";
 import {
   dayRangeForStop,
   defaultRoute,
+  editionContextOptions,
+  extractLiveDataClaims,
   getProjectWorkflow,
   itineraryBlockers,
+  lintProjectForPublish,
   normalizeRoute,
   readinessFingerprint,
   routeNights,
@@ -157,6 +160,93 @@ describe("project workflow", () => {
     expect(
       readinessFingerprint({ ...reviewed, positioning: "A different promise." }),
     ).not.toBe(readinessFingerprint(project));
+  });
+
+  it("does not duplicate missing verification notes between blockers and linter", () => {
+    const project = projectFixture();
+    const itinerary = {
+      ...project.itineraries[0],
+      verificationNotes: "",
+    };
+    const withoutNotes = projectSchema.parse({
+      ...project,
+      itineraries: [itinerary],
+    });
+
+    const labels = getProjectWorkflow(withoutNotes).blockers.map(
+      (issue) => issue.label,
+    );
+
+    expect(labels.filter((label) => label.includes("Add verification notes"))).toHaveLength(1);
+    expect(lintProjectForPublish(withoutNotes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "edition-verification-notes" }),
+      ]),
+    );
+  });
+
+  it("extracts only live-data sentences for deterministic fixes", () => {
+    const result = extractLiveDataClaims(
+      "Start with a quiet garden walk. Museum tickets cost $18. Dinner is flexible.",
+    );
+
+    expect(result.claims).toEqual(["Museum tickets cost $18."]);
+    expect(result.cleaned).toBe(
+      "Start with a quiet garden walk. Dinner is flexible.",
+    );
+  });
+});
+
+describe("editionContextOptions", () => {
+  it("prefers the linked edition's duration and traveler type", () => {
+    const base = projectFixture();
+    const project = projectSchema.parse({
+      ...base,
+      productionPlan: {
+        ...base.productionPlan,
+        editions: [
+          ...base.productionPlan.editions,
+          {
+            id: "edition-14",
+            duration: "14 days",
+            travelerType: "Family",
+            createdAt: now,
+          },
+        ],
+      },
+    });
+    // A 14-day edition's itinerary still carrying a stale 7-day-ish base.
+    const itinerary = {
+      ...project.itineraries[0],
+      plannedEditionId: "edition-14",
+      duration: "7 days",
+      travelerType: "Couple" as const,
+    };
+
+    expect(editionContextOptions(project, itinerary)).toMatchObject({
+      duration: "14 days",
+      travelerType: "Family",
+    });
+  });
+
+  it("falls back to the itinerary's own label when unlinked", () => {
+    const project = projectFixture();
+    const itinerary = {
+      ...project.itineraries[0],
+      plannedEditionId: undefined,
+      duration: "10 days",
+      travelerType: "Group" as const,
+    };
+
+    expect(editionContextOptions(project, itinerary)).toMatchObject({
+      duration: "10 days",
+      travelerType: "Group",
+    });
+  });
+
+  it("returns only extra cities when no itinerary is given", () => {
+    const project = projectFixture();
+    expect(editionContextOptions(project)).toEqual({ extraCities: [] });
   });
 });
 
