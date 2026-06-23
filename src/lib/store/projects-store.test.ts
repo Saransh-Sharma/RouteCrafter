@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedProjects } from "../seed-projects";
+import { seedTemplates } from "../templates";
 import {
   MAX_PERSISTED_STATE_CHARS,
   useProjectsStore,
@@ -233,6 +234,245 @@ describe("projects store mutations", () => {
       presentationReviewed: false,
       backupConfirmed: false,
     });
+  });
+
+  it("does not mutate project-scoped listing or brand voice when duplicating an edition", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const source = {
+      id: "edition-base",
+      duration: "7 days" as const,
+      travelerType: "Couple" as const,
+      cities: ["Tokyo", "Kyoto"],
+      route: [
+        { id: "stop-tokyo", city: "Tokyo", nights: 3 },
+        { id: "stop-kyoto", city: "Kyoto", nights: 4 },
+      ],
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    const listing = {
+      titleOptions: ["Premium Japan itinerary"],
+      tags: ["japan", "itinerary"],
+      shortDescription: "A calm route for couples",
+      longDescription: "Original marketplace copy",
+      packages: [
+        {
+          name: "Standard",
+          price: "$19",
+          description: "Curated route",
+          features: ["Printable guide"],
+        },
+      ],
+      faqs: [],
+      buyerRequirements: [],
+      upsells: [],
+      deliveryNotes: "Verify live details before travel.",
+    };
+    const brandStyle = {
+      ...project.brandStyle,
+      voice: "premium",
+    } as typeof project.brandStyle;
+    useProjectsStore.getState().update(project.id, {
+      listing,
+      brandStyle,
+      productionPlan: {
+        ...project.productionPlan,
+        editions: [source],
+      },
+    });
+
+    const created = useProjectsStore.getState().duplicateEdition(project.id, source.id, {
+      keepListingCopy: false,
+      keepBrandVoice: false,
+    });
+
+    expect(created).toBeDefined();
+    const updated = useProjectsStore.getState().projects[0];
+    expect(updated.listing).toEqual(listing);
+    expect(updated.brandStyle).toEqual(brandStyle);
+  });
+
+  it("rewrites stale duration text when cloning an edition into a new length", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const source = {
+      id: "edition-base",
+      duration: "7 days" as const,
+      travelerType: "Couple" as const,
+      cities: ["Hanoi"],
+      route: [{ id: "stop-hanoi", city: "Hanoi", nights: 7 }],
+      itineraryId: "itinerary-7",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    useProjectsStore.getState().update(project.id, {
+      itineraries: [
+        {
+          id: "itinerary-7",
+          plannedEditionId: "edition-base",
+          title: "7 days Vietnam itinerary",
+          subtitle: "Couple - Nature/adventure - Mid-range",
+          country: "Vietnam",
+          duration: "7 days",
+          travelerType: "Couple",
+          style: "Nature/adventure",
+          budget: "Mid-range",
+          overview: "An energetic 7 days Vietnam route for couples.",
+          whoFor: "Couples who want a 7 days escape.",
+          routeSummary: "Hanoi",
+          bestStayAreas: "Old Quarter",
+          days: [],
+          foodGuide: "",
+          transportGuide: "",
+          packingList: "",
+          etiquetteSafety: "",
+          bookingChecklist: "",
+          personalizationQuestions: "",
+          verificationNotes: "",
+          pdfTheme: "beige",
+          coverImage: "",
+          hiddenElements: [],
+          customBlocks: [],
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+      productionPlan: {
+        ...project.productionPlan,
+        editions: [source],
+      },
+    });
+
+    const created = useProjectsStore
+      .getState()
+      .duplicateEdition(project.id, source.id, { duration: "14 days" });
+    expect(created).toBeDefined();
+
+    const updated = useProjectsStore.getState().projects[0];
+    const cloned = updated.itineraries.find(
+      (itinerary) => itinerary.id === created!.itineraryId,
+    );
+    expect(cloned).toBeDefined();
+    expect(cloned!.duration).toBe("14 days");
+    expect(cloned!.title).toBe("14 days Vietnam itinerary");
+    expect(cloned!.overview).not.toContain("7 days");
+    expect(cloned!.overview).toContain("14 days");
+    expect(cloned!.subtitle).toBe("Couple - Nature/adventure - Mid-range");
+  });
+
+  it("removes a duplicated edition against latest state without clobbering unrelated edits", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const source = {
+      id: "edition-base",
+      duration: "7 days" as const,
+      travelerType: "Couple" as const,
+      cities: ["Tokyo", "Kyoto"],
+      route: [
+        { id: "stop-tokyo", city: "Tokyo", nights: 3 },
+        { id: "stop-kyoto", city: "Kyoto", nights: 4 },
+      ],
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    useProjectsStore.getState().update(project.id, {
+      productionPlan: {
+        ...project.productionPlan,
+        editions: [source],
+      },
+    });
+    const created = useProjectsStore
+      .getState()
+      .duplicateEdition(project.id, source.id);
+    expect(created).toBeDefined();
+
+    useProjectsStore.getState().update(project.id, {
+      positioning: "Updated while undo toast is still visible.",
+    });
+    const result = useProjectsStore
+      .getState()
+      .removeDuplicatedEdition(project.id, created!.id);
+
+    expect(result.ok).toBe(true);
+    const updated = useProjectsStore.getState().projects[0];
+    expect(updated.positioning).toBe("Updated while undo toast is still visible.");
+    expect(
+      updated.productionPlan.editions.some((edition) => edition.id === created!.id),
+    ).toBe(false);
+  });
+
+  it("refuses to remove a base edition through duplicated-edition undo", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const source = {
+      id: "edition-base",
+      duration: "7 days" as const,
+      travelerType: "Couple" as const,
+      cities: ["Tokyo", "Kyoto"],
+      route: [
+        { id: "stop-tokyo", city: "Tokyo", nights: 3 },
+        { id: "stop-kyoto", city: "Kyoto", nights: 4 },
+      ],
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    useProjectsStore.getState().update(project.id, {
+      productionPlan: {
+        ...project.productionPlan,
+        editions: [source],
+      },
+    });
+
+    const result = useProjectsStore
+      .getState()
+      .removeDuplicatedEdition(project.id, source.id);
+
+    expect(result.ok).toBe(false);
+    expect(
+      useProjectsStore
+        .getState()
+        .projects[0].productionPlan.editions.some(
+          (edition) => edition.id === source.id,
+        ),
+    ).toBe(true);
+  });
+
+  it("creates from a template atomically while preserving template editions", () => {
+    const template = {
+      ...structuredClone(seedTemplates[0]),
+      project: {
+        ...seedTemplates[0].project,
+        productionPlan: {
+          ...seedTemplates[0].project.productionPlan,
+          editions: [
+            {
+              id: "template-edition",
+              duration: "3 days" as const,
+              travelerType: "Solo" as const,
+              cities: ["Paris"],
+              route: [{ id: "template-stop", city: "Paris", nights: 3 }],
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+        },
+      },
+    };
+
+    const project = useProjectsStore.getState().createProjectFromTemplate(template, {
+      name: "France starter",
+      country: "France",
+      regions: ["Paris"],
+      targetAudience: "Solo travelers",
+      voice: "premium",
+      offerModel: "hybrid",
+      channels: ["etsy", "direct"],
+      outputs: ["marketplace-listing", "pdf", "food-guide"],
+    });
+
+    expect(project.country).toBe("France");
+    expect(project.targetAudience).toBe("Solo travelers");
+    expect(project.brandStyle.voice).toBe("premium");
+    expect(project.productionPlan.offerModel).toBe("hybrid");
+    expect(project.productionPlan.channels).toEqual(["etsy", "direct"]);
+    expect(project.productionPlan.editions).toHaveLength(1);
+    expect(project.productionPlan.editions[0].id).not.toBe("template-edition");
+    expect(project.productionPlan.editions[0].route[0].id).not.toBe(
+      "template-stop",
+    );
+    expect(project.sourceTemplateId).toBe(template.id);
   });
 
   it("serializes rapid cloud sync writes with the returned revision", async () => {

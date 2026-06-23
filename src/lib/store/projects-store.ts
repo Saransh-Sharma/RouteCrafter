@@ -7,8 +7,11 @@ import {
   type ItineraryOutput,
   type OfferModel,
   type OutputRequirement,
+  type PlannedEdition,
   type Project,
+  type RouteStop,
   type SalesChannel,
+  type Template,
   type TravelerType,
 } from "../schemas";
 import {
@@ -18,7 +21,9 @@ import {
 import { seedProjects } from "../seed-projects";
 import { logActivity } from "./activity-store";
 import { useAuthStore } from "./auth-store";
-import { readinessFingerprint } from "../workflow";
+import { normalizeRoute, readinessFingerprint } from "../workflow";
+import { syncItineraryToRoute } from "../generation/route-sync";
+import { realignItineraryDurationText } from "../generation/itinerary";
 import { isCloudPersistenceEnabled } from "../persistence/config";
 import type { CloudProject } from "../persistence/types";
 
@@ -88,10 +93,29 @@ export interface CreateProjectInput {
   travelerTypes?: Project["travelerTypes"];
   durations?: Project["durations"];
   deliverables?: Project["deliverables"];
+  brandStyle?: Partial<Project["brandStyle"]>;
   offerModel?: OfferModel;
   channels?: SalesChannel[];
   outputs?: OutputRequirement[];
   accent?: Project["accent"];
+  sourceTemplateId?: string;
+  sourceTemplateName?: string;
+}
+
+export interface CreateProjectFromTemplateInput
+  extends Omit<CreateProjectInput, "name"> {
+  name?: string;
+  voice?: Project["brandStyle"]["voice"];
+}
+
+export interface DuplicateEditionOptions {
+  duration?: Duration;
+  customDays?: number;
+  keepGuides?: boolean;
+  /** Deprecated: listing copy is project-scoped and must not be mutated by edition cloning. */
+  keepListingCopy?: boolean;
+  /** Deprecated: brand voice is project-scoped and must not be mutated by edition cloning. */
+  keepBrandVoice?: boolean;
 }
 
 const ACCENTS: Project["accent"][] = [
@@ -189,6 +213,20 @@ interface ProjectsState extends PersistedSlice {
   ) => MutationResult;
   remove: (id: string) => MutationResult;
   duplicate: (id: string) => Project | undefined;
+  duplicateEdition: (
+    projectId: string,
+    editionId: string,
+    options?: DuplicateEditionOptions,
+  ) => PlannedEdition | undefined;
+  removeDuplicatedEdition: (
+    projectId: string,
+    editionId: string,
+  ) => MutationResult;
+  createProjectFromTemplate: (
+    template: Template,
+    input: CreateProjectFromTemplateInput,
+  ) => Project;
+  createFromTemplate: (template: Template, name?: string) => Project;
   getById: (id: string) => Project | undefined;
   importProject: (project: unknown) => Project;
   expandHint: ExpandHint | null;
@@ -198,6 +236,77 @@ interface ProjectsState extends PersistedSlice {
 
 function now() {
   return new Date().toISOString();
+}
+
+function dayCountForDuration(duration: Duration, customDays?: number): number {
+  return customDays ?? Number.parseInt(duration, 10);
+}
+
+function resizeRoute(route: RouteStop[], dayCount: number): RouteStop[] {
+  if (!route.length || dayCount < 1) return route;
+  const total = route.reduce((sum, stop) => sum + Math.max(stop.nights, 0), 0);
+  if (total <= 0) {
+    return normalizeRoute(
+      route.map((stop, index) => ({
+        ...stop,
+        nights: index === 0 ? dayCount : 0,
+      })),
+    );
+  }
+  let placed = 0;
+  const resized = route.map((stop, index) => {
+    const isLast = index === route.length - 1;
+    const nights = isLast
+      ? Math.max(0, dayCount - placed)
+      : Math.max(0, Math.round((stop.nights / total) * dayCount));
+    placed += nights;
+    return { ...stop, nights };
+  });
+  if (placed === 0 && resized[0]) resized[0] = { ...resized[0], nights: dayCount };
+  const delta = dayCount - resized.reduce((sum, stop) => sum + stop.nights, 0);
+  if (delta !== 0 && resized[resized.length - 1]) {
+    const last = resized[resized.length - 1];
+    resized[resized.length - 1] = {
+      ...last,
+      nights: Math.max(0, last.nights + delta),
+    };
+  }
+  return normalizeRoute(resized);
+}
+
+function cloneItineraryForEdition({
+  itinerary,
+  edition,
+  timestamp,
+  keepGuides,
+}: {
+  itinerary: ItineraryOutput;
+  edition: PlannedEdition;
+  timestamp: string;
+  keepGuides: boolean;
+}): ItineraryOutput {
+  const duration = edition.customDays
+    ? `${edition.customDays} days`
+    : edition.duration;
+  const cloned: ItineraryOutput = {
+    ...itinerary,
+    id: crypto.randomUUID(),
+    plannedEditionId: edition.id,
+    duration,
+    travelerType: edition.travelerType,
+    subtitle: `${edition.travelerType} - ${itinerary.style ?? "Custom"} - ${itinerary.budget}`,
+    foodGuide: keepGuides ? itinerary.foodGuide : "",
+    transportGuide: keepGuides ? itinerary.transportGuide : "",
+    packingList: keepGuides ? itinerary.packingList : "",
+    etiquetteSafety: keepGuides ? itinerary.etiquetteSafety : "",
+    bookingChecklist: keepGuides ? itinerary.bookingChecklist : "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  // The source label (e.g. "7 days") is still embedded in the copied title and
+  // overview prose; rewrite those occurrences to the new edition's duration.
+  const realigned = realignItineraryDurationText(cloned, itinerary.duration);
+  return syncItineraryToRoute(realigned, edition.route).next;
 }
 
 export function persistedStateSize(slice: PersistedSlice): number {
@@ -804,7 +913,10 @@ export const useProjectsStore = createZustand<ProjectsState>()(
                 backupConfirmed: false,
               },
             },
+            brandStyle: input.brandStyle,
             accent,
+            sourceTemplateId: input.sourceTemplateId,
+            sourceTemplateName: input.sourceTemplateName,
             status: "Draft",
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -914,6 +1026,179 @@ export const useProjectsStore = createZustand<ProjectsState>()(
           }
           return result.ok ? copy : undefined;
         },
+
+        duplicateEdition: (projectId, editionId, options = {}) => {
+          const project = get().projects.find((item) => item.id === projectId);
+          const source = project?.productionPlan.editions.find(
+            (edition) => edition.id === editionId,
+          );
+          if (!project || !source) return undefined;
+
+          const timestamp = now();
+          const duration = options.duration ?? source.duration;
+          const customDays =
+            options.customDays === undefined
+              ? source.customDays
+              : options.customDays;
+          const dayCount = dayCountForDuration(duration, customDays);
+          const edition: PlannedEdition = {
+            ...source,
+            id: crypto.randomUUID(),
+            duration,
+            customDays,
+            route: resizeRoute(source.route, dayCount),
+            itineraryId: undefined,
+            sourceEditionId: source.id,
+            lineageNote: `Copied from ${source.customDays ? `${source.customDays} days` : source.duration} · ${source.travelerType}`,
+            createdAt: timestamp,
+          };
+
+          const linked = source.itineraryId
+            ? project.itineraries.find((item) => item.id === source.itineraryId)
+            : undefined;
+          const clonedItinerary = linked
+            ? cloneItineraryForEdition({
+                itinerary: linked,
+                edition,
+                timestamp,
+                keepGuides: options.keepGuides ?? true,
+              })
+            : undefined;
+          const nextEdition = clonedItinerary
+            ? { ...edition, itineraryId: clonedItinerary.id }
+            : edition;
+
+          const result = get().updateProject(projectId, (current) => ({
+            ...current,
+            productionPlan: {
+              ...current.productionPlan,
+              editions: current.productionPlan.editions.flatMap((item) =>
+                item.id === source.id ? [item, nextEdition] : [item],
+              ),
+            },
+            itineraries: clonedItinerary
+              ? [...current.itineraries, clonedItinerary]
+              : current.itineraries,
+          }));
+          return result.ok ? nextEdition : undefined;
+        },
+
+        removeDuplicatedEdition: (projectId, editionId) => {
+          const project = get().projects.find((item) => item.id === projectId);
+          const edition = project?.productionPlan.editions.find(
+            (item) => item.id === editionId,
+          );
+          if (!project || !edition) {
+            return { ok: false, error: "Edition not found." };
+          }
+          if (!edition.sourceEditionId) {
+            return {
+              ok: false,
+              error: "Only duplicated editions can be removed with undo.",
+            };
+          }
+
+          return get().updateProject(projectId, (current) => {
+            const currentEdition = current.productionPlan.editions.find(
+              (item) => item.id === editionId,
+            );
+            if (!currentEdition?.sourceEditionId) return current;
+            return {
+              ...current,
+              productionPlan: {
+                ...current.productionPlan,
+                editions: current.productionPlan.editions.filter(
+                  (item) => item.id !== editionId,
+                ),
+              },
+              itineraries: currentEdition.itineraryId
+                ? current.itineraries.filter(
+                    (item) => item.id !== currentEdition.itineraryId,
+                  )
+                : current.itineraries,
+            };
+          });
+        },
+
+        createProjectFromTemplate: (template, input) => {
+          const timestamp = now();
+          const channels =
+            input.channels ?? template.project.productionPlan.channels;
+          const outputs = input.outputs ?? template.project.productionPlan.outputs;
+          const project = projectSchema.parse({
+            id: crypto.randomUUID(),
+            name: input.name?.trim() || `${template.name} project`,
+            country: input.country ?? template.project.country,
+            regions: input.regions ?? template.project.regions,
+            positioning: input.positioning ?? template.project.positioning,
+            targetAudience:
+              input.targetAudience ?? template.project.targetAudience,
+            travelStyles: input.travelStyles ?? template.project.travelStyles,
+            travelerTypes: input.travelerTypes ?? template.project.travelerTypes,
+            durations: input.durations ?? template.project.durations,
+            deliverables: input.deliverables ?? [],
+            brandStyle: {
+              ...template.project.brandStyle,
+              ...input.brandStyle,
+              voice:
+                input.voice ??
+                input.brandStyle?.voice ??
+                template.project.brandStyle.voice,
+            },
+            tripConfigs: template.project.tripConfigs.map((config) => ({
+              ...config,
+              id: crypto.randomUUID(),
+              updatedAt: timestamp,
+            })),
+            productionPlan: {
+              ...template.project.productionPlan,
+              offerModel:
+                input.offerModel ?? template.project.productionPlan.offerModel,
+              channels,
+              outputs,
+              editions: template.project.productionPlan.editions.map((edition) => ({
+                ...edition,
+                id: crypto.randomUUID(),
+                route: edition.route.map((stop) => ({
+                  ...stop,
+                  id: crypto.randomUUID(),
+                })),
+                itineraryId: undefined,
+                sourceEditionId: undefined,
+                createdAt: timestamp,
+              })),
+              review: {
+                liveDataVerified: false,
+                presentationReviewed: false,
+                backupConfirmed: false,
+              },
+            },
+            accent: input.accent ?? template.accent,
+            sourceTemplateId: template.id,
+            sourceTemplateName: template.name,
+            status: "Draft",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+          const result = commitProjects([project, ...get().projects]);
+          if (!result.ok) throw new Error(result.error);
+          const user = useAuthStore.getState().user;
+          logActivity(
+            project.id,
+            "created",
+            `Created project "${project.name}" from template "${template.name}"`,
+            user,
+          );
+          enqueueProjectSync(
+            project.id,
+            `Created project "${project.name}" from template "${template.name}"`,
+            "POST",
+          );
+          return project;
+        },
+
+        createFromTemplate: (template, name) =>
+          get().createProjectFromTemplate(template, { name }),
 
         getById: (id) =>
           get().projects.find((project) => project.id === id),
