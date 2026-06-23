@@ -84,6 +84,7 @@ export async function streamAiText(
   } = {},
 ): Promise<AiResult> {
   const timeoutSignal = requestSignalWithTimeout(signal);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     const response = await fetch("/api/ai/text/stream", {
       method: "POST",
@@ -95,7 +96,7 @@ export async function streamAiText(
     if (!response.body) {
       throw new Error("The AI stream did not return a readable response.");
     }
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let finalResult: AiResult | null = null;
@@ -145,6 +146,7 @@ export async function streamAiText(
   } catch (error) {
     throw normalizeClientFetchError(error, timeoutSignal.timedOut);
   } finally {
+    await reader?.cancel().catch(() => undefined);
     timeoutSignal.cleanup();
   }
 }
