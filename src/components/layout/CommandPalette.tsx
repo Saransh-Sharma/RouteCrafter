@@ -70,7 +70,8 @@ export function CommandPalette() {
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
-  const projectId = pathname.match(/^\/projects\/([^/]+)/)?.[1];
+  const projectMatch = pathname.match(/^\/projects\/([^/]+)/)?.[1];
+  const projectId = projectMatch === "new" ? undefined : projectMatch;
   const commands = React.useMemo<CommandItem[]>(
     () => [
       ...navItems.map((item) => ({

@@ -63,6 +63,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [dismissWithReason],
   );
 
+  React.useEffect(
+    () => () => {
+      timers.current.forEach((timer) => clearTimeout(timer));
+      timers.current.clear();
+    },
+    [],
+  );
+
   const toast = React.useCallback<ToastContextValue["toast"]>(
     (input, tone: ToastTone = "success") => {
       const id = (idRef.current += 1);

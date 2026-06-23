@@ -782,13 +782,15 @@ function AiReviewPanel({
     );
   }
 
+  const displayedRows = rows.slice(0, 80);
+
   function applySelected() {
     const base = cloneJson(
       current && typeof current === "object" && !Array.isArray(current)
         ? current
         : ai,
     );
-    for (const row of rows) {
+    for (const row of displayedRows) {
       const choice = choices[row.path] ?? "keep-current";
       if (choice === "keep-current") continue;
       setJsonPath(
@@ -814,7 +816,7 @@ function AiReviewPanel({
           <CopyButton value={aiText} />
         </div>
         <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
-          {rows.slice(0, 80).map((row) => {
+          {displayedRows.map((row) => {
             const choice = choices[row.path] ?? "keep-current";
             return (
               <div
