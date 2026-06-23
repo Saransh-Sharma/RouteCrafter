@@ -43,6 +43,9 @@ export type {
   PlannedEdition,
   PublishReview,
   ProductionPlan,
+  Template,
+  TemplateCategory,
+  TemplateProjectSkeleton,
 } from "./schemas";
 
 /** A module/section inside the project workspace (UI-only). */

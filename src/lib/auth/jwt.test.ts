@@ -33,7 +33,12 @@ describe("JWT sessions", () => {
       displayName: "Admin",
       role: "admin",
     });
-    const tampered = `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
+    const [header, payload, signature] = token.split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const tamperedPayload = Buffer.from(
+      JSON.stringify({ ...claims, username: "not-admin" }),
+    ).toString("base64url");
+    const tampered = `${header}.${tamperedPayload}.${signature}`;
 
     await expect(verifyToken(tampered)).resolves.toBeNull();
   });
