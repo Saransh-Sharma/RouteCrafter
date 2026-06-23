@@ -117,6 +117,7 @@ function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Pr
 
   const itineraries = project.itineraries.map((itinerary) => {
     const edition =
+      editions.find((candidate) => candidate.id === itinerary.plannedEditionId) ??
       editions.find((candidate) => candidate.itineraryId === itinerary.id) ??
       editions.find(
         (candidate) =>

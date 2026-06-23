@@ -71,6 +71,49 @@ describe("project normalization", () => {
     expect(itinerary.overview).not.toContain("7 days");
   });
 
+  it("prefers plannedEditionId over heuristic duration matching", () => {
+    const project = structuredClone(seedProjects[0]) as Record<string, unknown>;
+    project.itineraries = [
+      {
+        id: "it-custom",
+        plannedEditionId: "edition-14",
+        title: "7 days Vietnam itinerary",
+        country: "Vietnam",
+        duration: "7 days",
+        travelerType: "Couple",
+        overview: "A 7 days Vietnam route.",
+        days: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    project.productionPlan = {
+      offerModel: "digital",
+      channels: ["etsy"],
+      outputs: ["marketplace-listing"],
+      editions: [
+        {
+          id: "edition-7",
+          duration: "7 days",
+          travelerType: "Couple",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "edition-14",
+          duration: "14 days",
+          travelerType: "Couple",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      review: {},
+    };
+
+    const normalized = normalizeProject(project);
+
+    expect(normalized.itineraries[0].duration).toBe("14 days");
+    expect(normalized.itineraries[0].title).toBe("14 days Vietnam itinerary");
+  });
+
   it("preserves an intentionally empty initialized project list", () => {
     expect(
       normalizePersistedProjects({ projects: [], initialized: true }),
