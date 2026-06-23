@@ -3,7 +3,11 @@
 import { ArrowRight, Check, CircleAlert, ShieldCheck } from "lucide-react";
 import type { Project } from "@/lib/types";
 import {
+  extractLiveDataClaims,
   getProjectWorkflow,
+  itineraryForEdition,
+  lintProjectForPublish,
+  type LintFinding,
   type WorkflowIssue,
   type WorkflowStageId,
 } from "@/lib/workflow";
@@ -11,6 +15,7 @@ import { useProjectsStore } from "@/lib/store/projects-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui";
+import { useUndoableAction } from "@/hooks/useUndoableAction";
 import { downloadProjectJson } from "@/lib/io/project-io";
 import { StageShell } from "../StageShell";
 
@@ -26,7 +31,9 @@ export function PublishStage({
 }) {
   const update = useProjectsStore((state) => state.update);
   const { toast } = useToast();
+  const undoable = useUndoableAction();
   const workflow = getProjectWorkflow(project);
+  const lintFindings = lintProjectForPublish(project);
   const publishStage = workflow.stages.find((item) => item.id === "publish");
   const review = project.productionPlan.review;
   const confirmationsComplete =
@@ -57,7 +64,62 @@ export function PublishStage({
         },
       },
     });
-    toast("Marked ready to sell 🎉");
+    toast("Marked ready to sell");
+  }
+
+  function applyMoveLiveClaimsFix() {
+    const fixable = lintFindings.filter(
+      (finding) => finding.fixId === "move-live-claims-to-verification-notes",
+    );
+    if (!fixable.length) return;
+    const result = update(project.id, {
+      itineraries: project.itineraries.map((itinerary) => {
+        const edition = project.productionPlan.editions.find(
+          (item) => item.id === itinerary.plannedEditionId,
+        );
+        const linked = edition
+          ? itineraryForEdition(project, edition)?.id === itinerary.id
+          : true;
+        if (!linked) return itinerary;
+        const notes: string[] = [];
+        const days = itinerary.days.map((day, dayIndex) => {
+          let next = day;
+          for (const finding of fixable) {
+            if (finding.editionId && finding.editionId !== edition?.id) continue;
+            const match = finding.fieldPath.match(/^days\.(\d+)\.([A-Za-z]+)$/);
+            if (!match || Number(match[1]) !== dayIndex) continue;
+            const key = match[2] as keyof typeof day;
+            const value = String(day[key] ?? "").trim();
+            if (!value) continue;
+            const { cleaned, claims } = extractLiveDataClaims(value);
+            if (!claims.length) continue;
+            notes.push(...claims.map((claim) => `Day ${day.day} ${key}: ${claim}`));
+            next = {
+              ...next,
+              [key]: cleaned,
+            };
+          }
+          return next;
+        });
+        if (!notes.length) return itinerary;
+        const verificationNotes = [
+          itinerary.verificationNotes.trim(),
+          "Live details moved from itinerary text:",
+          ...notes.map((note) => `- ${note}`),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        return { ...itinerary, days, verificationNotes };
+      }),
+    });
+    if (result.ok) {
+      undoable({
+        message: `Moved ${fixable.length} live detail claim${fixable.length === 1 ? "" : "s"}`,
+        onUndo: () => {
+          update(project.id, { itineraries: project.itineraries });
+        },
+      });
+    } else toast(result.error, "error");
   }
 
   return (
@@ -79,6 +141,11 @@ export function PublishStage({
     >
       <div className="grid gap-7 lg:grid-cols-[1fr_340px]">
         <div className="space-y-8">
+          <ReadinessReport
+            findings={lintFindings}
+            onNavigate={onNavigate}
+            onMoveLiveClaims={applyMoveLiveClaimsFix}
+          />
           <ReviewSection
             title="Blockers"
             count={workflow.blockers.length}
@@ -156,6 +223,145 @@ export function PublishStage({
         </aside>
       </div>
     </StageShell>
+  );
+}
+
+function ReadinessReport({
+  findings,
+  onNavigate,
+  onMoveLiveClaims,
+}: {
+  findings: LintFinding[];
+  onNavigate: (
+    stage: WorkflowStageId,
+    params?: Record<string, string | undefined>,
+  ) => void;
+  onMoveLiveClaims: () => void;
+}) {
+  const mustFix = findings.filter((finding) => finding.severity === "must-fix");
+  const recommended = findings.filter(
+    (finding) => finding.severity === "recommended",
+  );
+  const polish = findings.filter((finding) => finding.severity === "polish");
+  const fixableCount = findings.filter(
+    (finding) => finding.fixId === "move-live-claims-to-verification-notes",
+  ).length;
+
+  return (
+    <section className="rounded-2xl border border-border-strong bg-paper/55 p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="rc-label">Readiness report</p>
+          <p className="mt-1 text-sm leading-6 text-ink-soft">
+            Proof mode catches live-data claims, thin days, and packaging gaps before the product is marked ready.
+          </p>
+        </div>
+        {fixableCount ? (
+          <Button size="sm" variant="outline" onClick={onMoveLiveClaims}>
+            Move {fixableCount} live claim{fixableCount === 1 ? "" : "s"}
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-sage-soft px-3 py-1 text-xs font-semibold text-forest">
+            <Check className="size-3.5" />
+            No deterministic fixes
+          </span>
+        )}
+      </div>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <FindingGroup
+          title="Must-fix"
+          findings={mustFix}
+          empty="No credibility blockers."
+          tone="danger"
+          onNavigate={onNavigate}
+        />
+        <FindingGroup
+          title="Recommended"
+          findings={recommended}
+          empty="No recommended fixes."
+          tone="warning"
+          onNavigate={onNavigate}
+        />
+        <FindingGroup
+          title="Polish"
+          findings={polish}
+          empty="No polish notes."
+          tone="neutral"
+          onNavigate={onNavigate}
+        />
+      </div>
+    </section>
+  );
+}
+
+function FindingGroup({
+  title,
+  findings,
+  empty,
+  tone,
+  onNavigate,
+}: {
+  title: string;
+  findings: LintFinding[];
+  empty: string;
+  tone: "danger" | "warning" | "neutral";
+  onNavigate: (
+    stage: WorkflowStageId,
+    params?: Record<string, string | undefined>,
+  ) => void;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border-soft bg-paper/70 p-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border-soft pb-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+          {title}
+        </p>
+        <span className="text-xs font-semibold text-ink-muted">
+          {findings.length}
+        </span>
+      </div>
+      {findings.length ? (
+        <div className="mt-2 space-y-1">
+          {findings.slice(0, 5).map((finding) => (
+            <button
+              key={finding.id}
+              type="button"
+              onClick={() =>
+                onNavigate(finding.stage, {
+                  edition: finding.editionId,
+                  tool: finding.tool,
+                })
+              }
+              className="group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-paper-2/70"
+            >
+              <CircleAlert
+                className={cn(
+                  "mt-0.5 size-3.5 shrink-0",
+                  tone === "danger"
+                    ? "text-terracotta"
+                    : tone === "warning"
+                      ? "text-gold"
+                      : "text-ink-muted",
+                )}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold text-ink">
+                  {finding.label}
+                </span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-ink-muted">
+                  {finding.message}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-forest">
+          <Check className="size-3.5" />
+          {empty}
+        </p>
+      )}
+    </div>
   );
 }
 

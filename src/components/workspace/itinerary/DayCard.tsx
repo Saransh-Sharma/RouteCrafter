@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ImageIcon,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -51,10 +52,20 @@ export function DayCard({
   onAiImprove?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const uploadId = React.useId();
 
   function set<K extends keyof DayPlan>(key: K, value: DayPlan[K]) {
     // A manual edit reconciles the day with its new city, so clear the flag.
     onChange({ ...day, [key]: value, needsRefresh: false });
+  }
+
+  function uploadImage(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") set("image", reader.result);
+    };
+    reader.readAsDataURL(file);
   }
 
   const complete = Boolean(
@@ -185,7 +196,77 @@ export function DayCard({
         </div>
 
         {open ? (
-        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+        <div className="space-y-4">
+          <div className="grid gap-3 rounded-2xl border border-border-soft bg-paper-2/25 p-3 sm:grid-cols-[180px_1fr]">
+            <div className="overflow-hidden rounded-xl border border-border-soft bg-paper">
+              {day.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={day.image}
+                  alt={`Day ${day.day} visual`}
+                  className="h-32 w-full object-cover"
+                />
+              ) : (
+                <div className="grid h-32 place-items-center text-center text-xs text-ink-muted">
+                  <span>
+                    <ImageIcon className="mx-auto mb-2 size-5 text-terracotta" />
+                    Day visual
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="grid gap-3">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                  Image prompt
+                </span>
+                <Textarea
+                  value={day.imagePrompt}
+                  rows={2}
+                  autoSize
+                  placeholder="Describe the visual direction for this day"
+                  onChange={(e) => set("imagePrompt", e.target.value)}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                  Image URL
+                </span>
+                <Input
+                  value={day.image}
+                  placeholder="Paste or generate a day image URL"
+                  onChange={(e) => set("image", e.target.value)}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  id={uploadId}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) =>
+                    uploadImage(event.currentTarget.files?.[0] ?? null)
+                  }
+                />
+                <label
+                  htmlFor={uploadId}
+                  className="inline-flex h-9 cursor-pointer items-center justify-center rounded-full border border-border-strong px-3 text-xs font-semibold text-ink-soft hover:border-forest/40 hover:text-forest"
+                >
+                  Upload
+                </label>
+                <button
+                  type="button"
+                  onClick={() => set("image", "")}
+                  disabled={!day.image}
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-border-strong px-3 text-xs font-semibold text-ink-soft hover:border-terracotta/40 hover:text-terracotta disabled:opacity-45"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
           {TEXT_FIELDS.map((f) => (
             <div
               key={f.key}
@@ -223,6 +304,7 @@ export function DayCard({
               ))}
             </Select>
           </div>
+        </div>
         </div>
         ) : null}
       </CardContent>
