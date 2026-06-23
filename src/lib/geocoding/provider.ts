@@ -21,7 +21,8 @@ export interface SearchGeocodeInput {
 const DEFAULT_GEOCODING_TIMEOUT_MS = 8000;
 
 function normalizeLimit(limit: number): number {
-  return Math.max(1, Math.min(limit, 5));
+  const parsed = Number.isFinite(limit) ? Math.trunc(limit) : 3;
+  return Math.max(1, Math.min(parsed, 5));
 }
 
 function geocodingTimeoutMs(): number {

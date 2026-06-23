@@ -23,7 +23,9 @@ export function readGeocodeCache(
   country?: string,
   limit = 3,
 ): GeocodeCandidate[] | undefined {
-  return cache.get(geocodeCacheKey(query, country, limit));
+  return cache
+    .get(geocodeCacheKey(query, country, limit))
+    ?.map((candidate) => ({ ...candidate }));
 }
 
 export function writeGeocodeCache(
@@ -39,7 +41,10 @@ export function writeGeocodeCache(
     if (!oldest) break;
     cache.delete(oldest);
   }
-  cache.set(key, candidates);
+  cache.set(
+    key,
+    candidates.map((candidate) => ({ ...candidate })),
+  );
 }
 
 export function clearGeocodeCacheForTests(): void {

@@ -143,6 +143,44 @@ describe("geocoding provider", () => {
     ]);
   });
 
+  it("does not expose mutable cache references", () => {
+    const original = [
+      { lat: 35, lng: 135, label: "Kyoto, Japan", provider: "test" },
+    ];
+    writeGeocodeCache("Kyoto", "Japan", 3, original);
+    original[0].label = "Mutated before read";
+
+    const firstRead = readGeocodeCache("Kyoto", "Japan", 3);
+    expect(firstRead).toEqual([
+      { lat: 35, lng: 135, label: "Kyoto, Japan", provider: "test" },
+    ]);
+    firstRead![0].label = "Mutated after read";
+
+    expect(readGeocodeCache("Kyoto", "Japan", 3)).toEqual([
+      { lat: 35, lng: 135, label: "Kyoto, Japan", provider: "test" },
+    ]);
+  });
+
+  it.each([
+    { limit: Number.NaN, expected: "3" },
+    { limit: 2.8, expected: "2" },
+    { limit: 0, expected: "1" },
+    { limit: 99, expected: "5" },
+  ])("normalizes invalid or out-of-range limits %#", async ({ limit, expected }) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchGeocodeCandidates({
+      query: `Kyoto ${expected}`,
+      country: "Japan",
+      limit,
+    });
+
+    expect(
+      ((fetchMock.mock.calls[0]?.[0] as URL).searchParams.get("limit")),
+    ).toBe(expected);
+  });
+
   it("aborts requests that exceed the geocoding timeout", async () => {
     vi.useFakeTimers();
     vi.stubEnv("GEOCODING_TIMEOUT_MS", "10");
