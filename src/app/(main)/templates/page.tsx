@@ -6,6 +6,7 @@ import { ArrowRight, LibraryBig, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { useToast } from "@/components/ui";
 import { useTemplatesStore } from "@/lib/store/templates-store";
 import { seedTemplates } from "@/lib/templates";
 import type { Template, TemplateCategory } from "@/lib/types";
@@ -30,6 +31,7 @@ export default function TemplatesPage() {
     (state) => state.hydrateCloudTemplates,
   );
   const removeTemplate = useTemplatesStore((state) => state.removeTemplate);
+  const { toast } = useToast();
   const [filter, setFilter] = React.useState<TemplateCategory | "all">("all");
 
   React.useEffect(() => {
@@ -57,6 +59,7 @@ export default function TemplatesPage() {
           <button
             key={item.id}
             type="button"
+            aria-pressed={filter === item.id}
             onClick={() => setFilter(item.id)}
             className={cn(
               "rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
@@ -83,7 +86,16 @@ export default function TemplatesPage() {
               key={template.id}
               template={template}
               removable={!seedTemplates.some((seed) => seed.id === template.id)}
-              onRemove={() => void removeTemplate(template.id)}
+              onRemove={() => {
+                void removeTemplate(template.id).catch((error) => {
+                  toast(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not remove the template.",
+                    "error",
+                  );
+                });
+              }}
             />
           ))}
         </div>
