@@ -46,6 +46,15 @@ export function RouteMap({
       const source = map.getSource("route-line") as
         | import("maplibre-gl").GeoJSONSource
         | undefined;
+      if (coordinates.length < 2) {
+        if (source) {
+          source.setData({
+            type: "FeatureCollection",
+            features: [],
+          });
+        }
+        return;
+      }
       const data = {
         type: "Feature",
         geometry: { type: "LineString", coordinates },

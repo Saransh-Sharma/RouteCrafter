@@ -53,17 +53,24 @@ export function DayCard({
 }) {
   const [open, setOpen] = React.useState(false);
   const uploadId = React.useId();
+  const dayRef = React.useRef(day);
+
+  React.useEffect(() => {
+    dayRef.current = day;
+  }, [day]);
 
   function set<K extends keyof DayPlan>(key: K, value: DayPlan[K]) {
     // A manual edit reconciles the day with its new city, so clear the flag.
-    onChange({ ...day, [key]: value, needsRefresh: false });
+    onChange({ ...dayRef.current, [key]: value, needsRefresh: false });
   }
 
   function uploadImage(file: File | null) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") set("image", reader.result);
+      if (typeof reader.result === "string") {
+        onChange({ ...dayRef.current, image: reader.result, needsRefresh: false });
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -244,9 +251,10 @@ export function DayCard({
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(event) =>
-                    uploadImage(event.currentTarget.files?.[0] ?? null)
-                  }
+                  onChange={(event) => {
+                    uploadImage(event.currentTarget.files?.[0] ?? null);
+                    event.currentTarget.value = "";
+                  }}
                 />
                 <label
                   htmlFor={uploadId}

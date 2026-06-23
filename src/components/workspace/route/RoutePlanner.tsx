@@ -60,6 +60,11 @@ export function RoutePlanner({
   >([]);
   const undoable = useUndoableAction();
   const { toast } = useToast();
+  const routeRef = React.useRef(route);
+
+  React.useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
 
   const placed = routeNights(route);
   const left = dayCount - placed;
@@ -170,7 +175,7 @@ export function RoutePlanner({
     undoable({
       message: `Removed ${stop.city} from the route`,
       onUndo: () => {
-        const next = route.filter((item) => item.id !== id);
+        const next = routeRef.current.filter((item) => item.id !== id);
         next.splice(Math.min(index, next.length), 0, stop);
         commit(next);
       },
