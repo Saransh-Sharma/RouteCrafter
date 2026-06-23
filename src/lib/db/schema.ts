@@ -64,6 +64,11 @@ export const templates = pgTable(
   (table) => ({
     updatedIdx: index("templates_updated_idx").on(table.updatedAt),
     categoryIdx: index("templates_category_idx").on(table.category),
+    userActiveUpdatedIdx: index("templates_user_active_updated_idx").on(
+      table.userId,
+      table.deletedAt,
+      table.updatedAt,
+    ),
   }),
 );
 

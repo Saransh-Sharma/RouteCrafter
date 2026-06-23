@@ -16,3 +16,5 @@ ALTER TABLE "templates" ADD CONSTRAINT "templates_user_id_users_id_fk" FOREIGN K
 CREATE INDEX "templates_updated_idx" ON "templates" USING btree ("updated_at");
 --> statement-breakpoint
 CREATE INDEX "templates_category_idx" ON "templates" USING btree ("category");
+--> statement-breakpoint
+CREATE INDEX "templates_user_active_updated_idx" ON "templates" USING btree ("user_id","deleted_at","updated_at");
