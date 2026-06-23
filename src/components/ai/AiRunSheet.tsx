@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import type { AiResult, AiTaskType, AiTextRequest } from "@/lib/ai/types";
-import { requestAiImage, requestAiText } from "@/lib/ai/client";
+import { requestAiImage, requestAiText, streamAiText } from "@/lib/ai/client";
 import { AI_PROVIDERS, providerSupports } from "@/lib/ai/providers";
 import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
 import { Button } from "@/components/ui/Button";
@@ -29,6 +29,13 @@ import { isRetryableErrorMessage } from "@/lib/ai/errors";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 type RunState = "idle" | "running" | "result" | "error";
+type AiReviewChoice = "keep-current" | "use-ai" | "merge";
+
+interface AiReviewRow {
+  path: string;
+  currentValue: unknown;
+  aiValue: unknown;
+}
 
 export interface AiRunSheetProps {
   open: boolean;
@@ -191,6 +198,8 @@ function AiRunSheetDialog({
     null,
   );
   const [draft, setDraft] = React.useState("");
+  const [reviewKey, setReviewKey] = React.useState(0);
+  const [phase, setPhase] = React.useState(0);
   const abortRef = React.useRef<AbortController | null>(null);
 
   const close = React.useCallback(() => {
@@ -232,28 +241,47 @@ function AiRunSheetDialog({
     setError(null);
     setValidationError(null);
     setResult(null);
+    setDraft("");
+    setReviewKey((key) => key + 1);
+    setPhase(0);
 
     try {
       const runText = requestText ?? requestAiText;
-      const next =
+      const textRequest =
         mode === "text"
-          ? await runText(
-              {
-                provider: selection.provider,
-                apiKey: personalKey || undefined,
-                model: selection.model,
-                prompt: effectivePrompt,
-                taskType,
-                projectId,
-                label: title,
-                source: sourceLabel,
-                temperature: textDefaults.temperature,
-                topP: textDefaults.topP,
-                maxOutputTokens: textMaxOutputTokens,
-                responseFormat,
-              },
-              controller.signal,
-            )
+          ? {
+              provider: selection.provider,
+              apiKey: personalKey || undefined,
+              model: selection.model,
+              prompt: effectivePrompt,
+              taskType,
+              projectId,
+              label: title,
+              source: sourceLabel,
+              temperature: textDefaults.temperature,
+              topP: textDefaults.topP,
+              maxOutputTokens: textMaxOutputTokens,
+              responseFormat,
+            }
+          : null;
+      const next =
+        mode === "text" && textRequest
+          ? !requestText && responseFormat !== "json"
+            ? await streamAiText(textRequest, {
+                signal: controller.signal,
+                onToken: (token) => setDraft((current) => current + token),
+                onEvent: (event) => {
+                  if (event.type !== "phase") return;
+                  setPhase(
+                    event.phase === "preparing"
+                      ? 0
+                      : event.phase === "calling-provider"
+                        ? 1
+                        : 2,
+                  );
+                },
+              })
+            : await runText(textRequest, controller.signal)
           : await requestAiImage(
               {
                 provider: selection.provider,
@@ -271,7 +299,9 @@ function AiRunSheetDialog({
               controller.signal,
             );
       setResult(next);
-      setDraft(next.text ?? "");
+      setDraft((current) => next.text ?? current);
+      setReviewKey((key) => key + 1);
+      setPhase(2);
       setState("result");
       if (next.text && validateText) setValidationError(validateText(next.text));
     } catch (runError) {
@@ -503,13 +533,23 @@ function AiRunSheetDialog({
                         <div
                           className={cn(
                             "h-1 rounded-full bg-[var(--rc-ai-gold)]",
-                            index === 1 && "animate-pulse",
+                            index === phase && "animate-pulse",
+                            index < phase && "bg-forest",
                           )}
                         />
                         <p className="mt-2 text-sm text-ink-soft">{step}</p>
                       </div>
                     ))}
                   </div>
+                  {mode === "text" && draft ? (
+                    <div className="mt-4 rounded-2xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/25 p-4">
+                      <p className="mb-2 text-sm font-semibold text-ink">
+                        Streaming preview
+                        <span className="ml-1 inline-block h-4 w-1 translate-y-0.5 animate-pulse rounded-full bg-[var(--rc-ai-gold)]" />
+                      </p>
+                      <Textarea value={draft} readOnly rows={8} />
+                    </div>
+                  ) : null}
                   <Button
                     variant="outline"
                     className="mt-5"
@@ -564,26 +604,41 @@ function AiRunSheetDialog({
                 <div className="space-y-4">
                   {error ? <InlineError message={error} /> : null}
                   {mode === "text" ? (
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                      <PreviewBlock title="Current content" value={currentText} />
-                      <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-ink">
-                            AI proposal
-                          </p>
-                          <CopyButton value={draft} />
+                    responseFormat === "json" ? (
+                      <AiReviewPanel
+                        key={reviewKey}
+                        currentText={currentText}
+                        aiText={draft}
+                        onApply={(nextText) => {
+                          const issue = validateText?.(nextText) ?? null;
+                          setValidationError(issue);
+                          if (issue || !onApplyText) return;
+                          onApplyText(nextText, { ...result, text: nextText }, "replace");
+                          close();
+                        }}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        <PreviewBlock title="Current content" value={currentText} />
+                        <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-ink">
+                              AI proposal
+                            </p>
+                            <CopyButton value={draft} />
+                          </div>
+                          <Textarea
+                            value={draft}
+                            rows={16}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              setDraft(next);
+                              setValidationError(validateText?.(next) ?? null);
+                            }}
+                          />
                         </div>
-                        <Textarea
-                          value={draft}
-                          rows={16}
-                          onChange={(event) => {
-                            const next = event.target.value;
-                            setDraft(next);
-                            setValidationError(validateText?.(next) ?? null);
-                          }}
-                        />
                       </div>
-                    </div>
+                    )
                   ) : (
                     <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
                       <p className="mb-3 text-sm font-semibold text-ink">
@@ -613,7 +668,7 @@ function AiRunSheetDialog({
                     <Button variant="ghost" onClick={close}>
                       Discard
                     </Button>
-                    {mode === "text" && onApplyText ? (
+                    {mode === "text" && onApplyText && responseFormat !== "json" ? (
                       <>
                         <Button
                           variant="outline"
@@ -683,6 +738,242 @@ function PreviewBlock({ title, value }: { title: string; value: string }) {
       <Textarea value={value || "No existing content."} readOnly rows={16} />
     </div>
   );
+}
+
+function AiReviewPanel({
+  currentText,
+  aiText,
+  onApply,
+}: {
+  currentText: string;
+  aiText: string;
+  onApply: (nextText: string) => void;
+}) {
+  const current = parseJsonValue(currentText) ?? {};
+  const ai = parseJsonValue(aiText);
+  const rows = ai ? flattenJsonRows(ai, current) : [];
+  const [choices, setChoices] = React.useState<Record<string, AiReviewChoice>>(
+    () =>
+      Object.fromEntries(
+        rows.map((row) => [
+          row.path,
+          isEmptyJsonValue(row.currentValue) ? "use-ai" : "keep-current",
+        ]),
+      ),
+  );
+  const [mergeValues, setMergeValues] = React.useState<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        rows.map((row) => [
+          row.path,
+          typeof row.currentValue === "string" && typeof row.aiValue === "string"
+            ? [row.currentValue, row.aiValue].filter(Boolean).join("\n\n")
+            : stringifyJsonValue(row.aiValue),
+        ]),
+      ),
+  );
+
+  if (!ai) {
+    return (
+      <div className="rounded-2xl border border-terracotta/30 bg-terracotta-soft/60 p-4 text-sm text-terracotta">
+        The AI response is not valid JSON, so RouteCrafter cannot safely review
+        individual fields.
+      </div>
+    );
+  }
+
+  function applySelected() {
+    const base = cloneJson(
+      current && typeof current === "object" && !Array.isArray(current)
+        ? current
+        : ai,
+    );
+    for (const row of rows) {
+      const choice = choices[row.path] ?? "keep-current";
+      if (choice === "keep-current") continue;
+      setJsonPath(
+        base,
+        row.path,
+        choice === "merge" ? mergeValues[row.path] : row.aiValue,
+      );
+    }
+    onApply(JSON.stringify(base, null, 2));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-ink">Field review</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Empty current fields default to Use AI. Existing fields default to
+              Keep mine.
+            </p>
+          </div>
+          <CopyButton value={aiText} />
+        </div>
+        <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
+          {rows.slice(0, 80).map((row) => {
+            const choice = choices[row.path] ?? "keep-current";
+            return (
+              <div
+                key={row.path}
+                className="rounded-xl border border-border-soft bg-paper-2/35 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-ink">{row.path}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(["keep-current", "use-ai", "merge"] as const).map(
+                      (nextChoice) => (
+                        <button
+                          key={nextChoice}
+                          type="button"
+                          onClick={() =>
+                            setChoices((currentChoices) => ({
+                              ...currentChoices,
+                              [row.path]: nextChoice,
+                            }))
+                          }
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                            choice === nextChoice
+                              ? "bg-forest text-paper"
+                              : "bg-paper text-ink-muted hover:text-ink",
+                          )}
+                        >
+                          {nextChoice === "keep-current"
+                            ? "Keep mine"
+                            : nextChoice === "use-ai"
+                              ? "Use AI"
+                              : "Merge"}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <MiniValue title="Current" value={row.currentValue} />
+                  <MiniValue title="AI" value={row.aiValue} />
+                </div>
+                {choice === "merge" ? (
+                  <Textarea
+                    value={mergeValues[row.path] ?? ""}
+                    rows={3}
+                    className="mt-2"
+                    onChange={(event) =>
+                      setMergeValues((currentValues) => ({
+                        ...currentValues,
+                        [row.path]: event.target.value,
+                      }))
+                    }
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={applySelected}>Apply selected fields</Button>
+      </div>
+    </div>
+  );
+}
+
+function MiniValue({ title, value }: { title: string; value: unknown }) {
+  return (
+    <div className="rounded-lg bg-paper/75 p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+        {title}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-ink-soft">
+        {stringifyJsonValue(value) || "Empty"}
+      </p>
+    </div>
+  );
+}
+
+function parseJsonValue(text: string): unknown | null {
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function stringifyJsonValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function isEmptyJsonValue(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return false;
+}
+
+function flattenJsonRows(ai: unknown, current: unknown, prefix = ""): AiReviewRow[] {
+  if (ai && typeof ai === "object" && !Array.isArray(ai)) {
+    return Object.entries(ai as Record<string, unknown>).flatMap(([key, value]) =>
+      flattenJsonRows(value, getJsonPath(current, key), prefix ? `${prefix}.${key}` : key),
+    );
+  }
+  if (Array.isArray(ai)) {
+    if (ai.every((item) => !item || typeof item !== "object")) {
+      return [{ path: prefix, currentValue: getJsonPath(current, ""), aiValue: ai }];
+    }
+    return ai.flatMap((value, index) =>
+      flattenJsonRows(value, getJsonPath(current, String(index)), `${prefix}.${index}`),
+    );
+  }
+  return [{ path: prefix, currentValue: current, aiValue: ai }];
+}
+
+function getJsonPath(value: unknown, path: string): unknown {
+  if (!path) return value;
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (current === null || current === undefined) return undefined;
+    if (Array.isArray(current)) return current[Number(part)];
+    if (typeof current === "object") {
+      return (current as Record<string, unknown>)[part];
+    }
+    return undefined;
+  }, value);
+}
+
+function setJsonPath(target: unknown, path: string, value: unknown): void {
+  const parts = path.split(".");
+  let current = target as Record<string, unknown> | unknown[];
+  parts.forEach((part, index) => {
+    const last = index === parts.length - 1;
+    if (last) {
+      if (Array.isArray(current)) current[Number(part)] = value;
+      else current[part] = value;
+      return;
+    }
+    const nextPart = parts[index + 1];
+    const existing = Array.isArray(current)
+      ? current[Number(part)]
+      : current[part];
+    const next =
+      existing && typeof existing === "object"
+        ? existing
+        : /^\d+$/.test(nextPart)
+          ? []
+          : {};
+    if (Array.isArray(current)) current[Number(part)] = next;
+    else current[part] = next;
+    current = next as Record<string, unknown> | unknown[];
+  });
 }
 
 function InlineError({ message }: { message: string }) {
