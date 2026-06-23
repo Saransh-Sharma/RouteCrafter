@@ -129,11 +129,6 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
       "The model returned listing JSON RouteCrafter could not safely apply.",
     ),
   ).toBeVisible();
-  await expect(
-    page.getByText(
-      "The model returned listing JSON RouteCrafter could not safely apply.",
-    ),
-  ).toBeVisible();
   await page.getByRole("button", { name: "Discard" }).click();
 
   await page.unroute("**/api/ai/text");
