@@ -38,6 +38,16 @@ export const routeStopSchema = z.object({
   nights: z.number().int().min(0).max(60).default(1),
   /** Transport used to ARRIVE here from the previous stop. Omit on the first stop. */
   arriveBy: transportModeEnum.optional(),
+  /** Cached map/geocoder coordinates. Optional so route planning never depends on map services. */
+  coords: z
+    .object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      label: z.string().optional(),
+      provider: z.string().optional(),
+      updatedAt: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const plannedEditionSchema = z.object({
@@ -49,6 +59,8 @@ export const plannedEditionSchema = z.object({
   /** Ordered, time-aware route. Empty for legacy editions (lazily seeded). */
   route: z.array(routeStopSchema).default([]),
   itineraryId: z.string().optional(),
+  sourceEditionId: z.string().optional(),
+  lineageNote: z.string().optional(),
   createdAt: z.string(),
 });
 
