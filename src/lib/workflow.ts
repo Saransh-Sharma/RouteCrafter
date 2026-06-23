@@ -394,14 +394,20 @@ export function lintItinerary(
         }),
       );
     }
-    if (!hasText(day.rainyDayAlternative) || !hasText(day.lowEnergyAlternative)) {
+    const missingRainyDayAlternative = !hasText(day.rainyDayAlternative);
+    const missingLowEnergyAlternative = !hasText(day.lowEnergyAlternative);
+    if (missingRainyDayAlternative || missingLowEnergyAlternative) {
       findings.push(
         finding({
           id: lintId(prefix, "backup", day.day),
           severity: "polish",
           label: `Day ${day.day} needs stronger backup options`,
           editionId,
-          fieldPath: `days.${dayIndex}.rainyDayAlternative`,
+          fieldPath: `days.${dayIndex}.${
+            missingRainyDayAlternative
+              ? "rainyDayAlternative"
+              : "lowEnergyAlternative"
+          }`,
           message:
             "Add rainy-day and low-energy alternatives to make the day safer to sell.",
         }),

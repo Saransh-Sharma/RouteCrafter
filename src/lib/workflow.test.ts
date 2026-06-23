@@ -185,6 +185,33 @@ describe("project workflow", () => {
     );
   });
 
+  it("points backup findings to the missing backup field", () => {
+    const project = projectFixture();
+    const itinerary = {
+      ...project.itineraries[0],
+      days: [
+        {
+          ...project.itineraries[0].days[0],
+          rainyDayAlternative: "Move the garden walk to a covered arcade.",
+          lowEnergyAlternative: "",
+        },
+      ],
+    };
+    const result = projectSchema.parse({
+      ...project,
+      itineraries: [itinerary],
+    });
+
+    expect(lintProjectForPublish(result)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "edition-backup-1",
+          fieldPath: "days.0.lowEnergyAlternative",
+        }),
+      ]),
+    );
+  });
+
   it("extracts only live-data sentences for deterministic fixes", () => {
     const result = extractLiveDataClaims(
       "Start with a quiet garden walk. Museum tickets cost $18. Dinner is flexible.",
