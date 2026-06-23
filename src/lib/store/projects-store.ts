@@ -263,13 +263,19 @@ function resizeRoute(route: RouteStop[], dayCount: number): RouteStop[] {
     return { ...stop, nights };
   });
   if (placed === 0 && resized[0]) resized[0] = { ...resized[0], nights: dayCount };
-  const delta = dayCount - resized.reduce((sum, stop) => sum + stop.nights, 0);
-  if (delta !== 0 && resized[resized.length - 1]) {
+  let remaining = dayCount - resized.reduce((sum, stop) => sum + stop.nights, 0);
+  if (remaining > 0 && resized[resized.length - 1]) {
     const last = resized[resized.length - 1];
-    resized[resized.length - 1] = {
-      ...last,
-      nights: Math.max(0, last.nights + delta),
-    };
+    resized[resized.length - 1] = { ...last, nights: last.nights + remaining };
+    remaining = 0;
+  }
+  if (remaining < 0) {
+    for (let index = resized.length - 1; index >= 0 && remaining < 0; index -= 1) {
+      const stop = resized[index];
+      const reduction = Math.min(stop.nights, Math.abs(remaining));
+      resized[index] = { ...stop, nights: stop.nights - reduction };
+      remaining += reduction;
+    }
   }
   return normalizeRoute(resized);
 }

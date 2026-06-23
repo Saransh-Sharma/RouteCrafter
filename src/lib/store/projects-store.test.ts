@@ -357,6 +357,35 @@ describe("projects store mutations", () => {
     expect(cloned!.subtitle).toBe("Couple - Nature/adventure - Mid-range");
   });
 
+  it("resizes cloned routes to the exact custom day count after clamping", () => {
+    const project = useProjectsStore.getState().projects[0];
+    const source = {
+      id: "edition-base",
+      duration: "7 days" as const,
+      travelerType: "Couple" as const,
+      cities: ["Hanoi", "Hue", "Hoi An"],
+      route: [
+        { id: "stop-hanoi", city: "Hanoi", nights: 5 },
+        { id: "stop-hue", city: "Hue", nights: 5 },
+        { id: "stop-hoi-an", city: "Hoi An", nights: 0 },
+      ],
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    useProjectsStore.getState().update(project.id, {
+      productionPlan: {
+        ...project.productionPlan,
+        editions: [source],
+      },
+    });
+
+    const created = useProjectsStore
+      .getState()
+      .duplicateEdition(project.id, source.id, { customDays: 1 });
+
+    expect(created).toBeDefined();
+    expect(created!.route.reduce((sum, stop) => sum + stop.nights, 0)).toBe(1);
+  });
+
   it("removes a duplicated edition against latest state without clobbering unrelated edits", () => {
     const project = useProjectsStore.getState().projects[0];
     const source = {
@@ -1059,7 +1088,7 @@ describe("shared workspace cloud freshness and conflicts", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
     const project = useProjectsStore.getState().projects[0];
     const fetchMock = vi.fn(
-      async (_url: string | URL | Request, _init?: RequestInit) =>
+      async () =>
         new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: jsonHeaders,
