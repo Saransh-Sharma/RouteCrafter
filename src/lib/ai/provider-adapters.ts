@@ -32,6 +32,14 @@ interface ProviderFetchResult {
   meta: ProviderFetchMeta;
 }
 
+type StreamTextEvent =
+  | { type: "delta"; text: string }
+  | { type: "result"; result: AiResult };
+
+type SafeJsonResult =
+  | { ok: true; value: unknown }
+  | { ok: false; error: Error };
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 90_000;
 const PROVIDER_MAX_ATTEMPTS = 3;
 const PROVIDER_RETRY_BASE_DELAY_MS = 1_000;
@@ -58,6 +66,11 @@ function attachProviderAttempts(error: unknown, attempts: number): never {
   const wrapped = new Error(AI_ERROR.DID_NOT_COMPLETE);
   (wrapped as Error & { providerAttempts?: number }).providerAttempts = attempts;
   throw wrapped;
+}
+
+function withProviderAttempts(error: Error, attempts: number): Error {
+  (error as Error & { providerAttempts?: number }).providerAttempts = attempts;
+  return error;
 }
 
 function redactProviderUrl(input: string): string {
@@ -284,6 +297,10 @@ function truncationError(): Error {
   );
 }
 
+function incompleteStreamError(): Error {
+  return new Error("Provider stream ended before completion.");
+}
+
 function throwIfOpenAiTruncated(data: JsonRecord): void {
   const incomplete = asRecord(data.incomplete_details);
   if (
@@ -322,6 +339,30 @@ export function readProviderAttempts(error: unknown): number | undefined {
   return undefined;
 }
 
+export function safeParseSseJson(data: string): SafeJsonResult {
+  try {
+    return { ok: true, value: JSON.parse(data) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error : new Error("Invalid SSE JSON."),
+    };
+  }
+}
+
+function parseProviderSseJson(
+  provider: string,
+  data: string,
+  attempts: number,
+): JsonRecord {
+  const parsed = safeParseSseJson(data);
+  if (parsed.ok) return asRecord(parsed.value);
+  throw withProviderAttempts(
+    new Error(`${provider} returned a malformed streaming event.`),
+    attempts,
+  );
+}
+
 export async function generateText(
   request: ResolvedAiTextRequest,
   signal?: AbortSignal,
@@ -337,6 +378,219 @@ export async function generateText(
     case "gemini":
       return generateGeminiText(request, signal);
   }
+}
+
+export async function* streamGenerateText(
+  request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamTextEvent> {
+  if (!providerSupports(request.provider, "text")) {
+    throw new Error("This provider does not support text generation here.");
+  }
+  switch (request.provider) {
+    case "openai":
+      yield* streamOpenAiText(request, signal);
+      return;
+    case "anthropic":
+      yield* streamAnthropicText(request, signal);
+      return;
+    case "gemini":
+      yield* streamGeminiText(request, signal);
+      return;
+  }
+}
+
+async function* readSse(
+  response: Response,
+): AsyncGenerator<{ event?: string; data: string }> {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const raw = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const lines = raw.split(/\r?\n/);
+      const event = lines
+        .find((line) => line.startsWith("event:"))
+        ?.slice("event:".length)
+        .trim();
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trim())
+        .join("\n");
+      if (data && data !== "[DONE]") yield { event, data };
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+async function* streamOpenAiText(
+  request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamTextEvent> {
+  const { response, meta } = await providerFetchWithRetry("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: request.model,
+      input: [
+        request.system
+          ? { role: "system", content: request.system }
+          : undefined,
+        { role: "user", content: request.prompt },
+      ].filter(Boolean),
+      temperature: request.temperature,
+      top_p: request.topP,
+      max_output_tokens: request.maxOutputTokens,
+      stream: true,
+    }),
+  }, signal);
+  if (!response.ok) throw new Error(await readError(response));
+  let text = "";
+  let usage: AiUsage | undefined;
+  let completed = false;
+  for await (const event of readSse(response)) {
+    const data = parseProviderSseJson("OpenAI", event.data, meta.attempts);
+    if (data.type === "response.output_text.delta") {
+      const delta = stringValue(data.delta) ?? "";
+      text += delta;
+      if (delta) yield { type: "delta" as const, text: delta };
+    }
+    if (data.type === "response.completed") {
+      completed = true;
+      usage = usageFromOpenAI(asRecord(asRecord(data.response).usage));
+    }
+  }
+  if (!completed) throw withProviderAttempts(incompleteStreamError(), meta.attempts);
+  yield {
+    type: "result" as const,
+    result: {
+      provider: "openai",
+      model: request.model,
+      credentialSource: request.credentialSource,
+      text,
+      usage,
+      providerAttempts: meta.attempts,
+    },
+  };
+}
+
+async function* streamAnthropicText(
+  request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamTextEvent> {
+  const isLateOpus = /^claude-opus-4-[78]/.test(request.model);
+  const { response, meta } = await providerFetchWithRetry("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": request.apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: request.model,
+      max_tokens: request.maxOutputTokens ?? 4000,
+      system: request.system,
+      messages: [{ role: "user", content: request.prompt }],
+      temperature: isLateOpus ? undefined : request.temperature,
+      top_p: isLateOpus ? undefined : request.topP,
+      stream: true,
+    }),
+  }, signal);
+  if (!response.ok) throw new Error(await readError(response));
+  let text = "";
+  let usage: AiUsage | undefined;
+  let completed = false;
+  for await (const event of readSse(response)) {
+    const data = parseProviderSseJson("Anthropic", event.data, meta.attempts);
+    if (event.event === "content_block_delta") {
+      const delta = stringValue(asRecord(data.delta).text) ?? "";
+      text += delta;
+      if (delta) yield { type: "delta" as const, text: delta };
+    }
+    if (event.event === "message_delta") {
+      usage = usageFromAnthropic(asRecord(data.usage));
+    }
+    if (event.event === "message_stop") {
+      completed = true;
+    }
+  }
+  if (!completed) throw withProviderAttempts(incompleteStreamError(), meta.attempts);
+  yield {
+    type: "result" as const,
+    result: {
+      provider: "anthropic",
+      model: request.model,
+      credentialSource: request.credentialSource,
+      text,
+      usage,
+      providerAttempts: meta.attempts,
+    },
+  };
+}
+
+async function* streamGeminiText(
+  request: ResolvedAiTextRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamTextEvent> {
+  const { response, meta } = await providerFetchWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      request.model,
+    )}:streamGenerateContent?alt=sse&key=${encodeURIComponent(request.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: request.system
+          ? { parts: [{ text: request.system }] }
+          : undefined,
+        contents: [{ role: "user", parts: [{ text: request.prompt }] }],
+        generationConfig: {
+          temperature: request.temperature,
+          topP: request.topP,
+          maxOutputTokens: request.maxOutputTokens,
+        },
+      }),
+    },
+    signal,
+  );
+  if (!response.ok) throw new Error(await readError(response));
+  let text = "";
+  let usage: AiUsage | undefined;
+  let completed = false;
+  for await (const event of readSse(response)) {
+    const data = parseProviderSseJson("Gemini", event.data, meta.attempts);
+    const delta = extractGeminiText(data);
+    text += delta;
+    if (delta) yield { type: "delta" as const, text: delta };
+    usage = usageFromGemini(data.usageMetadata) ?? usage;
+    const candidate = asRecord(asArray(data.candidates)[0]);
+    const finishReason = stringValue(candidate.finishReason);
+    if (finishReason && finishReason !== "FINISH_REASON_UNSPECIFIED") {
+      completed = true;
+    }
+  }
+  if (!completed) throw withProviderAttempts(incompleteStreamError(), meta.attempts);
+  yield {
+    type: "result" as const,
+    result: {
+      provider: "gemini",
+      model: request.model,
+      credentialSource: request.credentialSource,
+      text,
+      usage,
+      providerAttempts: meta.attempts,
+    },
+  };
 }
 
 export async function generateImage(

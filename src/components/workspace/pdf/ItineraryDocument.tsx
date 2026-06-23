@@ -46,10 +46,18 @@ export const ItineraryDocument = React.forwardRef<
     project: Project;
     onAssetSettled?: () => void;
     editable?: boolean;
+    exportMode?: boolean;
     editor?: DocEditor;
   }
 >(function ItineraryDocument(
-  { itinerary, project, onAssetSettled, editable = false, editor },
+  {
+    itinerary,
+    project,
+    onAssetSettled,
+    editable = false,
+    exportMode = false,
+    editor,
+  },
   ref,
 ) {
   const isEdit = editable && Boolean(editor);
@@ -101,7 +109,9 @@ export const ItineraryDocument = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={`rc-doc rc-print-root${isEdit ? " rc-doc-editing" : ""}`}
+      className={`rc-doc rc-print-root${isEdit ? " rc-doc-editing" : ""}${
+        exportMode ? " rc-doc-export" : ""
+      }`}
       style={themeVars(theme)}
     >
       {/* Cover */}
@@ -188,7 +198,7 @@ export const ItineraryDocument = React.forwardRef<
       </section>
 
       {/* Overview */}
-      <section className="rc-print-page px-14 py-16">
+      <section className="rc-print-page rc-doc-overview-page px-14 py-16">
         <p className="rc-doc-eyebrow">The trip at a glance</p>
         <div className="rc-doc-rule mt-3" />
         <h2 className="mt-5 text-3xl font-semibold">Trip overview</h2>
@@ -249,7 +259,7 @@ export const ItineraryDocument = React.forwardRef<
           return (
             <section
               key={day.day}
-              className="rc-print-page rc-edit-only flex items-center justify-center px-14 py-14"
+              className="rc-print-page rc-doc-day-page rc-edit-only flex items-center justify-center px-14 py-14"
             >
               <button
                 type="button"
@@ -264,7 +274,7 @@ export const ItineraryDocument = React.forwardRef<
           );
         }
         return (
-          <section key={day.day} className="rc-print-page px-14 py-14">
+          <section key={day.day} className="rc-print-page rc-doc-day-page px-14 py-14">
             {isEdit ? (
               <button
                 type="button"
@@ -275,8 +285,8 @@ export const ItineraryDocument = React.forwardRef<
                 <Trash2 className="size-3.5" />
               </button>
             ) : null}
-            <div className="flex items-end justify-between gap-4">
-              <div>
+            <div className="rc-doc-day-header flex items-end justify-between gap-4">
+              <div className="rc-doc-day-heading min-w-0">
                 <p className="rc-doc-eyebrow">
                   Day {String(day.day).padStart(2, "0")}
                 </p>
@@ -286,7 +296,7 @@ export const ItineraryDocument = React.forwardRef<
                   editable={isEdit}
                   placeholder="Day title"
                   onCommit={(next) => setDayField(day.day, "title", next)}
-                  className="mt-1 text-3xl font-semibold"
+                  className="rc-doc-day-title mt-1 text-3xl font-semibold"
                 />
                 {day.base || isEdit ? (
                   <EditableText
@@ -295,7 +305,7 @@ export const ItineraryDocument = React.forwardRef<
                     editable={isEdit}
                     placeholder="Base city"
                     onCommit={(next) => setDayField(day.day, "base", next)}
-                    className="mt-1 text-sm uppercase tracking-[0.18em]"
+                    className="rc-doc-day-base mt-1 text-sm uppercase tracking-[0.18em]"
                     style={{ color: "var(--doc-ink-muted)" }}
                   />
                 ) : null}
@@ -309,13 +319,13 @@ export const ItineraryDocument = React.forwardRef<
                 hidden={hidden(`${dayKey}:image`)}
                 onToggle={() => toggle(`${dayKey}:image`)}
                 label="day image"
-                className="mt-6"
+                className="rc-doc-day-image-slot"
               >
                 <div
-                  className="overflow-hidden rounded-2xl"
+                  className="rc-doc-day-image overflow-hidden rounded-2xl"
                   style={{ border: "1px solid var(--doc-border)" }}
                 >
-                  <div className="rc-doc-img-frame">
+                  <div className="rc-doc-img-frame rc-doc-day-img-frame">
                     <img
                       className="rc-doc-img"
                       src={day.image ?? ""}
@@ -328,7 +338,7 @@ export const ItineraryDocument = React.forwardRef<
               </Removable>
             ) : null}
 
-            <div className="mt-7">
+            <div className="rc-doc-day-schedule mt-7">
               {times.map((f) => (
                 <div key={f.key as string} className="rc-day-row">
                   <div className="rc-day-row-label">{f.label}</div>
@@ -350,16 +360,16 @@ export const ItineraryDocument = React.forwardRef<
                 hidden={hidden(`${dayKey}:notes`)}
                 onToggle={() => toggle(`${dayKey}:notes`)}
                 label="notes"
-                className="mt-6"
+                className="rc-doc-day-notes-slot"
               >
                 <div
-                  className="rc-doc-section rounded-2xl p-5"
+                  className="rc-doc-section rc-day-notes rounded-2xl"
                   style={{ background: "var(--doc-accent-soft)" }}
                 >
                   <p className="rc-doc-eyebrow">Good to know</p>
-                  <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                  <div className="rc-day-notes-grid mt-3 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                     {notes.map((f) => (
-                      <div key={f.key as string} className="text-sm">
+                      <div key={f.key as string} className="rc-day-note text-sm">
                         <span
                           className="font-semibold"
                           style={{ color: "var(--doc-ink)" }}
@@ -392,7 +402,7 @@ export const ItineraryDocument = React.forwardRef<
 
       {/* Guides */}
       {guides.length || isEdit ? (
-        <section className="rc-print-page px-14 py-16">
+        <section className="rc-print-page rc-doc-guides-page px-14 py-16">
           <p className="rc-doc-eyebrow">Plan with confidence</p>
           <div className="rc-doc-rule mt-3" />
           <h2 className="mt-5 text-3xl font-semibold">Guides & checklists</h2>
@@ -430,7 +440,7 @@ export const ItineraryDocument = React.forwardRef<
       ) : null}
 
       {/* Closing / disclaimer */}
-      <section className="rc-print-page px-14 py-16">
+      <section className="rc-print-page rc-doc-closing-page px-14 py-16">
         <div className="rc-doc-rule" />
         <p className="mt-5 text-xl font-semibold">
           {businessName || "Thank you & safe travels"}

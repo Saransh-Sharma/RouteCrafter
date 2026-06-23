@@ -32,6 +32,8 @@ export const dayPlanSchema = z.object({
   whyThisWorks: z.string().default(""),
   /** Optional illustration for this day (data URL or remote URL). */
   image: z.string().default(""),
+  /** Prompt used to generate or brief the day's optional illustration. */
+  imagePrompt: z.string().default(""),
   /**
    * Set true when a route change re-based this day to a new city, so its prose
    * may still reference the old one. Cleared after an AI refresh or manual edit.
@@ -49,7 +51,7 @@ export const customBlockSchema = z.object({
   id: z.string(),
   anchor: z.string(),
   order: z.number().default(0),
-  type: z.enum(["text", "image", "divider"]).default("text"),
+  type: z.enum(["text", "image", "divider", "route-map"]).default("text"),
   /** text: heading|subheading|body|callout ; divider: line|space|rule */
   variant: z.string().default(""),
   text: z.string().default(""),

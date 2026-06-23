@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, X } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -15,6 +15,7 @@ import {
   CheckboxChip,
 } from "@/components/ui/field";
 import { useProjectsStore } from "@/lib/store/projects-store";
+import { useTemplatesStore } from "@/lib/store/templates-store";
 import { enumValues } from "@/lib/schemas";
 import type {
   BrandVoice,
@@ -65,9 +66,24 @@ const STARTER_OUTPUTS: {
 ];
 
 export default function NewProjectPage() {
+  return (
+    <React.Suspense
+      fallback={<div className="h-64 rounded-2xl bg-paper/45" />}
+    >
+      <NewProjectForm />
+    </React.Suspense>
+  );
+}
+
+function NewProjectForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const create = useProjectsStore((s) => s.create);
-  const update = useProjectsStore((s) => s.update);
+  const createProjectFromTemplate = useProjectsStore(
+    (s) => s.createProjectFromTemplate,
+  );
+  const templates = useTemplatesStore((s) => s.templates);
+  const hydrateCloudTemplates = useTemplatesStore((s) => s.hydrateCloudTemplates);
 
   const [name, setName] = React.useState("");
   const [country, setCountry] = React.useState("");
@@ -82,7 +98,35 @@ export default function NewProjectPage() {
     "marketplace-listing",
     "pdf",
   ]);
+  const [appliedTemplateId, setAppliedTemplateId] = React.useState<string | null>(
+    null,
+  );
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const templateId = searchParams.get("template");
+  const selectedTemplate = templateId
+    ? templates.find((template) => template.id === templateId)
+    : undefined;
+
+  React.useEffect(() => {
+    void hydrateCloudTemplates();
+  }, [hydrateCloudTemplates]);
+
+  React.useEffect(() => {
+    if (!selectedTemplate || appliedTemplateId === selectedTemplate.id) return;
+    queueMicrotask(() => {
+      setAppliedTemplateId(selectedTemplate.id);
+      setName(`${selectedTemplate.name} project`);
+      setCountry(selectedTemplate.project.country);
+      setRegions(selectedTemplate.project.regions.join(", "));
+      setAudience(selectedTemplate.project.targetAudience);
+      setPositioning(selectedTemplate.project.positioning);
+      setStyles(selectedTemplate.project.travelStyles);
+      setTravelers(selectedTemplate.project.travelerTypes);
+      setVoice(selectedTemplate.project.brandStyle.voice);
+      setOfferModel(selectedTemplate.project.productionPlan.offerModel);
+      setOutputs(selectedTemplate.project.productionPlan.outputs);
+    });
+  }, [appliedTemplateId, selectedTemplate]);
 
   function toggle<T>(list: T[], value: T): T[] {
     return list.includes(value)
@@ -94,29 +138,41 @@ export default function NewProjectPage() {
     e.preventDefault();
     setSubmitError(null);
     try {
-      const project = create({
-        name: name.trim(),
-        country: country.trim(),
-        regions: regions
-          .split(",")
-          .map((r) => r.trim())
-          .filter(Boolean),
-        positioning: positioning.trim(),
-        targetAudience: audience.trim(),
-        travelStyles: styles,
-        travelerTypes: travelers,
-        offerModel,
-        channels:
-          OFFER_OPTIONS.find((option) => option.id === offerModel)?.channels ??
-          ["etsy"],
-        outputs,
-      });
-      if (voice !== "editorial") {
-        const result = update(project.id, {
-          brandStyle: { ...project.brandStyle, voice },
-        });
-        if (!result.ok) throw new Error(result.error);
-      }
+      const regionsList = regions
+        .split(",")
+        .map((r) => r.trim())
+        .filter(Boolean);
+      const project = selectedTemplate
+        ? createProjectFromTemplate(selectedTemplate, {
+            name: name.trim(),
+            country: country.trim(),
+            regions: regionsList,
+            positioning: positioning.trim(),
+            targetAudience: audience.trim(),
+            travelStyles: styles,
+            travelerTypes: travelers,
+            voice,
+            offerModel,
+            channels:
+              OFFER_OPTIONS.find((option) => option.id === offerModel)?.channels ??
+              ["etsy"],
+            outputs,
+          })
+        : create({
+            name: name.trim(),
+            country: country.trim(),
+            regions: regionsList,
+            positioning: positioning.trim(),
+            targetAudience: audience.trim(),
+            travelStyles: styles,
+            travelerTypes: travelers,
+            brandStyle: { voice },
+            offerModel,
+            channels:
+              OFFER_OPTIONS.find((option) => option.id === offerModel)?.channels ??
+              ["etsy"],
+            outputs,
+          });
       router.push(`/projects/${project.id}`);
     } catch (error) {
       setSubmitError(
@@ -142,6 +198,19 @@ export default function NewProjectPage() {
         title="Choose what you want to sell"
         subtitle="Start with the offer model and product promise. RouteCrafter will turn those choices into a guided route from brief to launch."
       />
+
+      {selectedTemplate ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sage/40 bg-sage-soft/40 px-4 py-3 text-sm text-forest">
+          <span className="font-semibold">Started from “{selectedTemplate.name}”</span>
+          <Link
+            href="/projects/new"
+            className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold hover:bg-paper/70"
+          >
+            <X className="size-3.5" />
+            Clear
+          </Link>
+        </div>
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <section className="space-y-4">

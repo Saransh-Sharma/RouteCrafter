@@ -1,11 +1,14 @@
 import type {
+  Duration,
   ItineraryOutput,
   OutputRequirement,
   PlannedEdition,
   Project,
   RouteStop,
   TransportMode,
+  TravelerType,
 } from "./types";
+import { durationOverrideFromLabel } from "./generation/itinerary";
 
 export type WorkflowStageId =
   | "define"
@@ -26,6 +29,15 @@ export interface WorkflowIssue {
   stage: WorkflowStageId;
   editionId?: string;
   tool?: string;
+}
+
+export type LintSeverity = "must-fix" | "recommended" | "polish";
+
+export interface LintFinding extends WorkflowIssue {
+  severity: LintSeverity;
+  fieldPath: string;
+  message: string;
+  fixId?: "move-live-claims-to-verification-notes";
 }
 
 export interface WorkflowStage {
@@ -118,6 +130,43 @@ export function editionExtraCities(
   const id = itinerary?.plannedEditionId;
   if (!id) return [];
   return project.productionPlan.editions.find((e) => e.id === id)?.cities ?? [];
+}
+
+/** Generation-context overrides for the edition an itinerary belongs to, so AI
+ *  prompts reflect that edition's cities, duration, and traveler type instead of
+ *  the project's first trip config. Prefers the linked edition; falls back to the
+ *  itinerary's own stored duration/traveler type when there is no link. */
+export function editionContextOptions(
+  project: Project,
+  itinerary?: ItineraryOutput | null,
+): {
+  extraCities: string[];
+  duration?: Duration;
+  customDays?: number;
+  travelerType?: TravelerType;
+} {
+  const extraCities = editionExtraCities(project, itinerary);
+  const edition = itinerary?.plannedEditionId
+    ? project.productionPlan.editions.find(
+        (e) => e.id === itinerary.plannedEditionId,
+      )
+    : undefined;
+  if (edition) {
+    return {
+      extraCities,
+      duration: edition.duration,
+      customDays: edition.customDays,
+      travelerType: edition.travelerType,
+    };
+  }
+  if (itinerary) {
+    return {
+      extraCities,
+      ...durationOverrideFromLabel(itinerary.duration),
+      travelerType: itinerary.travelerType,
+    };
+  }
+  return { extraCities };
 }
 
 /* ----------------------------------------------------------------------------
@@ -220,6 +269,217 @@ function hasMeaningfulDay(day: ItineraryOutput["days"][number]): boolean {
   ].some(hasText);
 }
 
+const LIVE_DATA_PATTERN =
+  /([$€£¥₹]\s?\d+|\b\d+(?:\.\d{2})?\s?(?:usd|eur|gbp|jpy|inr)\b|\b(?:open|opens|closed|closes)\s+(?:at|from|until)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)?|\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\s?[-–]\s?\d{1,2}(?::\d{2})?\s?(?:am|pm)?)/i;
+
+const DAY_LINT_FIELDS: Array<keyof ItineraryOutput["days"][number]> = [
+  "morning",
+  "lunch",
+  "afternoon",
+  "evening",
+  "dinner",
+  "transportNotes",
+  "bookingNotes",
+  "optionalUpgrade",
+];
+
+function lintId(...parts: Array<string | number | undefined>): string {
+  return parts.filter((part) => part !== undefined && part !== "").join("-");
+}
+
+export function extractLiveDataClaims(text: string): {
+  cleaned: string;
+  claims: string[];
+} {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const parts = sentences.length ? sentences : [text.trim()].filter(Boolean);
+  const claims = parts.filter((part) => LIVE_DATA_PATTERN.test(part));
+  const cleaned = parts
+    .filter((part) => !LIVE_DATA_PATTERN.test(part))
+    .join(" ")
+    .trim();
+  return { cleaned, claims };
+}
+
+function finding({
+  id,
+  severity,
+  label,
+  editionId,
+  tool = "quality",
+  fieldPath,
+  message,
+  fixId,
+}: {
+  id: string;
+  severity: LintSeverity;
+  label: string;
+  editionId?: string;
+  tool?: string;
+  fieldPath: string;
+  message: string;
+  fixId?: LintFinding["fixId"];
+}): LintFinding {
+  return {
+    id,
+    severity,
+    label,
+    stage: "build",
+    editionId,
+    tool,
+    fieldPath,
+    message,
+    fixId,
+  };
+}
+
+export function lintItinerary(
+  itinerary: ItineraryOutput,
+  project: Project,
+  edition?: PlannedEdition,
+): LintFinding[] {
+  const findings: LintFinding[] = [];
+  const editionId = edition?.id ?? itinerary.plannedEditionId;
+  const expectedDays = edition ? editionDayCount(edition) : itinerary.days.length;
+  const prefix = editionId ?? itinerary.id;
+
+  if (edition && itinerary.days.length !== expectedDays) {
+    findings.push(
+      finding({
+        id: lintId(prefix, "day-count"),
+        severity: "must-fix",
+        label: `${editionLabel(edition)}: day count does not match route`,
+        editionId,
+        fieldPath: "days",
+        message: `Expected ${expectedDays} days but found ${itinerary.days.length}.`,
+      }),
+    );
+  }
+
+  if (!hasText(itinerary.verificationNotes)) {
+    findings.push(
+      finding({
+        id: lintId(prefix, "verification-notes"),
+        severity: "must-fix",
+        label: `${itinerary.title || "Itinerary"} needs verification notes`,
+        editionId,
+        fieldPath: "verificationNotes",
+        message:
+          "Add a clear note that live prices, hours, tickets, and availability must be verified before travel.",
+      }),
+    );
+  }
+
+  itinerary.days.forEach((day, dayIndex) => {
+    const meaningfulFields = [
+      day.morning,
+      day.lunch,
+      day.afternoon,
+      day.evening,
+      day.dinner,
+    ].filter(hasText).length;
+    if (meaningfulFields < 2) {
+      findings.push(
+        finding({
+          id: lintId(prefix, "thin-day", day.day),
+          severity: "recommended",
+          label: `Day ${day.day} feels light`,
+          editionId,
+          fieldPath: `days.${dayIndex}`,
+          message:
+            "Add another activity, meal anchor, or fallback so the product feels complete.",
+        }),
+      );
+    }
+    const missingRainyDayAlternative = !hasText(day.rainyDayAlternative);
+    const missingLowEnergyAlternative = !hasText(day.lowEnergyAlternative);
+    if (missingRainyDayAlternative || missingLowEnergyAlternative) {
+      findings.push(
+        finding({
+          id: lintId(prefix, "backup", day.day),
+          severity: "polish",
+          label: `Day ${day.day} needs stronger backup options`,
+          editionId,
+          fieldPath: `days.${dayIndex}.${
+            missingRainyDayAlternative
+              ? "rainyDayAlternative"
+              : "lowEnergyAlternative"
+          }`,
+          message:
+            "Add rainy-day and low-energy alternatives to make the day safer to sell.",
+        }),
+      );
+    }
+    for (const key of DAY_LINT_FIELDS) {
+      const value = String(day[key] ?? "");
+      if (LIVE_DATA_PATTERN.test(value)) {
+        findings.push(
+          finding({
+            id: lintId(prefix, "live-data", day.day, key),
+            severity: "must-fix",
+            label: `Day ${day.day}: unverified live detail in ${String(key)}`,
+            editionId,
+            fieldPath: `days.${dayIndex}.${String(key)}`,
+            message:
+              "Move live prices, hours, tickets, or availability claims into verification notes, or rewrite them as details to verify.",
+            fixId: "move-live-claims-to-verification-notes",
+          }),
+        );
+      }
+    }
+  });
+
+  if (
+    project.productionPlan.outputs.includes("portfolio-visuals") &&
+    itinerary.days.some((day) => !hasText(day.image))
+  ) {
+    findings.push(
+      finding({
+        id: lintId(prefix, "day-images"),
+        severity: "polish",
+        label: `${itinerary.title || "Itinerary"} has missing day visuals`,
+        editionId,
+        tool: "presentation",
+        fieldPath: "days.image",
+        message:
+          "Generate or upload day images so the PDF feels more premium.",
+      }),
+    );
+  }
+
+  return findings;
+}
+
+export function lintProjectForPublish(project: Project): LintFinding[] {
+  const findings = project.productionPlan.editions.flatMap((edition) => {
+    const itinerary = itineraryForEdition(project, edition);
+    return itinerary ? lintItinerary(itinerary, project, edition) : [];
+  });
+
+  if (
+    project.productionPlan.outputs.includes("map-pins-legacy") &&
+    project.productionPlan.editions.some((edition) =>
+      editionRoute(project, edition).some((stop) => !stop.coords),
+    )
+  ) {
+    findings.push({
+      id: "route-map-coordinates",
+      severity: "recommended",
+      label: "Route map needs geocoded stops",
+      stage: "plan",
+      tool: "overview",
+      fieldPath: "productionPlan.editions.route.coords",
+      message:
+        "Add or geocode route stops before exporting a buyer-facing map.",
+    });
+  }
+
+  return findings;
+}
+
 export function itineraryBlockers(
   project: Project,
   edition: PlannedEdition,
@@ -313,6 +573,7 @@ function stageStatus(
 export function getProjectWorkflow(project: Project): ProjectWorkflow {
   const blockers: WorkflowIssue[] = [];
   const warnings: WorkflowIssue[] = [];
+  const lintFindings = lintProjectForPublish(project);
   const config = project.tripConfigs[0];
 
   const defineChecks = [
@@ -375,6 +636,28 @@ export function getProjectWorkflow(project: Project): ProjectWorkflow {
         tool: "quality",
       });
     }
+  }
+
+  for (const lint of lintFindings) {
+    if (
+      lint.id.includes("verification-notes") &&
+      blockers.some(
+        (issue) =>
+          issue.editionId === lint.editionId &&
+          issue.label.includes("Add verification notes"),
+      )
+    ) {
+      continue;
+    }
+    const issue: WorkflowIssue = {
+      id: `lint-${lint.id}`,
+      label: lint.label,
+      stage: lint.stage,
+      editionId: lint.editionId,
+      tool: lint.tool,
+    };
+    if (lint.severity === "must-fix") blockers.push(issue);
+    else warnings.push(issue);
   }
 
   const listingProblems = listingBlockers(project);

@@ -12,7 +12,7 @@ import {
   voiceDescription,
 } from "@/lib/generation/context";
 import { buildContext, imagePromptToText } from "@/lib/generation";
-import { editionExtraCities } from "@/lib/workflow";
+import { editionContextOptions } from "@/lib/workflow";
 import { enumValues } from "@/lib/schemas";
 
 const REALISM =
@@ -80,9 +80,7 @@ export function buildItineraryPrompt(
   current?: ItineraryOutput | null,
   focus?: string,
 ): string {
-  const ctx = buildContext(project, {
-    extraCities: editionExtraCities(project, current),
-  });
+  const ctx = buildContext(project, editionContextOptions(project, current));
   return `Draft or improve a structured RouteCrafter itinerary.
 
 Project configuration:
@@ -116,9 +114,7 @@ export function buildItineraryOverviewPrompt(
   current: ItineraryOutput,
   focus?: string,
 ): string {
-  const ctx = buildContext(project, {
-    extraCities: editionExtraCities(project, current),
-  });
+  const ctx = buildContext(project, editionContextOptions(project, current));
   return `Draft or improve only the non-day fields for a RouteCrafter itinerary.
 
 Project configuration:
@@ -176,9 +172,7 @@ export function buildItineraryDaysPrompt({
   days: DayPlan[];
   focus?: string;
 }): string {
-  const ctx = buildContext(project, {
-    extraCities: editionExtraCities(project, itinerary),
-  });
+  const ctx = buildContext(project, editionContextOptions(project, itinerary));
   const dayNumbers = days.map((day) => day.day);
   return `Draft or improve only days ${dayNumbers.join(", ")} for a RouteCrafter itinerary.
 
@@ -223,9 +217,7 @@ export function buildDayPrompt(
   day: DayPlan,
   focus: string,
 ): string {
-  const ctx = buildContext(project, {
-    extraCities: editionExtraCities(project, itinerary),
-  });
+  const ctx = buildContext(project, editionContextOptions(project, itinerary));
   return `Improve one day inside a RouteCrafter itinerary.
 
 Project configuration:
@@ -363,9 +355,7 @@ export function buildGuidePrompt(
   itinerary: ItineraryOutput,
   focus: string,
 ): string {
-  const ctx = buildContext(project, {
-    extraCities: editionExtraCities(project, itinerary),
-  });
+  const ctx = buildContext(project, editionContextOptions(project, itinerary));
   return `Improve selected guide fields for a RouteCrafter itinerary.
 
 Project configuration:

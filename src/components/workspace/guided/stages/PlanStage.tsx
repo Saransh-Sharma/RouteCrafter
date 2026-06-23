@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Copy,
   Lightbulb,
   Plus,
   Route,
@@ -49,6 +50,10 @@ export function PlanStage({
   ) => void;
 }) {
   const update = useProjectsStore((state) => state.update);
+  const duplicateEdition = useProjectsStore((state) => state.duplicateEdition);
+  const removeDuplicatedEdition = useProjectsStore(
+    (state) => state.removeDuplicatedEdition,
+  );
   const { toast } = useToast();
   const [confirmEditionId, setConfirmEditionId] = React.useState<string | null>(
     null,
@@ -65,6 +70,10 @@ export function PlanStage({
       "Couple",
   );
   const [cities, setCities] = React.useState<string[]>([]);
+  const [cloneSourceId, setCloneSourceId] = React.useState<string | null>(null);
+  const [cloneDuration, setCloneDuration] = React.useState<Duration>(duration);
+  const [cloneCustomDays, setCloneCustomDays] = React.useState<number | undefined>();
+  const [keepGuides, setKeepGuides] = React.useState(true);
   const baseCities = project.tripConfigs[0]?.cities.length
     ? project.tripConfigs[0].cities
     : project.regions;
@@ -142,6 +151,36 @@ export function PlanStage({
       return;
     }
     setEditions(editions.filter((item) => item.id !== edition.id));
+  }
+
+  function openCloneDrawer(edition: PlannedEdition) {
+    setCloneSourceId(edition.id);
+    setCloneDuration(edition.duration);
+    setCloneCustomDays(edition.customDays);
+    setKeepGuides(true);
+  }
+
+  function commitClone(source: PlannedEdition) {
+    const created = duplicateEdition(project.id, source.id, {
+      duration: cloneDuration,
+      customDays: cloneCustomDays,
+      keepGuides,
+    });
+    if (!created) {
+      toast("Could not duplicate the edition", "error");
+      return;
+    }
+    setCloneSourceId(null);
+    toast({
+      message: `Copied ${editionLabel(source)} to ${editionLabel(created)}`,
+      tone: "success",
+      actionLabel: "Undo",
+      durationMs: 6000,
+      onAction: () => {
+        const result = removeDuplicatedEdition(project.id, created.id);
+        if (!result.ok) toast(result.error, "error");
+      },
+    });
   }
 
   function conceptsFor(edition: PlannedEdition) {
@@ -249,6 +288,16 @@ export function PlanStage({
               <Plus className="size-4" />
               {duplicate ? "Already planned" : "Add to production plan"}
             </Button>
+            {editions.length ? (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => openCloneDrawer(editions[0])}
+              >
+                <Copy className="size-4" />
+                New from existing...
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -290,17 +339,93 @@ export function PlanStage({
                             ? "Itinerary started"
                             : "Planned · itinerary not started"}
                         </p>
+                        {edition.lineageNote ? (
+                          <p className="mt-2 inline-flex rounded-full bg-sage-soft px-2.5 py-1 text-[11px] font-semibold text-forest">
+                            {edition.lineageNote}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeEdition(edition)}
-                      aria-label={`Remove ${editionLabel(edition)}`}
-                      className="p-2 text-ink-muted hover:text-terracotta"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openCloneDrawer(edition)}
+                        aria-label={`Duplicate ${editionLabel(edition)}`}
+                        className="rounded-lg p-2 text-ink-muted hover:bg-paper-2/70 hover:text-forest"
+                      >
+                        <Copy className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeEdition(edition)}
+                        aria-label={`Remove ${editionLabel(edition)}`}
+                        className="rounded-lg p-2 text-ink-muted hover:bg-terracotta/10 hover:text-terracotta"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
                   </div>
+
+                  {cloneSourceId === edition.id ? (
+                    <div className="ml-10 mt-4 rounded-2xl border border-sage/40 bg-sage-soft/30 p-4">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+                        <FormField label="Adapt duration">
+                          <Select
+                            value={cloneDuration}
+                            onChange={(event) => {
+                              setCloneDuration(event.target.value as Duration);
+                              setCloneCustomDays(undefined);
+                            }}
+                          >
+                            {enumValues.duration.map((item) => (
+                              <option key={item}>{item}</option>
+                            ))}
+                          </Select>
+                        </FormField>
+                        <FormField label="Custom days">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={cloneCustomDays ?? ""}
+                            onChange={(event) =>
+                              setCloneCustomDays(
+                                event.target.value
+                                  ? Number.parseInt(event.target.value, 10)
+                                  : undefined,
+                              )
+                            }
+                          />
+                        </FormField>
+                        <div className="flex flex-wrap gap-2 pb-1">
+                          <label className="inline-flex items-center gap-2 rounded-full bg-paper/70 px-3 py-1.5 text-xs font-medium text-ink-soft">
+                            <input
+                              type="checkbox"
+                              checked={keepGuides}
+                              onChange={(event) => setKeepGuides(event.target.checked)}
+                              className="accent-[var(--rc-forest)]"
+                            />
+                            Keep guides
+                          </label>
+                          <span className="rounded-full bg-paper/70 px-3 py-1.5 text-xs font-medium text-ink-muted">
+                            Listing and brand voice stay project-wide
+                          </span>
+                        </div>
+                        <div className="ml-auto flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setCloneSourceId(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button size="sm" onClick={() => commitClone(edition)}>
+                            Duplicate
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="ml-10 mt-5">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
@@ -332,6 +457,7 @@ export function PlanStage({
                           baseCities={baseCities}
                           route={route}
                           dayCount={editionDayCount(edition)}
+                          country={project.country}
                           onChange={(next) => updateEditionRoute(edition, next)}
                         />
                       </div>

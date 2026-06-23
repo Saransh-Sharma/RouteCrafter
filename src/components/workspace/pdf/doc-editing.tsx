@@ -7,6 +7,7 @@ import {
   ChevronUp,
   Eye,
   ImageIcon,
+  Map,
   Minus,
   Plus,
   Trash2,
@@ -268,6 +269,23 @@ function CustomBlockView({
       ) : (
         <div className="rc-doc-rule" />
       )
+    ) : block.type === "route-map" ? (
+      <div className="rounded-2xl border border-[var(--doc-border)] bg-[var(--doc-paper-soft)] p-5">
+        <p className="rc-doc-eyebrow">Route map</p>
+        <div className="rc-doc-rule mt-2" />
+        <EditableText
+          as="p"
+          value={
+            block.text ||
+            "Add an exported route map image here, or use this block as a buyer-facing route-map placeholder."
+          }
+          editable={editable}
+          placeholder="Route map caption..."
+          onCommit={(next) => updateBlock(patch, block.id, { text: next })}
+          className="mt-4 text-sm leading-relaxed"
+          style={{ color: "var(--doc-ink-soft)" }}
+        />
+      </div>
     ) : block.type === "image" ? (
       block.image ? (
         <div
@@ -446,6 +464,13 @@ export function AnchorSlot({
           >
             <Minus className="size-3.5" />
             Divider
+          </button>
+          <button
+            type="button"
+            onClick={() => addBlock(patch, anchor, "route-map")}
+          >
+            <Map className="size-3.5" />
+            Route map
           </button>
         </div>
       ) : null}

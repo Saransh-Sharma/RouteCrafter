@@ -15,7 +15,7 @@ import { marketplaceListingSchema } from "./listing";
 import { aiAcceptedRunSchema } from "./ai";
 import { productionPlanSchema } from "./production-plan";
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export const brandStyleSchema = z.object({
   businessName: z.string().default(""),
@@ -60,6 +60,8 @@ export const projectSchema = z.object({
 
   status: projectStatusEnum.default("Draft"),
   accent: accentEnum.default("sage"),
+  sourceTemplateId: z.string().optional(),
+  sourceTemplateName: z.string().optional(),
 
   createdAt: z.string(),
   updatedAt: z.string(),

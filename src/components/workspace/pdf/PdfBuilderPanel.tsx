@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/field";
 import { ItineraryDocument } from "./ItineraryDocument";
+import { PdfTextControls } from "./PdfTextControls";
 import { PdfThemeControls } from "./PdfThemeControls";
 import { prepareDocumentForPdf } from "./pdf-assets";
 import { captureAsset, recordAssetUsage } from "@/lib/assets/capture";
@@ -80,7 +81,13 @@ export function PdfBuilderPanel({
     setCapturing(true);
     await nextFrame();
     try {
-      await prepareDocumentForPdf(docRef.current);
+      const documentElement = docRef.current;
+      if (!documentElement) return;
+      await prepareDocumentForPdf(documentElement);
+      const exportBounds = documentElement.getBoundingClientRect();
+      const exportWidth = Math.ceil(
+        Math.max(documentElement.scrollWidth, exportBounds.width),
+      );
       const html2pdf = (await import("html2pdf.js")).default;
       const slug = (project.country || "project").toLowerCase();
       const filename = `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`;
@@ -93,13 +100,18 @@ export function PdfBuilderPanel({
             scale: 2,
             useCORS: true,
             backgroundColor: "#ffffff",
+            windowWidth: exportWidth,
             ignoreElements: (element: Element) =>
               element.classList?.contains("rc-edit-only"),
           },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
+          pagebreak: {
+            mode: ["css", "legacy"],
+            before: ".rc-print-page:not(:first-child):not(.rc-doc-overview-page)",
+            avoid: [".rc-doc-section", ".rc-day-row", ".rc-doc-block"],
+          },
         })
-        .from(docRef.current)
+        .from(documentElement)
         .output("blob");
       const url = URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
@@ -238,16 +250,26 @@ export function PdfBuilderPanel({
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
-        <div className="rc-no-print lg:sticky lg:top-6 lg:self-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
+        <div
+          role="region"
+          aria-label="PDF presentation controls"
+          className="rc-no-print space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6.5rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-2"
+        >
+          <PdfTextControls project={project} itinerary={selected} />
           <PdfThemeControls project={project} itinerary={selected} />
         </div>
-        <div className="overflow-auto rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6">
+        <div
+          role="region"
+          aria-label="PDF preview"
+          className="min-w-0 overflow-auto rounded-[var(--radius-card)] border border-border-soft bg-paper-2/30 p-4 sm:p-6 lg:max-h-[calc(100dvh-6.5rem)] lg:overscroll-contain"
+        >
           <ItineraryDocument
             ref={docRef}
             itinerary={selected}
             project={project}
             editable={editing && !capturing}
+            exportMode={capturing}
             editor={docEditor}
             onAssetSettled={() =>
               setAssetState((current) =>

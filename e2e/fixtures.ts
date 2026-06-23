@@ -295,6 +295,39 @@ export async function mockAiText(
   text: string,
   status = 200,
 ) {
+  await page.route("**/api/ai/text/stream", async (route) => {
+    const request = route.request().postDataJSON() as { apiKey?: string };
+    const body =
+      status >= 400
+        ? `event: error\ndata: ${JSON.stringify({ error: text })}\n\n`
+        : [
+            ["phase", { phase: "preparing" }],
+            ["phase", { phase: "calling-provider" }],
+            ["delta", { text }],
+            ["phase", { phase: "validating" }],
+            [
+              "result",
+              {
+                text,
+                provider: "openai",
+                model: "gpt-5.4",
+                credentialSource: request.apiKey ? "personal" : "server",
+                usage: {
+                  inputTokens: 100,
+                  outputTokens: 200,
+                  totalTokens: 300,
+                },
+              },
+            ],
+          ]
+            .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+            .join("");
+    await route.fulfill({
+      status,
+      headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+      body,
+    });
+  });
   await page.route("**/api/ai/text", async (route) => {
     const request = route.request().postDataJSON() as { apiKey?: string };
     await fulfillAiRoute(route, {

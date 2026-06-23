@@ -1,12 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { MapPin, Plus, RotateCcw, X } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import type { RouteStop } from "@/lib/schemas";
 import { dayRangeForStop, normalizeRoute, routeNights } from "@/lib/workflow";
 import { cn } from "@/lib/utils";
 import { StopCard } from "./StopCard";
 import { LegConnector } from "./LegConnector";
+import { useUndoableAction } from "@/hooks/useUndoableAction";
+import { RouteMap } from "./RouteMap";
+import { useToast } from "@/components/ui";
+
+interface GeocodeCandidate {
+  lat: number;
+  lng: number;
+  label: string;
+  provider: string;
+  confidence?: number;
+}
+
+interface PendingGeocodeStop {
+  stopId: string;
+  city: string;
+  candidates: GeocodeCandidate[];
+}
 
 function makeStop(city: string): RouteStop {
   return { id: crypto.randomUUID(), city, nights: 1 };
@@ -22,11 +39,13 @@ export function RoutePlanner({
   baseCities,
   route,
   dayCount,
+  country,
   onChange,
 }: {
   baseCities: string[];
   route: RouteStop[];
   dayCount: number;
+  country?: string;
   onChange: (next: RouteStop[]) => void;
 }) {
   const cardRefs = React.useRef(new Map<string, HTMLElement>());
@@ -34,10 +53,18 @@ export function RoutePlanner({
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState("");
-  const [undo, setUndo] = React.useState<{ stop: RouteStop; index: number } | null>(
-    null,
-  );
-  const undoTimer = React.useRef<number | undefined>(undefined);
+  const [activeStopId, setActiveStopId] = React.useState<string | null>(null);
+  const [geocoding, setGeocoding] = React.useState(false);
+  const [pendingGeocodes, setPendingGeocodes] = React.useState<
+    PendingGeocodeStop[]
+  >([]);
+  const undoable = useUndoableAction();
+  const { toast } = useToast();
+  const routeRef = React.useRef(route);
+
+  React.useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
 
   const placed = routeNights(route);
   const left = dayCount - placed;
@@ -75,22 +102,84 @@ export function RoutePlanner({
     setDraft("");
   }
 
+  async function geocodeMissingStops() {
+    const missing = route.filter((stop) => !stop.coords);
+    if (!missing.length) return;
+    setGeocoding(true);
+    setPendingGeocodes([]);
+    try {
+      const pending: PendingGeocodeStop[] = [];
+      for (const stop of missing) {
+        const response = await fetch("/api/geocode/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: stop.city, country, limit: 3 }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          candidates?: GeocodeCandidate[];
+          error?: string;
+        };
+        if (!response.ok) throw new Error(body.error ?? "Geocoding failed.");
+        if (body.candidates?.length) {
+          pending.push({
+            stopId: stop.id,
+            city: stop.city,
+            candidates: body.candidates,
+          });
+        }
+      }
+      setPendingGeocodes(pending);
+      if (!pending.length) {
+        toast("No map matches found for the missing stops.", "info");
+      }
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Could not geocode route stops.",
+        "error",
+      );
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
+  function selectGeocodeCandidate(
+    pending: PendingGeocodeStop,
+    candidate: GeocodeCandidate,
+  ) {
+    commit(
+      route.map((stop) =>
+        stop.id === pending.stopId
+          ? {
+              ...stop,
+              coords: {
+                lat: candidate.lat,
+                lng: candidate.lng,
+                label: candidate.label,
+                provider: candidate.provider,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : stop,
+      ),
+    );
+    setPendingGeocodes((current) =>
+      current.filter((item) => item.stopId !== pending.stopId),
+    );
+  }
+
   function removeStop(id: string) {
     const index = route.findIndex((stop) => stop.id === id);
     if (index < 0) return;
     const stop = route[index];
     commit(route.filter((item) => item.id !== id));
-    window.clearTimeout(undoTimer.current);
-    setUndo({ stop, index });
-    undoTimer.current = window.setTimeout(() => setUndo(null), 6000);
-  }
-
-  function restoreUndo() {
-    if (!undo) return;
-    const next = [...route];
-    next.splice(Math.min(undo.index, next.length), 0, undo.stop);
-    commit(next);
-    setUndo(null);
+    undoable({
+      message: `Removed ${stop.city} from the route`,
+      onUndo: () => {
+        const next = routeRef.current.filter((item) => item.id !== id);
+        next.splice(Math.min(index, next.length), 0, stop);
+        commit(next);
+      },
+    });
   }
 
   /* ----- pointer drag-to-reorder (works for mouse and touch) ------------- */
@@ -154,8 +243,6 @@ export function RoutePlanner({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragId, route]);
-
-  React.useEffect(() => () => window.clearTimeout(undoTimer.current), []);
 
   const unplacedBrief = baseCities.filter(
     (city) => !route.some((stop) => stop.city === city),
@@ -221,6 +308,69 @@ export function RoutePlanner({
         ))}
       </div>
 
+      <div className="mt-4 space-y-2">
+        <RouteMap
+          route={route}
+          activeStopId={activeStopId}
+          onHoverStop={setActiveStopId}
+        />
+        {route.some((stop) => !stop.coords) ? (
+          <button
+            type="button"
+            onClick={() => void geocodeMissingStops()}
+            disabled={geocoding}
+            className="text-xs font-semibold text-forest hover:text-forest-deep disabled:opacity-50"
+          >
+            {geocoding ? "Geocoding stops..." : "Geocode missing stops for map"}
+          </button>
+        ) : null}
+        {pendingGeocodes.length ? (
+          <div className="space-y-3 rounded-2xl border border-sage/40 bg-sage-soft/25 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  Choose map matches
+                </p>
+                <p className="mt-1 text-xs leading-5 text-ink-muted">
+                  Coordinates are saved only after you pick a candidate.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingGeocodes([])}
+                className="text-xs font-semibold text-ink-muted hover:text-ink"
+              >
+                Dismiss
+              </button>
+            </div>
+            {pendingGeocodes.map((pending) => (
+              <div key={pending.stopId} className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                  {pending.city}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {pending.candidates.map((candidate) => (
+                    <button
+                      key={`${candidate.lat}:${candidate.lng}:${candidate.label}`}
+                      type="button"
+                      onClick={() => selectGeocodeCandidate(pending, candidate)}
+                      className="rounded-xl border border-border-soft bg-paper/80 px-3 py-2 text-left text-xs leading-5 text-ink-soft transition-colors hover:border-forest/40 hover:text-ink"
+                    >
+                      <span className="block font-semibold text-ink">
+                        {candidate.label}
+                      </span>
+                      <span className="text-ink-muted">
+                        {candidate.lat.toFixed(4)}, {candidate.lng.toFixed(4)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       {/* Rail */}
       {route.length ? (
         <div className="mt-5 flex items-stretch gap-2 overflow-x-auto pb-2 max-sm:flex-col max-sm:items-stretch max-sm:overflow-visible">
@@ -240,6 +390,8 @@ export function RoutePlanner({
                   else cardRefs.current.delete(stop.id);
                 }}
                 className={cn("flex", dragId === stop.id && "opacity-80")}
+                onMouseEnter={() => setActiveStopId(stop.id)}
+                onMouseLeave={() => setActiveStopId(null)}
               >
                 <StopCard
                   stop={stop}
@@ -340,38 +492,23 @@ export function RoutePlanner({
         </div>
       )}
 
-      {/* Brief-city suggestions + undo */}
-      {(unplacedBrief.length || undo) && (
+      {/* Brief-city suggestions */}
+      {unplacedBrief.length ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {unplacedBrief.length ? (
-            <>
-              <span className="text-[11px] text-ink-muted">From the brief:</span>
-              {unplacedBrief.map((city) => (
-                <button
-                  key={city}
-                  type="button"
-                  onClick={() => addStop(city)}
-                  className="inline-flex items-center gap-1 rounded-full border border-border-soft bg-paper-2/60 px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:border-forest/40 hover:text-forest"
-                >
-                  <Plus className="size-3" />
-                  {city}
-                </button>
-              ))}
-            </>
-          ) : null}
-          {undo ? (
+          <span className="text-[11px] text-ink-muted">From the brief:</span>
+          {unplacedBrief.map((city) => (
             <button
+              key={city}
               type="button"
-              onClick={restoreUndo}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-sage-soft px-3 py-1 text-xs font-semibold text-forest transition-colors hover:bg-sage-soft/70"
+              onClick={() => addStop(city)}
+              className="inline-flex items-center gap-1 rounded-full border border-border-soft bg-paper-2/60 px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:border-forest/40 hover:text-forest"
             >
-              <RotateCcw className="size-3" />
-              Undo remove “{undo.stop.city}”
-              <X className="size-3 opacity-60" />
+              <Plus className="size-3" />
+              {city}
             </button>
-          ) : null}
+          ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

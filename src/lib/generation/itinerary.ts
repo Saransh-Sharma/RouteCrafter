@@ -1,5 +1,6 @@
 import {
   dayPlanSchema,
+  durationEnum,
   itineraryOutputSchema,
   type Budget,
   type Duration,
@@ -120,4 +121,44 @@ export function buildItinerary(
     createdAt: now,
     updatedAt: now,
   });
+}
+
+/** Convert an itinerary duration label ("14 days", "12 days") into generation-
+ *  context overrides. Enum labels pass through as `duration`; anything else
+ *  (custom day counts) becomes `customDays` so `durationLabel` reproduces it. */
+export function durationOverrideFromLabel(label: string): {
+  duration?: Duration;
+  customDays?: number;
+} {
+  const trimmed = label.trim();
+  const parsed = durationEnum.safeParse(trimmed);
+  if (parsed.success) return { duration: parsed.data };
+  return { customDays: parseDays(trimmed) };
+}
+
+/** Realign duration-derived text to the itinerary's authoritative `duration`
+ *  field. Substitutes any stale "N days" label found in title/subtitle/overview/
+ *  whoFor that disagrees with `duration`, preserving the surrounding prose.
+ *
+ *  `staleLabel` may be supplied explicitly (e.g. by a clone that knows the
+ *  source duration); otherwise it is detected from the title. */
+export function realignItineraryDurationText(
+  itinerary: ItineraryOutput,
+  staleLabel?: string,
+): ItineraryOutput {
+  const target = itinerary.duration.trim();
+  const stale = (staleLabel ?? itinerary.title.match(/\d+\s*days/i)?.[0])?.trim();
+  if (!target || !stale || stale.toLowerCase() === target.toLowerCase()) {
+    return itinerary;
+  }
+  const escaped = stale.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\b${escaped}\\b`, "gi");
+  const swap = (value: string) => value.replace(pattern, target);
+  return {
+    ...itinerary,
+    title: swap(itinerary.title),
+    subtitle: swap(itinerary.subtitle),
+    overview: swap(itinerary.overview),
+    whoFor: swap(itinerary.whoFor),
+  };
 }

@@ -333,6 +333,15 @@
   background: var(--doc-paper);
 }
 
+/* Ensure themed backgrounds + photos render in browser print and html2pdf. */
+.rc-doc,
+.rc-print-page,
+.rc-doc-cover,
+.rc-doc-chip {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 /* --- Document building blocks --- */
 .rc-doc-eyebrow {
   font-size: 0.72rem;
@@ -383,6 +392,10 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.rc-doc-day-image {
+  margin-top: 1.5rem;
 }
 
 /* Cover */
@@ -624,6 +637,8 @@
   gap: 1rem;
   padding: 0.85rem 0;
   border-top: 1px solid var(--doc-border);
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .rc-day-row-label {
@@ -651,6 +666,129 @@
 .rc-doc-section {
   break-inside: avoid;
   page-break-inside: avoid;
+}
+
+.rc-doc-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rc-day-notes {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+}
+
+/*
+  Download-only PDF capture mode. The on-screen preview can keep a generous
+  editorial layout; html2pdf needs tighter, deterministic A4 geometry so it
+  does not slice day sections into arbitrary pages.
+*/
+.rc-doc-export {
+  background: var(--doc-paper);
+}
+
+.rc-doc-export .rc-print-page {
+  width: 210mm;
+  min-width: 210mm;
+  min-height: auto;
+  margin-inline: 0;
+}
+
+.rc-doc-export .rc-doc-cover {
+  min-height: 297mm;
+}
+
+.rc-doc-export .rc-doc-closing-page {
+  min-height: 297mm;
+}
+
+.rc-doc-export .rc-doc-day-page {
+  padding: 11mm 14mm !important;
+}
+
+.rc-doc-export .rc-doc-day-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem;
+  align-items: start;
+  column-gap: 8mm;
+  min-height: 20mm;
+}
+
+.rc-doc-export .rc-doc-day-heading {
+  min-width: 0;
+}
+
+.rc-doc-export .rc-doc-day-title {
+  margin-top: 0.2rem !important;
+  font-size: 1.65rem !important;
+  line-height: 1.06 !important;
+  overflow-wrap: anywhere;
+}
+
+.rc-doc-export .rc-doc-day-base {
+  margin-top: 0.15rem !important;
+  font-size: 0.72rem !important;
+  line-height: 1 !important;
+  letter-spacing: 0.16em !important;
+}
+
+.rc-doc-export .rc-day-num {
+  justify-self: end;
+  padding-top: 0.3rem;
+  font-size: 2.25rem;
+}
+
+.rc-doc-export .rc-doc-day-image {
+  margin-top: 4mm;
+  border-radius: 0.85rem !important;
+}
+
+.rc-doc-export .rc-doc-day-img-frame {
+  height: 78mm;
+  padding-bottom: 0;
+}
+
+.rc-doc-export .rc-doc-day-schedule {
+  margin-top: 6mm !important;
+}
+
+.rc-doc-export .rc-day-row {
+  grid-template-columns: 24mm 1fr;
+  gap: 5mm;
+  padding: 2.4mm 0;
+}
+
+.rc-doc-export .rc-day-row-label {
+  font-size: 0.58rem;
+  line-height: 1;
+  letter-spacing: 0.13em;
+  padding-top: 0.1rem;
+}
+
+.rc-doc-export .rc-day-row-body {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.rc-doc-export .rc-day-notes {
+  margin-top: 5mm;
+  padding: 4mm 5mm;
+  border-radius: 0.85rem;
+}
+
+.rc-doc-export .rc-day-notes .rc-doc-eyebrow {
+  font-size: 0.58rem;
+}
+
+.rc-doc-export .rc-day-notes-grid {
+  margin-top: 2.5mm !important;
+  column-gap: 7mm !important;
+  row-gap: 1.5mm !important;
+}
+
+.rc-doc-export .rc-day-note {
+  font-size: 0.68rem;
+  line-height: 1.28;
 }
 
 /* Print-friendly base for the PDF builder */
@@ -698,21 +836,7 @@
     page-break-after: auto;
   }
 
-  /* Ensure themed backgrounds + photos render in print/PDF. */
-  .rc-doc,
-  .rc-print-page,
-  .rc-doc-cover,
-  .rc-doc-chip {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
   .rc-doc img {
     max-width: 100%;
-  }
-
-  .rc-day-row {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 }
