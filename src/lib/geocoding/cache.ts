@@ -8,24 +8,38 @@ export interface GeocodeCandidate {
 
 const cache = new Map<string, GeocodeCandidate[]>();
 let nextRequestAt = 0;
+export const MAX_GEOCODE_CACHE_SIZE = 100;
 
-export function geocodeCacheKey(query: string, country?: string): string {
-  return `${query.trim().toLowerCase()}::${country?.trim().toLowerCase() ?? ""}`;
+export function geocodeCacheKey(
+  query: string,
+  country: string | undefined,
+  limit: number,
+): string {
+  return `${query.trim().toLowerCase()}::${country?.trim().toLowerCase() ?? ""}::${limit}`;
 }
 
 export function readGeocodeCache(
   query: string,
   country?: string,
+  limit = 3,
 ): GeocodeCandidate[] | undefined {
-  return cache.get(geocodeCacheKey(query, country));
+  return cache.get(geocodeCacheKey(query, country, limit));
 }
 
 export function writeGeocodeCache(
   query: string,
   country: string | undefined,
+  limit: number,
   candidates: GeocodeCandidate[],
 ): void {
-  cache.set(geocodeCacheKey(query, country), candidates);
+  const key = geocodeCacheKey(query, country, limit);
+  if (cache.has(key)) cache.delete(key);
+  while (cache.size >= MAX_GEOCODE_CACHE_SIZE) {
+    const oldest = cache.keys().next().value;
+    if (!oldest) break;
+    cache.delete(oldest);
+  }
+  cache.set(key, candidates);
 }
 
 export function clearGeocodeCacheForTests(): void {
