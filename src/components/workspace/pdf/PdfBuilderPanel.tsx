@@ -81,7 +81,13 @@ export function PdfBuilderPanel({
     setCapturing(true);
     await nextFrame();
     try {
-      await prepareDocumentForPdf(docRef.current);
+      const documentElement = docRef.current;
+      if (!documentElement) return;
+      await prepareDocumentForPdf(documentElement);
+      const exportBounds = documentElement.getBoundingClientRect();
+      const exportWidth = Math.ceil(
+        Math.max(documentElement.scrollWidth, exportBounds.width),
+      );
       const html2pdf = (await import("html2pdf.js")).default;
       const slug = (project.country || "project").toLowerCase();
       const filename = `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`;
@@ -94,13 +100,18 @@ export function PdfBuilderPanel({
             scale: 2,
             useCORS: true,
             backgroundColor: "#ffffff",
+            windowWidth: exportWidth,
             ignoreElements: (element: Element) =>
               element.classList?.contains("rc-edit-only"),
           },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
+          pagebreak: {
+            mode: ["css", "legacy"],
+            before: ".rc-print-page:not(:first-child):not(.rc-doc-overview-page)",
+            avoid: [".rc-doc-section", ".rc-day-row", ".rc-doc-block"],
+          },
         })
-        .from(docRef.current)
+        .from(documentElement)
         .output("blob");
       const url = URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
@@ -258,6 +269,7 @@ export function PdfBuilderPanel({
             itinerary={selected}
             project={project}
             editable={editing && !capturing}
+            exportMode={capturing}
             editor={docEditor}
             onAssetSettled={() =>
               setAssetState((current) =>
