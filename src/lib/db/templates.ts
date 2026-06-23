@@ -59,8 +59,13 @@ export async function upsertTemplateForUser({
 }): Promise<Template> {
   await ensureUser(user);
   const normalized = normalizeTemplate(template);
+  const activeTemplatePredicate = and(
+    eq(templates.id, normalized.id),
+    eq(templates.userId, user.id),
+    isNull(templates.deletedAt),
+  );
   const existing = await getDb().query.templates.findFirst({
-    where: and(eq(templates.id, normalized.id), eq(templates.userId, user.id)),
+    where: activeTemplatePredicate,
   });
   const updatedAt = new Date();
   if (existing) {
@@ -72,7 +77,7 @@ export async function upsertTemplateForUser({
           updatedAt,
         }),
       })
-      .where(and(eq(templates.id, normalized.id), eq(templates.userId, user.id)))
+      .where(activeTemplatePredicate)
       .returning();
     return rowToTemplate(updated);
   }
