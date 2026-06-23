@@ -9,6 +9,7 @@ import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import { useAuthStore } from "./auth-store";
 
 const TEMPLATES_STORAGE_KEY = "routecrafter:templates:v1";
+const CLOUD_UNAVAILABLE_COOLDOWN_MS = 5000;
 
 interface TemplatesState {
   templates: Template[];
@@ -22,7 +23,18 @@ interface TemplatesState {
   getById: (id: string) => Template | undefined;
 }
 
-let cloudUnavailable = false;
+let cloudUnavailableAt = 0;
+
+function isCloudTemporarilyUnavailable(): boolean {
+  return (
+    cloudUnavailableAt > 0 &&
+    Date.now() - cloudUnavailableAt < CLOUD_UNAVAILABLE_COOLDOWN_MS
+  );
+}
+
+function noteCloudUnavailable(): void {
+  cloudUnavailableAt = Date.now();
+}
 
 function mergeTemplates(local: Template[], incoming: Template[]): Template[] {
   const byId = new Map<string, Template>();
@@ -48,7 +60,7 @@ export const useTemplatesStore = createZustand<TemplatesState>()(
       syncError: null,
       setHasHydrated: (value) => set({ hasHydrated: value }),
       hydrateCloudTemplates: async () => {
-        if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
+        if (!isCloudPersistenceEnabled() || isCloudTemporarilyUnavailable()) return;
         const user = useAuthStore.getState().user;
         if (!user || typeof fetch === "undefined") return;
         set({ syncStatus: "syncing", syncError: null });
@@ -58,7 +70,7 @@ export const useTemplatesStore = createZustand<TemplatesState>()(
             headers: { Accept: "application/json" },
           });
           if (response.status === 503) {
-            cloudUnavailable = true;
+            noteCloudUnavailable();
             set({ syncStatus: "idle", syncError: null });
             return;
           }
@@ -80,7 +92,9 @@ export const useTemplatesStore = createZustand<TemplatesState>()(
       saveTemplate: async (template) => {
         const parsed = templateSchema.parse(template);
         set({ templates: mergeTemplates(get().templates, [parsed]) });
-        if (!isCloudPersistenceEnabled() || cloudUnavailable) return parsed;
+        if (!isCloudPersistenceEnabled() || isCloudTemporarilyUnavailable()) {
+          return parsed;
+        }
         const user = useAuthStore.getState().user;
         if (!user || typeof fetch === "undefined") return parsed;
         const response = await fetch("/api/templates", {
@@ -90,7 +104,7 @@ export const useTemplatesStore = createZustand<TemplatesState>()(
           body: JSON.stringify(parsed),
         });
         if (response.status === 503) {
-          cloudUnavailable = true;
+          noteCloudUnavailable();
           return parsed;
         }
         if (!response.ok) throw new Error("Could not save the template.");
@@ -104,15 +118,15 @@ export const useTemplatesStore = createZustand<TemplatesState>()(
         set({
           templates: get().templates.filter((template) => template.id !== id),
         });
-        if (!isCloudPersistenceEnabled() || cloudUnavailable) return;
+        if (!isCloudPersistenceEnabled() || isCloudTemporarilyUnavailable()) return;
         const user = useAuthStore.getState().user;
         if (!user || typeof fetch === "undefined") return;
-        const response = await fetch(`/api/templates/${id}`, {
+        const response = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
           method: "DELETE",
           credentials: "include",
         });
         if (response.status === 503) {
-          cloudUnavailable = true;
+          noteCloudUnavailable();
           return;
         }
         if (!response.ok) throw new Error("Could not delete the template.");
