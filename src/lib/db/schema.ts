@@ -45,6 +45,28 @@ export const projects = pgTable(
   }),
 );
 
+export const templates = pgTable(
+  "templates",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    accent: text("accent").notNull(),
+    data: jsonb("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    updatedByUserId: text("updated_by_user_id"),
+  },
+  (table) => ({
+    updatedIdx: index("templates_updated_idx").on(table.updatedAt),
+    categoryIdx: index("templates_category_idx").on(table.category),
+  }),
+);
+
 export const activityLogs = pgTable(
   "activity_logs",
   {
