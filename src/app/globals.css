@@ -746,6 +746,13 @@
 .rc-doc-export .rc-doc-day-img-frame {
   height: 78mm;
   padding-bottom: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.rc-doc-export .rc-doc-day-img-frame .rc-doc-img {
+  opacity: 0;
 }
 
 .rc-doc-export .rc-doc-day-schedule {
