@@ -12,6 +12,7 @@ import {
   voiceDescription,
 } from "@/lib/generation/context";
 import { buildContext, imagePromptToText } from "@/lib/generation";
+import { NATURAL_LANGUAGE_RULES } from "@/lib/generation/language";
 import { editionContextOptions } from "@/lib/workflow";
 import { enumValues } from "@/lib/schemas";
 
@@ -50,6 +51,8 @@ export function buildPromptRunPrompt(project: Project, prompt: string): string {
 
 Brand voice: ${voiceDescription(ctx)}
 
+${NATURAL_LANGUAGE_RULES}
+
 Prompt to run:
 ${prompt}
 
@@ -65,6 +68,8 @@ ${configBlock(ctx)}
 
 Current matrix, if any:
 ${current ? JSON.stringify(current, null, 2) : "None"}
+
+${NATURAL_LANGUAGE_RULES}
 
 Rules:
 - Cover the project's supported durations and traveler types.
@@ -91,6 +96,8 @@ ${focus || "Build a complete premium day-by-day itinerary."}
 
 Current itinerary, if any:
 ${current ? JSON.stringify(current, null, 2) : "None"}
+
+${NATURAL_LANGUAGE_RULES}
 
 Rules:
 - Preserve manually edited fields unless the focus requires improvement.
@@ -149,6 +156,8 @@ ${JSON.stringify(
   2,
 )}
 
+${NATURAL_LANGUAGE_RULES}
+
 Rules:
 - Return only the fields shown above. Do not include days.
 - Preserve country, duration, and travelerType exactly.
@@ -199,6 +208,8 @@ ${focus || "Build complete premium day plans."}
 Current days:
 ${JSON.stringify(days, null, 2)}
 
+${NATURAL_LANGUAGE_RULES}
+
 Rules:
 - Return an object with a "days" array only.
 - Return exactly ${days.length} day objects, in this order: ${dayNumbers.join(", ")}.
@@ -242,6 +253,8 @@ ${JSON.stringify(day, null, 2)}
 Requested focus:
 ${focus}
 
+${NATURAL_LANGUAGE_RULES}
+
 Rules:
 - Return the whole DayPlan object with the same day number.
 - Preserve strong existing details while filling weak or empty fields.
@@ -270,6 +283,8 @@ ${focus || "Improve the complete listing."}
 
 Current listing, if any:
 ${current ? JSON.stringify(current, null, 2) : "None"}
+
+${NATURAL_LANGUAGE_RULES}
 
 Rules:
 - Keep titles marketplace-ready and specific to ${project.country || "the destination"}.
@@ -301,6 +316,7 @@ Rules:
 - Keep the same prompt kind.
 - Make the visual direction more specific and country-accurate.
 - Keep overlay text short and legible.
+- Keep textOverlay wording plain and concrete; avoid AI-style marketing phrasing.
 - Avoid fake stock-photo faces, watermarks, visual clutter, neon, and distorted text.
 
 ${jsonOnly("PortfolioImagePrompt")}`;
@@ -366,6 +382,8 @@ ${JSON.stringify(itinerary, null, 2)}
 
 Focus:
 ${focus}
+
+${NATURAL_LANGUAGE_RULES}
 
 Rules:
 - Return the whole ItineraryOutput object.
