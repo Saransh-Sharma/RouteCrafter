@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
 import { REALISM_RULES } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const itineraryMatrixTemplate: PromptTemplate = {
   id: "itinerary-matrix",
@@ -27,6 +28,8 @@ Add when relevant:
 - Variation D: Premium Comfort
 
 Keep each cell to 1-2 lines (route spine + vibe). Output as a clean, compact table or list that is easy to scan and expand later.
+
+${NATURAL_LANGUAGE_RULES}
 
 ${REALISM_RULES}`,
 };

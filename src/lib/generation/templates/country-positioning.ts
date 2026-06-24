@@ -1,5 +1,6 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const countryPositioningTemplate: PromptTemplate = {
   id: "country-positioning",
@@ -20,5 +21,7 @@ Produce:
 3. 5 differentiators that make this offering feel premium, personalized, and local-first (not generic).
 4. 3 angles or sub-niches this country product could expand into.
 
-Keep it concrete and specific to ${ctx.project.country || "the country"}. Avoid clichés like "explore the city".`,
+Keep it concrete and specific to ${ctx.project.country || "the country"}. Avoid clichés like "explore the city".
+
+${NATURAL_LANGUAGE_RULES}`,
 };

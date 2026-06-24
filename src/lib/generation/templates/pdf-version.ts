@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock, durationLabel } from "../context";
 import { REALISM_RULES, VERIFICATION_FOOTER } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const pdfVersionTemplate: PromptTemplate = {
   id: "pdf-version",
@@ -27,6 +28,8 @@ Output content organized into these pages, each with a clear heading:
 12. Final checklist
 
 Keep it elegant and printable (A4). Use short paragraphs and checklists. End with this disclaimer line: "${VERIFICATION_FOOTER}"
+
+${NATURAL_LANGUAGE_RULES}
 
 ${REALISM_RULES}`,
 };

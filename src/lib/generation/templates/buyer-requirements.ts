@@ -1,4 +1,5 @@
 import type { PromptTemplate } from "../types";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const buyerRequirementsTemplate: PromptTemplate = {
   id: "buyer-requirements",
@@ -21,5 +22,7 @@ Ask for everything needed to plan a great trip, grouped sensibly:
 - Special occasions
 - Arrival/departure details (airports, times)
 
-Phrase each as a short prompt the buyer can answer quickly. End by reassuring them the itinerary is fully custom.`,
+Phrase each as a short prompt the buyer can answer quickly. End by reassuring them the itinerary is fully custom.
+
+${NATURAL_LANGUAGE_RULES}`,
 };

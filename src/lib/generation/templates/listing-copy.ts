@@ -1,5 +1,6 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const listingCopyTemplate: PromptTemplate = {
   id: "listing-copy",
@@ -26,5 +27,7 @@ Produce:
    - Premium: 10-14 day itinerary, multi-city, PDF + spreadsheet + packing list + map pins + revision
 6. Delivery notes and 2-3 upsell ideas.
 
-Be specific to ${ctx.project.country || "the country"}. Avoid generic filler.`,
+Be specific to ${ctx.project.country || "the country"}. Avoid generic filler.
+
+${NATURAL_LANGUAGE_RULES}`,
 };

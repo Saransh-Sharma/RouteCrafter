@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock, durationLabel } from "../context";
 import { REALISM_RULES } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const spreadsheetVersionTemplate: PromptTemplate = {
   id: "spreadsheet-version",
@@ -20,6 +21,8 @@ Rules:
 - "Booking required" = Yes/No. "Cost level" = $/$$/$$$.
 - Keep cells concise so they paste cleanly into Google Sheets.
 - Do not include real-time prices; use cost levels only.
+
+${NATURAL_LANGUAGE_RULES}
 
 ${REALISM_RULES}`,
 };

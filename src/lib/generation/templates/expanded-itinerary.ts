@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock, durationLabel } from "../context";
 import { REALISM_RULES, TRAVELER_ADAPTATION } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const expandedItineraryTemplate: PromptTemplate = {
   id: "expanded-itinerary",
@@ -27,6 +28,8 @@ Produce ALL of the following sections:
 12. Deliverable packaging (PDF, spreadsheet, printable packing list, optional map pins)
 
 ${TRAVELER_ADAPTATION}
+
+${NATURAL_LANGUAGE_RULES}
 
 ${REALISM_RULES}`,
 };

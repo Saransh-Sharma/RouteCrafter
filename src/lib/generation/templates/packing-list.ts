@@ -1,5 +1,6 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const packingListTemplate: PromptTemplate = {
   id: "packing-list",
@@ -13,5 +14,7 @@ ${configBlock(ctx)}
 
 Tailor to the season/month, walking intensity, traveler type, and any constraints above.
 Organize into clear categories (Clothing, Footwear, Weather, Electronics/Adapters, Health/Medicines, Documents, Day bag, Family add-ons where relevant).
-Use a checklist format. Note local clothing norms and any culturally appropriate dress. Do not assume specific weather as fact - frame it as typical for the season and tell the buyer to confirm the forecast.`,
+Use a checklist format. Note local clothing norms and any culturally appropriate dress. Do not assume specific weather as fact - frame it as typical for the season and tell the buyer to confirm the forecast.
+
+${NATURAL_LANGUAGE_RULES}`,
 };

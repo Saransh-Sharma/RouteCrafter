@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
 import { VERIFICATION_FOOTER } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const transportGuideTemplate: PromptTemplate = {
   id: "transport-guide",
@@ -20,5 +21,7 @@ Cover:
 - Taxi/rideshare notes and rough cost levels (no exact fares).
 - Walking intensity and tips for low-walking or mobility-limited travelers if relevant.
 
-${VERIFICATION_FOOTER}`,
+${VERIFICATION_FOOTER}
+
+${NATURAL_LANGUAGE_RULES}`,
 };

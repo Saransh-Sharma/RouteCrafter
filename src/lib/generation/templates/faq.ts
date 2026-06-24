@@ -1,4 +1,5 @@
 import type { PromptTemplate } from "../types";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const faqTemplate: PromptTemplate = {
   id: "faq",
@@ -17,5 +18,7 @@ Answer at least these questions clearly and honestly:
 - Can you revise the itinerary?
 - Do you verify opening hours and prices?
 
-For the verification question, be honest: explain that live opening hours, prices, tickets, and availability should be confirmed close to travel and are not guaranteed. Keep answers concise and reassuring.`,
+For the verification question, be honest: explain that live opening hours, prices, tickets, and availability should be confirmed close to travel and are not guaranteed. Keep answers concise and reassuring.
+
+${NATURAL_LANGUAGE_RULES}`,
 };

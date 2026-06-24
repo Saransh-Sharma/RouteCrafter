@@ -1,6 +1,7 @@
 import type { PromptTemplate } from "../types";
 import { configBlock } from "../context";
 import { VERIFICATION_FOOTER } from "../realism";
+import { NATURAL_LANGUAGE_RULES } from "../language";
 
 export const foodGuideTemplate: PromptTemplate = {
   id: "food-guide",
@@ -19,5 +20,7 @@ Cover:
 - Dietary accommodations relevant to the food preferences above (e.g. vegetarian, vegan, halal, Jain, no alcohol, kid-friendly).
 - Dining etiquette and tipping norms.
 
-Recommend by type and neighborhood rather than naming specific restaurants whose availability you cannot verify. ${VERIFICATION_FOOTER}`,
+Recommend by type and neighborhood rather than naming specific restaurants whose availability you cannot verify. ${VERIFICATION_FOOTER}
+
+${NATURAL_LANGUAGE_RULES}`,
 };
