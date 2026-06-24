@@ -38,6 +38,15 @@ const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "bookingChecklist", label: "Booking checklist" },
 ];
 
+function cssImageUrl(src: string): string {
+  return `url("${src
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\a ")
+    .replace(/\r/g, "\\d ")
+    .replace(/\f/g, "\\c ")}")`;
+}
+
 /** Premium, print-optimized itinerary document (screen preview + PDF source). */
 export const ItineraryDocument = React.forwardRef<
   HTMLDivElement,
@@ -325,7 +334,14 @@ export const ItineraryDocument = React.forwardRef<
                   className="rc-doc-day-image overflow-hidden rounded-2xl"
                   style={{ border: "1px solid var(--doc-border)" }}
                 >
-                  <div className="rc-doc-img-frame rc-doc-day-img-frame">
+                  <div
+                    className="rc-doc-img-frame rc-doc-day-img-frame"
+                    style={
+                      exportMode
+                        ? { backgroundImage: cssImageUrl(day.image) }
+                        : undefined
+                    }
+                  >
                     <img
                       className="rc-doc-img"
                       src={day.image ?? ""}

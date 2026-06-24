@@ -101,6 +101,44 @@ describe("ItineraryDocument", () => {
     );
   });
 
+  it("keeps day images as regular images in preview mode", () => {
+    const project = structuredClone(seedProjects[0]);
+    const itinerary = buildItinerary(buildContext(project), { duration: "3 days" });
+    itinerary.days[0].image = "https://images.example.com/day-one.jpg";
+
+    render(<ItineraryDocument itinerary={itinerary} project={project} />);
+
+    const image = screen.getByAltText("Day 1");
+    const frame = image.closest(".rc-doc-day-img-frame");
+
+    expect(image.getAttribute("src")).toBe(
+      "https://images.example.com/day-one.jpg",
+    );
+    expect(frame?.getAttribute("style") ?? "").not.toContain(
+      "background-image",
+    );
+  });
+
+  it("uses an export-only day image background to preserve aspect ratio", () => {
+    const project = structuredClone(seedProjects[0]);
+    const itinerary = buildItinerary(buildContext(project), { duration: "3 days" });
+    itinerary.days[0].image = 'https://images.example.com/day "one".jpg';
+
+    render(
+      <ItineraryDocument itinerary={itinerary} project={project} exportMode />,
+    );
+
+    const image = screen.getByAltText("Day 1");
+    const frame = image.closest(".rc-doc-day-img-frame") as HTMLElement | null;
+
+    expect(image.getAttribute("src")).toBe(
+      'https://images.example.com/day "one".jpg',
+    );
+    expect(frame?.style.backgroundImage).toContain(
+      "https://images.example.com/day",
+    );
+  });
+
   it("blocks PDF preparation when a remote image is not canvas-safe", async () => {
     class RejectedCorsImage {
       crossOrigin = "";
