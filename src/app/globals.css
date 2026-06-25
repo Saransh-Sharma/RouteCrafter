@@ -678,6 +678,72 @@
   padding: 1.25rem;
 }
 
+/* Per-day "Local details" page */
+.rc-detail-section {
+  padding-top: 0.25rem;
+}
+
+.rc-detail-section + .rc-detail-section {
+  margin-top: 1.25rem;
+}
+
+.rc-detail-item {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--doc-border);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rc-detail-name {
+  font-weight: 600;
+  color: var(--doc-ink);
+  font-size: 1rem;
+}
+
+.rc-detail-meta {
+  margin-top: 0.1rem;
+  font-size: 0.78rem;
+  color: var(--doc-ink-muted);
+}
+
+.rc-detail-why {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--doc-ink-soft);
+}
+
+.rc-detail-caveat {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--doc-ink-muted);
+}
+
+.rc-detail-source {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--doc-accent);
+  word-break: break-word;
+}
+
+.rc-detail-trivia {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--doc-ink-soft);
+  padding-left: 0.9rem;
+  position: relative;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rc-detail-trivia::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--doc-accent);
+}
+
 /*
   Download-only PDF capture mode. The on-screen preview can keep a generous
   editorial layout; html2pdf needs tighter, deterministic A4 geometry so it
@@ -796,6 +862,41 @@
 .rc-doc-export .rc-day-note {
   font-size: 0.68rem;
   line-height: 1.28;
+}
+
+.rc-doc-export .rc-doc-day-details-page {
+  padding: 11mm 14mm !important;
+}
+
+.rc-doc-export .rc-detail-section + .rc-detail-section {
+  margin-top: 5mm;
+}
+
+.rc-doc-export .rc-detail-item {
+  padding: 1.8mm 0;
+}
+
+.rc-doc-export .rc-detail-name {
+  font-size: 0.82rem;
+}
+
+.rc-doc-export .rc-detail-meta {
+  font-size: 0.6rem;
+}
+
+.rc-doc-export .rc-detail-why {
+  font-size: 0.72rem;
+  line-height: 1.32;
+}
+
+.rc-doc-export .rc-detail-caveat,
+.rc-doc-export .rc-detail-source {
+  font-size: 0.58rem;
+}
+
+.rc-doc-export .rc-detail-trivia {
+  font-size: 0.72rem;
+  line-height: 1.32;
 }
 
 /* Print-friendly base for the PDF builder */
