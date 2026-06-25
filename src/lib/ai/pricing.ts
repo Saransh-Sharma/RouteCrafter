@@ -38,6 +38,7 @@ const TASK_OUTPUT_FLOOR: Record<AiTaskType, number> = {
   imageGeneration: 0,
   guide: 1200,
   rewrite: 500,
+  dayDetails: 1200,
 };
 
 const GPT_IMAGE_2_OUTPUT: Record<string, Record<string, number>> = {

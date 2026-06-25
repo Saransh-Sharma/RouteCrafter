@@ -15,6 +15,7 @@ export const aiAcceptedRunSchema = z.object({
     "imageGeneration",
     "guide",
     "rewrite",
+    "dayDetails",
   ]),
   label: z.string(),
   createdAt: z.string(),

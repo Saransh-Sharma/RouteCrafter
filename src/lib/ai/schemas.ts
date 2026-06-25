@@ -12,6 +12,7 @@ export const aiTaskTypeSchema = z.enum([
   "imageGeneration",
   "guide",
   "rewrite",
+  "dayDetails",
 ]);
 
 export const aiUsageSchema = z.object({
@@ -36,6 +37,8 @@ export const aiTextRequestSchema = z.object({
   topP: z.number().min(0).max(1).optional(),
   maxOutputTokens: z.number().int().min(1).max(32000).optional(),
   responseFormat: z.enum(["text", "json"]).optional(),
+  enableWebSearch: z.boolean().optional(),
+  maxWebSearches: z.number().int().min(1).max(10).optional(),
 });
 
 export const aiImageRequestSchema = z.object({
