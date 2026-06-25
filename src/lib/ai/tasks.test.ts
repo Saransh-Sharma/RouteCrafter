@@ -4,6 +4,8 @@ import { buildContext } from "@/lib/generation/context";
 import { buildItinerary } from "@/lib/generation/itinerary";
 import {
   buildBriefExtractionPrompt,
+  buildDayDetailsFormatPrompt,
+  buildDayDetailsResearchPrompt,
   buildGuidePrompt,
   buildImageGenerationPrompt,
   buildItineraryDaysPrompt,
@@ -50,5 +52,26 @@ describe("natural-language guardrails in prose prompts", () => {
     const prompt = buildItineraryPrompt(project);
     expect(prompt).toContain("Return only valid JSON");
     expect(prompt.indexOf(NL)).toBeLessThan(prompt.indexOf("Return only valid JSON"));
+  });
+});
+
+describe("day-details grounding prompts", () => {
+  const day = itinerary.days[0];
+
+  it("instructs web-search grounding and keeps natural-language rules", () => {
+    const prompt = buildDayDetailsResearchPrompt({ project, itinerary, day });
+    expect(prompt).toContain("web search");
+    expect(prompt).toContain(NL);
+    // Real, named venues ARE wanted here — the standard 'do not name places'
+    // realism stance must be relaxed.
+    expect(prompt).not.toContain("Do not invent live hours, prices");
+    // ...but the verify caveat is retained.
+    expect(prompt.toLowerCase()).toContain("verify");
+  });
+
+  it("formats research into DayDetails JSON without web search", () => {
+    const prompt = buildDayDetailsFormatPrompt("A research brief about cafes.");
+    expect(prompt).toContain("DayDetails");
+    expect(prompt).toContain("Return only valid JSON");
   });
 });

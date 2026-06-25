@@ -263,6 +263,90 @@ Rules:
 ${jsonOnly("DayPlan")}`;
 }
 
+/**
+ * Grounded counterpart to REALISM for the Local-details page: real named venues
+ * ARE wanted (web search supplies them), but live data still must not be
+ * fabricated and each pick carries a verify caveat.
+ */
+const GROUNDED_REALISM =
+  "Recommend only REAL, currently-operating, specifically-named places that exist in or very near the stated base city — never invented or composite venues. Prefer well-reviewed, locally-loved spots over tourist traps. Do not state exact opening hours, prices, or live availability as fact; instead give a rough price band and a short caveat telling the buyer to verify hours, prices, bookings, and availability before travel. Cite a source (a URL or the title of a reputable guide/listing) for each recommendation.";
+
+function dayPlanSummary(day: DayPlan): string {
+  return (
+    [
+      day.morning && `Morning: ${day.morning}`,
+      day.lunch && `Lunch: ${day.lunch}`,
+      day.afternoon && `Afternoon: ${day.afternoon}`,
+      day.evening && `Evening: ${day.evening}`,
+      day.dinner && `Dinner: ${day.dinner}`,
+    ]
+      .filter(Boolean)
+      .join("\n") || "No fixed plan yet."
+  );
+}
+
+/**
+ * Pass 1 of the two-pass "Local details" flow: a web-search-grounded research
+ * brief (prose) for one day's base city. Intentionally omits REALISM's
+ * "do not name places" stance and instructs live grounding instead.
+ */
+export function buildDayDetailsResearchPrompt({
+  project,
+  itinerary,
+  day,
+}: {
+  project: Project;
+  itinerary: ItineraryOutput;
+  day: DayPlan;
+}): string {
+  const ctx = buildContext(project, editionContextOptions(project, itinerary));
+  const base = day.base || itinerary.routeSummary || project.country;
+  return `Use web search to research REAL local recommendations for Day ${day.day} of a trip, based in ${base}.
+
+Traveler & trip context:
+${configBlock(ctx)}
+
+This day's existing plan (complement it — do not just repeat these):
+${dayPlanSummary(day)}
+
+Research and list, for ${base} (or immediately adjacent areas the traveler would realistically reach this day):
+- Restaurants & cafes: a few specific, currently-open spots that fit the traveler's food preferences and budget.
+- Stays: a few specific hotels/guesthouses in good neighborhoods for this day's base.
+- Activities & experiences: specific things to do beyond the fixed plan.
+- Shopping: specific markets, streets, or stores worth a stop.
+- Local trivia: 2-4 short, genuinely interesting, factual notes about this place (history, culture, etiquette, food origin) — contextual to where the traveler is this day.
+
+For every place, capture: name, neighborhood/area, a short tag (e.g. izakaya, design hotel), one line on why it fits THIS traveler, a rough price band where relevant, a source (URL or guide title), and a one-line verify caveat.
+
+${NATURAL_LANGUAGE_RULES}
+
+${GROUNDED_REALISM}
+
+Write a concise, well-organized research brief in prose/bullets. Do not output JSON yet.`;
+}
+
+/**
+ * Pass 2 of the two-pass flow: convert the grounded research brief into strict
+ * DayDetails JSON. No web search here, so JSON reliability matches every other
+ * structured task.
+ */
+export function buildDayDetailsFormatPrompt(researchText: string): string {
+  return `Convert this researched local-recommendations brief into RouteCrafter DayDetails JSON.
+
+Research brief:
+${researchText}
+
+Rules:
+- Only include places that appear in the brief. Do not invent new venues or sources.
+- Map each place to { name, area, category, whyItFits, priceBand, source, caveat }.
+- restaurants, stays, activities, shopping are arrays of that shape; trivia is an array of { text, source }.
+- Carry each place's cited source URL or guide title into "source". Keep "caveat" to one short verify line.
+- Keep each field to one concise sentence or phrase so the JSON always finishes.
+- Omit a section (use an empty array) rather than padding it with weak or generic entries.
+
+${jsonOnly("DayDetails")}`;
+}
+
 export function buildListingPrompt(
   project: Project,
   current?: MarketplaceListing | null,
