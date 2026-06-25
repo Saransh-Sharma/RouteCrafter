@@ -1,7 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
 import * as React from "react";
 import { Eye, Trash2 } from "lucide-react";
-import type { ItineraryOutput, Project } from "@/lib/types";
+import type {
+  DayDetailRecommendation,
+  ItineraryOutput,
+  Project,
+} from "@/lib/types";
 import { getTheme, themeVars } from "./themes";
 import {
   AnchorSlot,
@@ -29,6 +33,15 @@ const NOTE_FIELDS: { key: keyof ItineraryOutput["days"][number]; label: string }
     { key: "rainyDayAlternative", label: "Rainy day" },
     { key: "whyThisWorks", label: "Why it works" },
   ];
+
+type DetailSectionKey = "restaurants" | "stays" | "activities" | "shopping";
+
+const DETAIL_SECTIONS: { key: DetailSectionKey; label: string }[] = [
+  { key: "restaurants", label: "Restaurants & cafes" },
+  { key: "stays", label: "Stays" },
+  { key: "activities", label: "Activities & experiences" },
+  { key: "shopping", label: "Shopping" },
+];
 
 const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "foodGuide", label: "Food & cafe guide" },
@@ -92,6 +105,54 @@ export const ItineraryDocument = React.forwardRef<
         days: it.days.map((day) =>
           day.day === dayNum ? { ...day, [key]: value } : day,
         ),
+      }));
+    },
+    [patch],
+  );
+  const setDetailField = React.useCallback(
+    (
+      dayNum: number,
+      section: DetailSectionKey,
+      index: number,
+      key: keyof DayDetailRecommendation,
+      value: string,
+    ) => {
+      patch((it) => ({
+        ...it,
+        days: it.days.map((day) => {
+          if (day.day !== dayNum || !day.details) return day;
+          const list = day.details[section];
+          if (!list[index]) return day;
+          return {
+            ...day,
+            details: {
+              ...day.details,
+              [section]: list.map((item, i) =>
+                i === index ? { ...item, [key]: value } : item,
+              ),
+            },
+          };
+        }),
+      }));
+    },
+    [patch],
+  );
+  const setTriviaText = React.useCallback(
+    (dayNum: number, index: number, value: string) => {
+      patch((it) => ({
+        ...it,
+        days: it.days.map((day) => {
+          if (day.day !== dayNum || !day.details) return day;
+          return {
+            ...day,
+            details: {
+              ...day.details,
+              trivia: day.details.trivia.map((item, i) =>
+                i === index ? { ...item, text: value } : item,
+              ),
+            },
+          };
+        }),
       }));
     },
     [patch],
@@ -282,8 +343,16 @@ export const ItineraryDocument = React.forwardRef<
             </section>
           );
         }
+        const detailsKey = `${dayKey}:details`;
+        const details = day.details;
+        const filledSections = details
+          ? DETAIL_SECTIONS.filter((s) => details[s.key].length)
+          : [];
+        const hasTrivia = Boolean(details?.trivia.length);
+        const hasDetails = filledSections.length > 0 || hasTrivia;
         return (
-          <section key={day.day} className="rc-print-page rc-doc-day-page px-14 py-14">
+          <React.Fragment key={day.day}>
+          <section className="rc-print-page rc-doc-day-page px-14 py-14">
             {isEdit ? (
               <button
                 type="button"
@@ -413,6 +482,153 @@ export const ItineraryDocument = React.forwardRef<
               patch={patch}
             />
           </section>
+
+          {/* Extra "Local details" page — only when the day has recommendations */}
+          {hasDetails && hidden(detailsKey) && isEdit ? (
+            <section className="rc-print-page rc-doc-day-details-page rc-edit-only flex items-center justify-center px-14 py-14">
+              <button
+                type="button"
+                onClick={() => toggle(detailsKey)}
+                className="rc-restore-bar"
+                title={`Restore Day ${day.day} local details`}
+              >
+                <Eye className="size-3.5" />
+                Restore Day {day.day} details
+              </button>
+            </section>
+          ) : hasDetails && !hidden(detailsKey) ? (
+            <section className="rc-print-page rc-doc-day-details-page px-14 py-14">
+              {isEdit ? (
+                <button
+                  type="button"
+                  onClick={() => toggle(detailsKey)}
+                  className="rc-edit-only rc-remove-btn rc-remove-day"
+                  title={`Remove Day ${day.day} local details`}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              ) : null}
+              <p className="rc-doc-eyebrow">
+                Local details{day.base ? ` - ${day.base}` : ""}
+              </p>
+              <div className="rc-doc-rule mt-3" />
+              <h3 className="mt-4 text-3xl font-semibold">
+                Where to eat, stay &amp; explore
+              </h3>
+              <div className="mt-6 space-y-6">
+                {filledSections.map((section) => (
+                  <Removable
+                    key={section.key}
+                    editable={isEdit}
+                    hidden={hidden(`${detailsKey}:${section.key}`)}
+                    onToggle={() => toggle(`${detailsKey}:${section.key}`)}
+                    label={section.label}
+                  >
+                    <div className="rc-doc-section rc-detail-section">
+                      <p className="rc-doc-eyebrow">{section.label}</p>
+                      <div className="mt-3 space-y-3">
+                        {details![section.key].map((item, index) => {
+                          const meta = [item.area, item.category, item.priceBand]
+                            .filter(Boolean)
+                            .join(" · ");
+                          return (
+                            <div key={index} className="rc-detail-item">
+                              <EditableText
+                                as="p"
+                                value={item.name}
+                                editable={isEdit}
+                                placeholder="Name"
+                                onCommit={(next) =>
+                                  setDetailField(
+                                    day.day,
+                                    section.key,
+                                    index,
+                                    "name",
+                                    next,
+                                  )
+                                }
+                                className="rc-detail-name"
+                              />
+                              {meta ? (
+                                <p className="rc-detail-meta">{meta}</p>
+                              ) : null}
+                              {item.whyItFits || isEdit ? (
+                                <EditableText
+                                  as="p"
+                                  value={item.whyItFits}
+                                  editable={isEdit}
+                                  placeholder="Why it fits"
+                                  onCommit={(next) =>
+                                    setDetailField(
+                                      day.day,
+                                      section.key,
+                                      index,
+                                      "whyItFits",
+                                      next,
+                                    )
+                                  }
+                                  className="rc-detail-why"
+                                />
+                              ) : null}
+                              {item.caveat ? (
+                                <p className="rc-detail-caveat">{item.caveat}</p>
+                              ) : null}
+                              {item.source ? (
+                                <p className="rc-detail-source">
+                                  Source: {item.source}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </Removable>
+                ))}
+
+                {hasTrivia ? (
+                  <Removable
+                    editable={isEdit}
+                    hidden={hidden(`${detailsKey}:trivia`)}
+                    onToggle={() => toggle(`${detailsKey}:trivia`)}
+                    label="local trivia"
+                  >
+                    <div className="rc-doc-section rc-detail-section">
+                      <p className="rc-doc-eyebrow">Local trivia</p>
+                      <ul className="mt-3 space-y-2">
+                        {details!.trivia.map((item, index) => (
+                          <li key={index} className="rc-detail-trivia">
+                            <EditableText
+                              as="span"
+                              value={item.text}
+                              editable={isEdit}
+                              placeholder="Trivia"
+                              onCommit={(next) =>
+                                setTriviaText(day.day, index, next)
+                              }
+                            />
+                            {item.source ? (
+                              <span className="rc-detail-source">
+                                {" "}
+                                — {item.source}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </Removable>
+                ) : null}
+              </div>
+              <AnchorSlot
+                anchor={detailsKey}
+                itinerary={itinerary}
+                editable={isEdit}
+                patch={patch}
+              />
+            </section>
+          ) : null}
+          </React.Fragment>
         );
       })}
 

@@ -8,8 +8,10 @@ import {
   ArrowRight,
   Check,
   Pencil,
+  MapPin,
 } from "lucide-react";
 import type { ItineraryOutput, Project } from "@/lib/types";
+import type { AiTextRequest } from "@/lib/ai/types";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +21,13 @@ import { PdfTextControls } from "./PdfTextControls";
 import { PdfThemeControls } from "./PdfThemeControls";
 import { prepareDocumentForPdf } from "./pdf-assets";
 import { captureAsset, recordAssetUsage } from "@/lib/assets/capture";
+import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
+import { useAiConfig } from "@/components/ai/AiConfigProvider";
+import { resolveClientAiRun } from "@/lib/ai/runtime";
+import { webSearchSupported } from "@/lib/ai/providers";
+import { requestDayDetails } from "@/lib/ai/day-details-client";
+import { normalizeAiDayDetails } from "@/lib/ai/itinerary-normalization";
+import { parseJsonObject } from "@/lib/ai/parse";
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) =>
@@ -43,6 +52,24 @@ export function PdfBuilderPanel({
   const [capturing, setCapturing] = React.useState(false);
   const docRef = React.useRef<HTMLDivElement>(null);
   const patchItinerary = useProjectsStore((state) => state.patchItinerary);
+  const textDefaults = useAiSettingsStore((state) => state.text);
+  const getApiKey = useAiSettingsStore((state) => state.getApiKey);
+  const { config } = useAiConfig();
+  const [detailsRunning, setDetailsRunning] = React.useState(false);
+  const [detailsProgress, setDetailsProgress] = React.useState({
+    done: 0,
+    total: 0,
+  });
+  const [detailsError, setDetailsError] = React.useState<string | null>(null);
+
+  const aiSelection = resolveClientAiRun({
+    mode: "text",
+    defaults: textDefaults,
+    personalKey: getApiKey(textDefaults.provider),
+    serverConfig: config,
+  });
+  const canAddDetails =
+    aiSelection.available && webSearchSupported(aiSelection.provider);
 
   const selected =
     itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;
@@ -154,6 +181,66 @@ export function PdfBuilderPanel({
     }
   }
 
+  async function addLocalDetails() {
+    if (!selected || detailsRunning) return;
+    if (!canAddDetails) {
+      setDetailsError(
+        "Local details need web search. Use the server OpenAI option or add a personal OpenAI key in Settings.",
+      );
+      return;
+    }
+    setDetailsRunning(true);
+    setDetailsError(null);
+    const days = selected.days;
+    setDetailsProgress({ done: 0, total: days.length });
+    const baseRequest: AiTextRequest = {
+      provider: aiSelection.provider,
+      apiKey: getApiKey(textDefaults.provider) || undefined,
+      model: aiSelection.model,
+      // Overridden per pass by the orchestrator; never sent verbatim.
+      prompt: "Local details",
+      taskType: "dayDetails",
+      projectId: project.id,
+      label: "Local details",
+      source: "pdf-builder",
+      temperature: textDefaults.temperature,
+      topP: textDefaults.topP,
+      maxOutputTokens: textDefaults.maxOutputTokens,
+    };
+    const controller = new AbortController();
+    try {
+      for (let i = 0; i < days.length; i += 1) {
+        const day = days[i];
+        const result = await requestDayDetails({
+          request: baseRequest,
+          signal: controller.signal,
+          project,
+          itinerary: selected,
+          day,
+        });
+        const details = normalizeAiDayDetails(
+          parseJsonObject(result.text ?? "{}"),
+          day.base,
+        );
+        patchItinerary(project.id, selected.id, (it) => ({
+          ...it,
+          days: it.days.map((d) =>
+            d.day === day.day ? { ...d, details } : d,
+          ),
+        }));
+        setDetailsProgress({ done: i + 1, total: days.length });
+      }
+    } catch (error) {
+      setDetailsError(
+        error instanceof Error
+          ? error.message
+          : "Could not generate local details.",
+      );
+    } finally {
+      setDetailsRunning(false);
+    }
+  }
+
   if (!selected) {
     return (
       <Card>
@@ -220,6 +307,22 @@ export function PdfBuilderPanel({
           <Button
             variant="outline"
             size="sm"
+            onClick={addLocalDetails}
+            disabled={!canAddDetails || detailsRunning || downloading}
+            title={
+              canAddDetails
+                ? "Generate web-search-grounded recommendations for every day"
+                : "Needs server OpenAI or a personal OpenAI key for web search"
+            }
+          >
+            <MapPin className="size-4" />
+            {detailsRunning
+              ? `Adding details ${detailsProgress.done}/${detailsProgress.total}...`
+              : "Add local details"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => window.print()}
             disabled={!assetsReady || downloading}
           >
@@ -236,6 +339,15 @@ export function PdfBuilderPanel({
           </Button>
         </div>
       </div>
+      {detailsError ? (
+        <p className="rc-no-print text-sm text-terracotta">{detailsError}</p>
+      ) : detailsRunning ? (
+        <p className="rc-no-print text-sm text-ink-muted">
+          Researching real, cited recommendations for each day —{" "}
+          {detailsProgress.done}/{detailsProgress.total} done. This uses web
+          search and may take a moment per day.
+        </p>
+      ) : null}
       {downloadError ? (
         <p className="rc-no-print text-sm text-terracotta">{downloadError}</p>
       ) : !assetsReady ? (
