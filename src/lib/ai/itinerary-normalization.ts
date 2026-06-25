@@ -1,11 +1,13 @@
 import {
   budgetEnum,
+  dayDetailsSchema,
   dayPlanSchema,
   enumValues,
   itineraryOutputSchema,
   paceEnum,
   travelStyleEnum,
   travelerTypeEnum,
+  type DayDetails,
   type DayPlan,
   type ItineraryOutput,
   type Project,
@@ -41,6 +43,26 @@ export function normalizeAiDayPlan(raw: unknown, current?: DayPlan): DayPlan {
     ...candidate,
     day: current?.day ?? candidate.day,
     pace: enumValue(candidate.pace, paceEnum.options) ?? current?.pace,
+    // A general day improve rarely returns the local-details page; keep any
+    // existing one so it is not wiped by an unrelated regeneration.
+    details: candidate.details ?? current?.details,
+  });
+}
+
+/**
+ * Normalize a model's "Local details" payload into a `DayDetails`. Tolerant of
+ * partial sections (each defaults to []), and force-stamps the base city and a
+ * fresh `generatedAt` so freshness reflects this run rather than the model.
+ */
+export function normalizeAiDayDetails(raw: unknown, base: string): DayDetails {
+  const candidate =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Partial<DayDetails>)
+      : {};
+  return dayDetailsSchema.parse({
+    ...candidate,
+    base: base || candidate.base || "",
+    generatedAt: new Date().toISOString(),
   });
 }
 

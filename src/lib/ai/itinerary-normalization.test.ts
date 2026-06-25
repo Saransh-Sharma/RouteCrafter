@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildContext, buildItinerary } from "@/lib/generation";
 import { seedProjects } from "@/lib/seed-projects";
-import { normalizeAiItinerary } from "./itinerary-normalization";
+import {
+  normalizeAiDayDetails,
+  normalizeAiDayPlan,
+  normalizeAiItinerary,
+} from "./itinerary-normalization";
 
 describe("AI itinerary normalization", () => {
   it("preserves selected itinerary metadata and coerces enum lists", () => {
@@ -52,5 +56,46 @@ describe("AI itinerary normalization", () => {
     expect(normalized.budget).toBe("Premium");
     expect(normalized.pdfTheme).toBe("sage");
     expect(normalized.coverImage).toBe("data:image/png;base64,cover");
+  });
+});
+
+describe("AI day-details normalization", () => {
+  it("preserves an existing details page when a day improve omits it", () => {
+    const current = {
+      day: 1,
+      title: "Arrival",
+      base: "Kyoto",
+      details: {
+        base: "Kyoto",
+        restaurants: [],
+        stays: [],
+        activities: [],
+        shopping: [],
+        trivia: [{ text: "Former imperial capital.", source: "" }],
+        generatedAt: "2026-06-25T00:00:00.000Z",
+      },
+    } as never;
+
+    const normalized = normalizeAiDayPlan(
+      { day: 1, title: "Arrival (improved)", morning: "Temples" },
+      current,
+    );
+
+    expect(normalized.details?.trivia[0]?.text).toBe(
+      "Former imperial capital.",
+    );
+  });
+
+  it("stamps the base city and a fresh generatedAt, tolerating partial input", () => {
+    const details = normalizeAiDayDetails(
+      { restaurants: [{ name: "Ippudo" }] },
+      "Fukuoka",
+    );
+
+    expect(details.base).toBe("Fukuoka");
+    expect(details.restaurants[0]?.name).toBe("Ippudo");
+    // Untouched sections default to empty arrays.
+    expect(details.stays).toEqual([]);
+    expect(details.generatedAt).not.toBe("");
   });
 });
