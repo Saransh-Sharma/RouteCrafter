@@ -6,20 +6,28 @@ import Link from "next/link";
 import {
   AlertCircle,
   Check,
+  ChevronDown,
   Copy,
   ImageIcon,
   Loader2,
+  RefreshCw,
   ShieldAlert,
   Sparkles,
   X,
 } from "lucide-react";
-import type { AiResult, AiTaskType, AiTextRequest } from "@/lib/ai/types";
+import type {
+  AiRequestContext,
+  AiResult,
+  AiTaskType,
+  AiTextRequest,
+  DraftProgress,
+} from "@/lib/ai/types";
 import { requestAiImage, requestAiText, streamAiText } from "@/lib/ai/client";
 import { AI_PROVIDERS, providerSupports } from "@/lib/ai/providers";
 import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { CheckboxChip, Textarea } from "@/components/ui/field";
+import { CheckboxChip, Select, Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { AiCostBadge } from "./AiCostButton";
 import { useAiConfig } from "./AiConfigProvider";
@@ -35,6 +43,14 @@ interface AiReviewRow {
   path: string;
   currentValue: unknown;
   aiValue: unknown;
+}
+
+/** A user-tunable lever (e.g. Travel style) surfaced in the run + review UI. */
+export interface AiTuningControl {
+  id: string;
+  label: string;
+  options: string[];
+  value: string;
 }
 
 export interface AiRunSheetProps {
@@ -58,10 +74,19 @@ export interface AiRunSheetProps {
   instructionsPlaceholder?: string;
   /** One-tap quick-tweak chips offered alongside the free-text instructions. */
   instructionsSuggestions?: string[];
+  /** Steerable levers (e.g. style/budget/pace) shown in the run + review UI. */
+  tuningControls?: AiTuningControl[];
+  /** Regenerate a single day in place during review; resolves to the new value. */
+  onRegenerateDay?: (
+    dayIndex: number,
+    ctx: AiRequestContext,
+    request: AiTextRequest,
+  ) => Promise<unknown>;
   validateText?: (text: string) => string | null;
   requestText?: (
     request: AiTextRequest,
     signal: AbortSignal,
+    ctx?: AiRequestContext,
   ) => Promise<AiResult>;
   onApplyText?: (
     text: string,
@@ -121,6 +146,8 @@ function AiRunSheetDialog({
   appendLabel = "Append as notes",
   instructionsPlaceholder,
   instructionsSuggestions,
+  tuningControls,
+  onRegenerateDay,
   validateText,
   requestText,
   onApplyText,
@@ -147,9 +174,13 @@ function AiRunSheetDialog({
   // and remounted on every keystroke. See sessionKey in AiRunSheet.
   const [instructions, setInstructions] = React.useState("");
   const [tweaks, setTweaks] = React.useState<string[]>([]);
+  const [tuning, setTuning] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries((tuningControls ?? []).map((c) => [c.id, c.value])),
+  );
   const changeRequest = [...tweaks, instructions.trim()]
     .filter(Boolean)
     .join("\n");
+  const tuningOverrides = tuningControls?.length ? tuning : undefined;
   const effectivePrompt = changeRequest
     ? `${prompt}\n\nUser change request (prioritize this over the default focus):\n${changeRequest}`
     : prompt;
@@ -200,7 +231,32 @@ function AiRunSheetDialog({
   const [draft, setDraft] = React.useState("");
   const [reviewKey, setReviewKey] = React.useState(0);
   const [phase, setPhase] = React.useState(0);
+  const [progress, setProgress] = React.useState<DraftProgress[]>([]);
   const abortRef = React.useRef<AbortController | null>(null);
+
+  const totalDays = React.useMemo(() => {
+    try {
+      const parsed = JSON.parse(currentText || "{}") as { days?: unknown[] };
+      return Array.isArray(parsed.days) ? parsed.days.length : 0;
+    } catch {
+      return 0;
+    }
+  }, [currentText]);
+
+  const liveOutputTokens = progress.reduce(
+    (total, step) => total + (step.usage?.outputTokens ?? 0),
+    0,
+  );
+
+  const requestContext = React.useCallback(
+    (): AiRequestContext => ({
+      instructions: changeRequest || undefined,
+      overrides: tuningOverrides,
+      onProgress: (event) =>
+        setProgress((prev) => upsertProgress(prev, event)),
+    }),
+    [changeRequest, tuningOverrides],
+  );
 
   const close = React.useCallback(() => {
     abortRef.current?.abort();
@@ -216,6 +272,23 @@ function AiRunSheetDialog({
         ? () => abortRef.current?.abort()
         : undefined,
   });
+
+  function buildTextRequest(): AiTextRequest {
+    return {
+      provider: selection.provider,
+      apiKey: personalKey || undefined,
+      model: selection.model,
+      prompt: effectivePrompt,
+      taskType,
+      projectId,
+      label: title,
+      source: sourceLabel,
+      temperature: textDefaults.temperature,
+      topP: textDefaults.topP,
+      maxOutputTokens: textMaxOutputTokens,
+      responseFormat,
+    };
+  }
 
   async function run() {
     if (!selection.available) {
@@ -244,26 +317,15 @@ function AiRunSheetDialog({
     setDraft("");
     setReviewKey((key) => key + 1);
     setPhase(0);
+    setProgress([]);
 
     try {
-      const runText = requestText ?? requestAiText;
-      const textRequest =
-        mode === "text"
-          ? {
-              provider: selection.provider,
-              apiKey: personalKey || undefined,
-              model: selection.model,
-              prompt: effectivePrompt,
-              taskType,
-              projectId,
-              label: title,
-              source: sourceLabel,
-              temperature: textDefaults.temperature,
-              topP: textDefaults.topP,
-              maxOutputTokens: textMaxOutputTokens,
-              responseFormat,
-            }
-          : null;
+      const runText: (
+        request: AiTextRequest,
+        signal: AbortSignal,
+        ctx?: AiRequestContext,
+      ) => Promise<AiResult> = requestText ?? requestAiText;
+      const textRequest = mode === "text" ? buildTextRequest() : null;
       const next =
         mode === "text" && textRequest
           ? !requestText && responseFormat !== "json"
@@ -281,7 +343,7 @@ function AiRunSheetDialog({
                   );
                 },
               })
-            : await runText(textRequest, controller.signal)
+            : await runText(textRequest, controller.signal, requestContext())
           : await requestAiImage(
               {
                 provider: selection.provider,
@@ -407,6 +469,12 @@ function AiRunSheetDialog({
                   />
                   <Meta label="Payer" value={selection.payer} />
                   <Meta label="Estimated cost" value={estimateLabel} />
+                  {liveOutputTokens > 0 ? (
+                    <Meta
+                      label="Output tokens so far"
+                      value={liveOutputTokens.toLocaleString()}
+                    />
+                  ) : null}
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted">
                   {estimate?.basis ??
@@ -440,6 +508,15 @@ function AiRunSheetDialog({
             <section className="space-y-4">
               {state === "idle" ? (
                 <div className="space-y-4">
+                  {tuningControls?.length ? (
+                    <TuningRow
+                      controls={tuningControls}
+                      values={tuning}
+                      onChange={(id, value) =>
+                        setTuning((prev) => ({ ...prev, [id]: value }))
+                      }
+                    />
+                  ) : null}
                   {instructionsPlaceholder ? (
                     <div className="space-y-3 rounded-2xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/35 p-4">
                       <div className="flex items-baseline gap-2">
@@ -522,25 +599,31 @@ function AiRunSheetDialog({
                 <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-5">
                   <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink">
                     <Loader2 className="size-4 animate-spin text-[var(--rc-ai-brown)]" />
-                    Running AI request
+                    {mode === "text" && responseFormat === "json"
+                      ? "Drafting your itinerary"
+                      : "Running AI request"}
                   </div>
-                  <div className="space-y-2">
-                    {progressByMode[mode].map((step, index) => (
-                      <div
-                        key={step}
-                        className="overflow-hidden rounded-xl border border-border-soft bg-paper-2/60 p-3"
-                      >
+                  {mode === "text" && responseFormat === "json" ? (
+                    <DraftProgressList progress={progress} totalDays={totalDays} />
+                  ) : (
+                    <div className="space-y-2">
+                      {progressByMode[mode].map((step, index) => (
                         <div
-                          className={cn(
-                            "h-1 rounded-full bg-[var(--rc-ai-gold)]",
-                            index === phase && "animate-pulse",
-                            index < phase && "bg-forest",
-                          )}
-                        />
-                        <p className="mt-2 text-sm text-ink-soft">{step}</p>
-                      </div>
-                    ))}
-                  </div>
+                          key={step}
+                          className="overflow-hidden rounded-xl border border-border-soft bg-paper-2/60 p-3"
+                        >
+                          <div
+                            className={cn(
+                              "h-1 rounded-full bg-[var(--rc-ai-gold)]",
+                              index === phase && "animate-pulse",
+                              index < phase && "bg-forest",
+                            )}
+                          />
+                          <p className="mt-2 text-sm text-ink-soft">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {mode === "text" && draft ? (
                     <div className="mt-4 rounded-2xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/25 p-4">
                       <p className="mb-2 text-sm font-semibold text-ink">
@@ -609,11 +692,49 @@ function AiRunSheetDialog({
                         key={reviewKey}
                         currentText={currentText}
                         aiText={draft}
-                        onApply={(nextText) => {
+                        applyLabel={applyLabel}
+                        fillEmptyLabel={fillEmptyLabel}
+                        appendLabel={appendLabel}
+                        tuningControls={tuningControls}
+                        tuning={tuning}
+                        onTuningChange={(id, value) =>
+                          setTuning((prev) => ({ ...prev, [id]: value }))
+                        }
+                        instructionsPlaceholder={instructionsPlaceholder}
+                        instructions={instructions}
+                        onInstructionsChange={setInstructions}
+                        instructionsSuggestions={instructionsSuggestions}
+                        tweaks={tweaks}
+                        onToggleTweak={(suggestion, on) =>
+                          setTweaks((prev) =>
+                            on
+                              ? [...prev, suggestion]
+                              : prev.filter((t) => t !== suggestion),
+                          )
+                        }
+                        canRegenerate={Boolean(requestText)}
+                        onRegenerateAll={() => {
+                          void run();
+                        }}
+                        onRegenerateDay={
+                          onRegenerateDay
+                            ? (dayIndex) =>
+                                onRegenerateDay(
+                                  dayIndex,
+                                  requestContext(),
+                                  buildTextRequest(),
+                                )
+                            : undefined
+                        }
+                        onApply={(nextText, applyMode) => {
                           const issue = validateText?.(nextText) ?? null;
                           setValidationError(issue);
                           if (issue || !onApplyText) return;
-                          onApplyText(nextText, { ...result, text: nextText }, "replace");
+                          onApplyText(
+                            nextText,
+                            { ...result, text: nextText },
+                            applyMode,
+                          );
                           close();
                         }}
                       />
@@ -740,18 +861,65 @@ function PreviewBlock({ title, value }: { title: string; value: string }) {
   );
 }
 
+const GUIDE_KEYS = new Set([
+  "foodGuide",
+  "transportGuide",
+  "packingList",
+  "etiquetteSafety",
+  "bookingChecklist",
+  "personalizationQuestions",
+  "verificationNotes",
+]);
+
+type ApplyMode = "replace" | "fill-empty" | "append";
+
+interface AiReviewPanelProps {
+  currentText: string;
+  aiText: string;
+  applyLabel: string;
+  fillEmptyLabel: string;
+  appendLabel: string;
+  tuningControls?: AiTuningControl[];
+  tuning: Record<string, string>;
+  onTuningChange: (id: string, value: string) => void;
+  instructionsPlaceholder?: string;
+  instructions: string;
+  onInstructionsChange: (value: string) => void;
+  instructionsSuggestions?: string[];
+  tweaks: string[];
+  onToggleTweak: (suggestion: string, on: boolean) => void;
+  canRegenerate: boolean;
+  onRegenerateAll: () => void;
+  onRegenerateDay?: (dayIndex: number) => Promise<unknown>;
+  onApply: (nextText: string, mode: ApplyMode) => void;
+}
+
 function AiReviewPanel({
   currentText,
   aiText,
+  applyLabel,
+  fillEmptyLabel,
+  appendLabel,
+  tuningControls,
+  tuning,
+  onTuningChange,
+  instructionsPlaceholder,
+  instructions,
+  onInstructionsChange,
+  instructionsSuggestions,
+  tweaks,
+  onToggleTweak,
+  canRegenerate,
+  onRegenerateAll,
+  onRegenerateDay,
   onApply,
-}: {
-  currentText: string;
-  aiText: string;
-  onApply: (nextText: string) => void;
-}) {
+}: AiReviewPanelProps) {
   const current = parseJsonValue(currentText) ?? {};
-  const ai = parseJsonValue(aiText);
-  const rows = ai ? flattenJsonRows(ai, current) : [];
+  const initialAi = parseJsonValue(aiText);
+  // Held in state so per-day "Regenerate this day" can swap a single day in place.
+  const [aiState, setAiState] = React.useState<unknown>(initialAi);
+  const rows = aiState ? flattenJsonRows(aiState, current) : [];
+
   const [choices, setChoices] = React.useState<Record<string, AiReviewChoice>>(
     () =>
       Object.fromEntries(
@@ -772,8 +940,11 @@ function AiReviewPanel({
         ]),
       ),
   );
+  const [openDays, setOpenDays] = React.useState<Set<number>>(new Set());
+  const [regenDay, setRegenDay] = React.useState<number | null>(null);
+  const [showTune, setShowTune] = React.useState(false);
 
-  if (!ai) {
+  if (!aiState) {
     return (
       <div className="rounded-2xl border border-terracotta/30 bg-terracotta-soft/60 p-4 text-sm text-terracotta">
         The AI response is not valid JSON, so RouteCrafter cannot safely review
@@ -782,105 +953,569 @@ function AiReviewPanel({
     );
   }
 
-  const displayedRows = rows.slice(0, 80);
+  const groups = groupReviewRows(rows);
 
-  function applySelected() {
+  function choiceFor(row: AiReviewRow): AiReviewChoice {
+    return (
+      choices[row.path] ??
+      (isEmptyJsonValue(row.currentValue) ? "use-ai" : "keep-current")
+    );
+  }
+
+  function setChoice(path: string, choice: AiReviewChoice) {
+    setChoices((prev) => ({ ...prev, [path]: choice }));
+  }
+
+  function setMergeValue(path: string, value: string) {
+    setMergeValues((prev) => ({ ...prev, [path]: value }));
+  }
+
+  function setManyChoices(paths: string[], choice: AiReviewChoice) {
+    setChoices((prev) => {
+      const next = { ...prev };
+      for (const path of paths) next[path] = choice;
+      return next;
+    });
+  }
+
+  function applySelected(mode: ApplyMode) {
     const base = cloneJson(
       current && typeof current === "object" && !Array.isArray(current)
         ? current
-        : ai,
+        : aiState,
     );
-    for (const row of displayedRows) {
-      const choice = choices[row.path] ?? "keep-current";
-      if (choice === "keep-current") continue;
+    for (const row of rows) {
+      if (choiceFor(row) === "keep-current") continue;
       setJsonPath(
         base,
         row.path,
-        choice === "merge" ? mergeValues[row.path] : row.aiValue,
+        choiceFor(row) === "merge" ? mergeValues[row.path] : row.aiValue,
       );
     }
-    onApply(JSON.stringify(base, null, 2));
+    onApply(JSON.stringify(base, null, 2), mode);
   }
+
+  async function regenerateDay(dayIndex: number) {
+    if (!onRegenerateDay) return;
+    setRegenDay(dayIndex);
+    try {
+      const newDay = await onRegenerateDay(dayIndex);
+      if (newDay && typeof newDay === "object") {
+        setAiState((prev: unknown) => {
+          const next = cloneJson(prev) as Record<string, unknown>;
+          const days = Array.isArray(next.days) ? [...next.days] : [];
+          days[dayIndex] = newDay;
+          next.days = days;
+          return next;
+        });
+        setManyChoices(
+          Object.keys(newDay as Record<string, unknown>).map(
+            (key) => `days.${dayIndex}.${key}`,
+          ),
+          "use-ai",
+        );
+        setOpenDays((prev) => new Set(prev).add(dayIndex));
+      }
+    } finally {
+      setRegenDay(null);
+    }
+  }
+
+  const dayCount = groups.days.length;
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-ink">Field review</p>
+            <p className="text-sm font-semibold text-ink">Review the draft</p>
             <p className="mt-1 text-xs text-ink-muted">
-              Empty current fields default to Use AI. Existing fields default to
-              Keep mine.
+              Empty fields default to Use AI; existing fields default to Keep
+              mine. Choose per field, per day, or all at once.
             </p>
           </div>
-          <CopyButton value={aiText} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setManyChoices(rows.map((row) => row.path), "use-ai")}
+              className="rounded-full bg-forest px-3 py-1 text-xs font-semibold text-paper hover:bg-forest-deep"
+            >
+              Replace all
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setManyChoices(rows.map((row) => row.path), "keep-current")
+              }
+              className="rounded-full border border-border-strong bg-paper px-3 py-1 text-xs font-semibold text-ink-soft hover:text-ink"
+            >
+              Keep all mine
+            </button>
+            <CopyButton value={aiText} />
+          </div>
         </div>
-        <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
-          {displayedRows.map((row) => {
-            const choice = choices[row.path] ?? "keep-current";
-            return (
-              <div
-                key={row.path}
-                className="rounded-xl border border-border-soft bg-paper-2/35 p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-ink">{row.path}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {(["keep-current", "use-ai", "merge"] as const).map(
-                      (nextChoice) => (
-                        <button
-                          key={nextChoice}
-                          type="button"
-                          onClick={() =>
-                            setChoices((currentChoices) => ({
-                              ...currentChoices,
-                              [row.path]: nextChoice,
-                            }))
-                          }
-                          className={cn(
-                            "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                            choice === nextChoice
-                              ? "bg-forest text-paper"
-                              : "bg-paper text-ink-muted hover:text-ink",
-                          )}
-                        >
-                          {nextChoice === "keep-current"
-                            ? "Keep mine"
-                            : nextChoice === "use-ai"
-                              ? "Use AI"
-                              : "Merge"}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  <MiniValue title="Current" value={row.currentValue} />
-                  <MiniValue title="AI" value={row.aiValue} />
-                </div>
-                {choice === "merge" ? (
-                  <Textarea
-                    value={mergeValues[row.path] ?? ""}
-                    rows={3}
-                    className="mt-2"
-                    onChange={(event) =>
-                      setMergeValues((currentValues) => ({
-                        ...currentValues,
-                        [row.path]: event.target.value,
-                      }))
-                    }
+
+        {canRegenerate ? (
+          <div className="mb-3 rounded-xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/30">
+            <button
+              type="button"
+              onClick={() => setShowTune((open) => !open)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Sparkles className="size-4 text-[var(--rc-ai-brown)]" />
+                Tune &amp; regenerate
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 text-ink-muted transition-transform",
+                  showTune && "rotate-180",
+                )}
+              />
+            </button>
+            {showTune ? (
+              <div className="space-y-3 border-t border-[var(--rc-ai-border)] p-3">
+                {tuningControls?.length ? (
+                  <TuningRow
+                    controls={tuningControls}
+                    values={tuning}
+                    onChange={onTuningChange}
                   />
                 ) : null}
+                {instructionsSuggestions?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {instructionsSuggestions.map((suggestion) => (
+                      <CheckboxChip
+                        key={suggestion}
+                        label={suggestion}
+                        selected={tweaks.includes(suggestion)}
+                        onToggle={(on) => onToggleTweak(suggestion, on)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                <Textarea
+                  autoSize
+                  rows={2}
+                  placeholder={
+                    instructionsPlaceholder ??
+                    "e.g. Make the pace more relaxed and add more local food stops"
+                  }
+                  value={instructions}
+                  onChange={(event) => onInstructionsChange(event.target.value)}
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={onRegenerateAll}>
+                    <RefreshCw className="size-4" />
+                    Regenerate all
+                  </Button>
+                </div>
               </div>
-            );
-          })}
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="max-h-[460px] space-y-4 overflow-y-auto pr-1">
+          {groups.overview.length ? (
+            <ReviewSection title="Overview">
+              {groups.overview.map((row) => (
+                <FieldRow
+                  key={row.path}
+                  row={row}
+                  choice={choiceFor(row)}
+                  onChoice={(choice) => setChoice(row.path, choice)}
+                  mergeValue={mergeValues[row.path]}
+                  onMergeChange={(value) => setMergeValue(row.path, value)}
+                />
+              ))}
+            </ReviewSection>
+          ) : null}
+
+          {groups.guides.length ? (
+            <ReviewSection title="Guides">
+              {groups.guides.map((row) => (
+                <FieldRow
+                  key={row.path}
+                  row={row}
+                  choice={choiceFor(row)}
+                  onChoice={(choice) => setChoice(row.path, choice)}
+                  mergeValue={mergeValues[row.path]}
+                  onMergeChange={(value) => setMergeValue(row.path, value)}
+                />
+              ))}
+            </ReviewSection>
+          ) : null}
+
+          {dayCount ? (
+            <ReviewSection title={`Days (${dayCount})`}>
+              {groups.days.map((group) => (
+                <DayReviewCard
+                  key={group.index}
+                  group={group}
+                  open={openDays.has(group.index)}
+                  onToggle={() =>
+                    setOpenDays((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.index)) next.delete(group.index);
+                      else next.add(group.index);
+                      return next;
+                    })
+                  }
+                  choiceFor={choiceFor}
+                  onSetField={setChoice}
+                  onSetDay={(choice) =>
+                    setManyChoices(
+                      group.rows.map((row) => row.path),
+                      choice,
+                    )
+                  }
+                  mergeValues={mergeValues}
+                  onMergeChange={setMergeValue}
+                  onRegenerate={onRegenerateDay ? regenerateDay : undefined}
+                  regenerating={regenDay === group.index}
+                />
+              ))}
+            </ReviewSection>
+          ) : null}
         </div>
       </div>
-      <div className="flex justify-end">
-        <Button onClick={applySelected}>Apply selected fields</Button>
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => applySelected("append")}>
+          {appendLabel}
+        </Button>
+        <Button variant="outline" onClick={() => applySelected("fill-empty")}>
+          {fillEmptyLabel}
+        </Button>
+        <Button onClick={() => applySelected("replace")}>{applyLabel}</Button>
       </div>
     </div>
   );
+}
+
+interface DayReviewGroup {
+  index: number;
+  dayNumber: number;
+  title: string;
+  rows: AiReviewRow[];
+  needsAttention: boolean;
+}
+
+function groupReviewRows(rows: AiReviewRow[]): {
+  overview: AiReviewRow[];
+  guides: AiReviewRow[];
+  days: DayReviewGroup[];
+} {
+  const overview: AiReviewRow[] = [];
+  const guides: AiReviewRow[] = [];
+  const dayRows = new Map<number, AiReviewRow[]>();
+  for (const row of rows) {
+    const [head, second] = row.path.split(".");
+    if (head === "days" && second !== undefined) {
+      const index = Number(second);
+      const list = dayRows.get(index) ?? [];
+      list.push(row);
+      dayRows.set(index, list);
+    } else if (GUIDE_KEYS.has(head)) {
+      guides.push(row);
+    } else {
+      overview.push(row);
+    }
+  }
+  const days: DayReviewGroup[] = [...dayRows.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([index, list]) => {
+      const value = (row: string) =>
+        list.find((item) => item.path === `days.${index}.${row}`)?.aiValue;
+      const title = stringifyJsonValue(value("title")) || `Day ${index + 1}`;
+      const dayNumber = Number(value("day")) || index + 1;
+      const filled = ["morning", "afternoon", "evening"]
+        .map((key) => value(key))
+        .filter((entry) => typeof entry === "string" && entry.trim()).length;
+      return { index, dayNumber, title, rows: list, needsAttention: filled === 0 };
+    });
+  return { overview, guides, days };
+}
+
+function ReviewSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--rc-ai-brown)]">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function ChoiceButtons({
+  choice,
+  onChoice,
+}: {
+  choice: AiReviewChoice | null;
+  onChoice: (choice: AiReviewChoice) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {(["keep-current", "use-ai", "merge"] as const).map((nextChoice) => (
+        <button
+          key={nextChoice}
+          type="button"
+          onClick={() => onChoice(nextChoice)}
+          className={cn(
+            "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+            choice === nextChoice
+              ? "bg-forest text-paper"
+              : "bg-paper text-ink-muted hover:text-ink",
+          )}
+        >
+          {nextChoice === "keep-current"
+            ? "Keep mine"
+            : nextChoice === "use-ai"
+              ? "Use AI"
+              : "Merge"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FieldRow({
+  row,
+  label,
+  choice,
+  onChoice,
+  mergeValue,
+  onMergeChange,
+}: {
+  row: AiReviewRow;
+  label?: string;
+  choice: AiReviewChoice;
+  onChoice: (choice: AiReviewChoice) => void;
+  mergeValue?: string;
+  onMergeChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border-soft bg-paper-2/35 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-ink">{label ?? row.path}</p>
+        <ChoiceButtons choice={choice} onChoice={onChoice} />
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <MiniValue title="Current" value={row.currentValue} />
+        <MiniValue title="AI" value={row.aiValue} />
+      </div>
+      {choice === "merge" ? (
+        <Textarea
+          value={mergeValue ?? ""}
+          rows={3}
+          className="mt-2"
+          onChange={(event) => onMergeChange(event.target.value)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DayReviewCard({
+  group,
+  open,
+  onToggle,
+  choiceFor,
+  onSetField,
+  onSetDay,
+  mergeValues,
+  onMergeChange,
+  onRegenerate,
+  regenerating,
+}: {
+  group: DayReviewGroup;
+  open: boolean;
+  onToggle: () => void;
+  choiceFor: (row: AiReviewRow) => AiReviewChoice;
+  onSetField: (path: string, choice: AiReviewChoice) => void;
+  onSetDay: (choice: AiReviewChoice) => void;
+  mergeValues: Record<string, string>;
+  onMergeChange: (path: string, value: string) => void;
+  onRegenerate?: (dayIndex: number) => void;
+  regenerating: boolean;
+}) {
+  const dayChoices = new Set(group.rows.map((row) => choiceFor(row)));
+  const summary: AiReviewChoice | null =
+    dayChoices.size === 1 ? [...dayChoices][0] : null;
+  return (
+    <div className="rounded-xl border border-border-soft bg-paper-2/35">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 items-center gap-2 text-left"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-ink-muted transition-transform",
+              open && "rotate-180",
+            )}
+          />
+          <span className="text-sm font-semibold text-ink">
+            Day {group.dayNumber}
+          </span>
+          <span className="max-w-[220px] truncate text-xs text-ink-muted">
+            {group.title}
+          </span>
+          {group.needsAttention ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-terracotta/30 bg-terracotta-soft/50 px-2 py-0.5 text-[10px] font-semibold text-terracotta">
+              <AlertCircle className="size-3" />
+              Needs detail
+            </span>
+          ) : null}
+        </button>
+        <div className="flex items-center gap-1.5">
+          <ChoiceButtons choice={summary} onChoice={onSetDay} />
+          {onRegenerate ? (
+            <button
+              type="button"
+              onClick={() => onRegenerate(group.index)}
+              disabled={regenerating}
+              className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-paper px-2.5 py-1 text-[11px] font-semibold text-ink-soft hover:text-ink disabled:opacity-60"
+            >
+              {regenerating ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              Regenerate
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {open ? (
+        <div className="space-y-2 border-t border-border-soft p-3">
+          {group.rows.map((row) => (
+            <FieldRow
+              key={row.path}
+              row={row}
+              label={row.path.split(".").slice(2).join(".")}
+              choice={choiceFor(row)}
+              onChoice={(choice) => onSetField(row.path, choice)}
+              mergeValue={mergeValues[row.path]}
+              onMergeChange={(value) => onMergeChange(row.path, value)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TuningRow({
+  controls,
+  values,
+  onChange,
+}: {
+  controls: AiTuningControl[];
+  values: Record<string, string>;
+  onChange: (id: string, value: string) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {controls.map((control) => (
+        <label key={control.id} className="block space-y-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            {control.label}
+          </span>
+          <Select
+            value={values[control.id] ?? control.value}
+            onChange={(event) => onChange(control.id, event.target.value)}
+            className="h-9 text-xs"
+          >
+            {control.options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function DraftProgressList({
+  progress,
+  totalDays,
+}: {
+  progress: DraftProgress[];
+  totalDays: number;
+}) {
+  const daysDone = progress
+    .filter((step) => step.kind === "days" && step.status === "done")
+    .reduce(
+      (total, step) =>
+        total +
+        (step.dayRange ? step.dayRange[1] - step.dayRange[0] + 1 : 0),
+      0,
+    );
+  const steps =
+    progress.length === 0
+      ? [
+          {
+            id: "overview",
+            kind: "overview" as const,
+            label: "Overview & guides",
+            status: "start" as const,
+          },
+        ]
+      : progress;
+
+  return (
+    <div className="space-y-2">
+      {totalDays > 0 ? (
+        <p className="text-xs font-medium text-ink-soft">
+          {daysDone} of {totalDays} days drafted
+        </p>
+      ) : null}
+      {steps.map((step) => (
+        <div
+          key={step.id}
+          className="flex items-center gap-3 rounded-xl border border-border-soft bg-paper-2/60 p-3"
+        >
+          <span
+            className={cn(
+              "flex size-5 shrink-0 items-center justify-center rounded-full",
+              step.status === "done"
+                ? "bg-forest text-paper"
+                : "bg-[var(--rc-ai-gold-soft)] text-[var(--rc-ai-brown)]",
+            )}
+          >
+            {step.status === "done" ? (
+              <Check className="size-3" />
+            ) : (
+              <Loader2 className="size-3 animate-spin" />
+            )}
+          </span>
+          <p className="text-sm text-ink-soft">{step.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function upsertProgress(
+  prev: DraftProgress[],
+  event: DraftProgress,
+): DraftProgress[] {
+  const index = prev.findIndex((step) => step.id === event.id);
+  if (index === -1) return [...prev, event];
+  const next = [...prev];
+  next[index] = event;
+  return next;
 }
 
 function MiniValue({ title, value }: { title: string; value: unknown }) {
