@@ -41,6 +41,7 @@ export function DayCard({
   canMoveUp,
   canMoveDown,
   onAiImprove,
+  onAiDetails,
 }: {
   day: DayPlan;
   onChange: (next: DayPlan) => void;
@@ -50,6 +51,7 @@ export function DayCard({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onAiImprove?: () => void;
+  onAiDetails?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const uploadId = React.useId();
@@ -171,6 +173,16 @@ export function DayCard({
                 className="mr-1 min-h-8 px-2.5 py-1.5 text-xs"
               >
                 AI improve
+              </AiCostButton>
+            ) : null}
+            {onAiDetails ? (
+              <AiCostButton
+                size="sm"
+                taskType="dayDetails"
+                onClick={onAiDetails}
+                className="mr-1 min-h-8 px-2.5 py-1.5 text-xs"
+              >
+                Local details
               </AiCostButton>
             ) : null}
             <button

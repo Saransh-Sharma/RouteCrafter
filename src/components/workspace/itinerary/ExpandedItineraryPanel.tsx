@@ -29,15 +29,21 @@ import { FormField, Input, Select, Textarea } from "@/components/ui/field";
 import { AiCostButton } from "@/components/ai/AiCostButton";
 import { AiRunSheet } from "@/components/ai/AiRunSheet";
 import {
+  buildDayDetailsResearchPrompt,
   buildDayPrompt,
   buildItineraryPrompt,
 } from "@/lib/ai/tasks";
 import { isLikelyTruncatedJson, parseJsonObject } from "@/lib/ai/parse";
 import {
+  normalizeAiDayDetails,
   normalizeAiDayPlan,
   normalizeAiItinerary,
 } from "@/lib/ai/itinerary-normalization";
-import { requestStructuredItineraryDraft } from "@/lib/ai/itinerary-draft-client";
+import {
+  requestItineraryDays,
+  requestStructuredItineraryDraft,
+} from "@/lib/ai/itinerary-draft-client";
+import { requestDayDetails } from "@/lib/ai/day-details-client";
 import { appendAiRun, createAiRunMetadata } from "@/lib/ai/metadata";
 import { markAiRunApplied } from "@/lib/assets/capture";
 import { cn } from "@/lib/utils";
@@ -66,7 +72,8 @@ const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
 
 type ItineraryAiTarget =
   | { kind: "itinerary"; title: string; focus: string }
-  | { kind: "day"; title: string; index: number; focus: string };
+  | { kind: "day"; title: string; index: number; focus: string }
+  | { kind: "dayDetails"; title: string; index: number };
 
 export function ExpandedItineraryPanel({
   project,
@@ -228,6 +235,11 @@ export function ExpandedItineraryPanel({
       }
       if (aiTarget?.kind === "day") {
         normalizeAiDayPlan(parseJsonObject(text), selected?.days[aiTarget.index]);
+      } else if (aiTarget?.kind === "dayDetails") {
+        normalizeAiDayDetails(
+          parseJsonObject(text),
+          selected?.days[aiTarget.index]?.base ?? "",
+        );
       } else {
         normalizeItinerary(parseJsonObject(text));
       }
@@ -317,7 +329,16 @@ export function ExpandedItineraryPanel({
     mode: "replace" | "fill-empty" | "append",
   ) {
     if (!aiTarget) return;
-    if (aiTarget.kind === "day" && selected) {
+    if (aiTarget.kind === "dayDetails" && selected) {
+      const incoming = normalizeAiDayDetails(
+        parseJsonObject(text),
+        selected.days[aiTarget.index]?.base ?? "",
+      );
+      const nextDays = selected.days.map((day, index) =>
+        index === aiTarget.index ? { ...day, details: incoming } : day,
+      );
+      updateItinerary({ ...selected, days: nextDays });
+    } else if (aiTarget.kind === "day" && selected) {
       const incoming = normalizeAiDayPlan(
         parseJsonObject(text),
         selected.days[aiTarget.index],
@@ -344,7 +365,12 @@ export function ExpandedItineraryPanel({
         project,
         createAiRunMetadata({
           result,
-          taskType: aiTarget.kind === "day" ? "rewrite" : "itinerary",
+          taskType:
+            aiTarget.kind === "day"
+              ? "rewrite"
+              : aiTarget.kind === "dayDetails"
+                ? "dayDetails"
+                : "itinerary",
           label: aiTarget.title,
           source: "expanded-itinerary",
         }),
@@ -365,7 +391,17 @@ export function ExpandedItineraryPanel({
           selected.days[aiTarget.index],
           aiTarget.focus,
         )
-      : buildItineraryPrompt(project, selected, aiTarget?.focus);
+      : aiTarget?.kind === "dayDetails" && selected
+        ? buildDayDetailsResearchPrompt({
+            project,
+            itinerary: selected,
+            day: selected.days[aiTarget.index],
+          })
+        : buildItineraryPrompt(
+            project,
+            selected,
+            aiTarget && "focus" in aiTarget ? aiTarget.focus : undefined,
+          );
 
   const SECTIONS: [string, string][] = [
     ["overview", "Overview"],
@@ -675,6 +711,13 @@ export function ExpandedItineraryPanel({
                         "Improve this day, fill weak fields, and preserve useful manual details.",
                     })
                   }
+                  onAiDetails={() =>
+                    setAiTarget({
+                      kind: "dayDetails",
+                      title: `Local details for day ${day.day}`,
+                      index: i,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -737,56 +780,127 @@ export function ExpandedItineraryPanel({
         mode="text"
         title={aiTarget?.title ?? "AI itinerary assist"}
         description="Creates structured itinerary JSON and previews it before applying. Existing edits are preserved unless you choose replace."
-        taskType={aiTarget?.kind === "day" ? "rewrite" : "itinerary"}
+        taskType={
+          aiTarget?.kind === "day"
+            ? "rewrite"
+            : aiTarget?.kind === "dayDetails"
+              ? "dayDetails"
+              : "itinerary"
+        }
         projectId={project.id}
         sourceLabel={
           aiTarget?.kind === "day"
             ? `Day ${selected?.days[aiTarget.index]?.day ?? ""}`
-            : "Expanded itinerary"
+            : aiTarget?.kind === "dayDetails"
+              ? `Day ${selected?.days[aiTarget.index]?.day ?? ""} local details`
+              : "Expanded itinerary"
         }
         prompt={aiPrompt}
         currentText={
           aiTarget?.kind === "day" && selected
             ? JSON.stringify(selected.days[aiTarget.index], null, 2)
-            : selected
-              ? JSON.stringify(selected, null, 2)
-              : ""
+            : aiTarget?.kind === "dayDetails" && selected
+              ? JSON.stringify(
+                  selected.days[aiTarget.index]?.details ?? {},
+                  null,
+                  2,
+                )
+              : selected
+                ? JSON.stringify(selected, null, 2)
+                : ""
         }
         responseFormat="json"
         validateText={validateItineraryAi}
         requestText={
           aiTarget?.kind === "itinerary" && selected
-            ? (request, signal) =>
+            ? (request, signal, ctx) =>
                 requestStructuredItineraryDraft({
                   request,
                   signal,
                   project,
                   current: selected,
                   focus: aiTarget.focus,
+                  overrides: ctx?.overrides,
+                  instructions: ctx?.instructions,
+                  onProgress: ctx?.onProgress,
                 })
+            : aiTarget?.kind === "dayDetails" && selected
+              ? (request, signal) =>
+                  requestDayDetails({
+                    request,
+                    signal,
+                    project,
+                    itinerary: selected,
+                    day: selected.days[aiTarget.index],
+                  })
+              : undefined
+        }
+        tuningControls={
+          aiTarget?.kind === "itinerary" && selected
+            ? [
+                {
+                  id: "style",
+                  label: "Travel style",
+                  options: [...enumValues.travelStyle],
+                  value: selected.style ?? enumValues.travelStyle[0],
+                },
+                {
+                  id: "budget",
+                  label: "Budget",
+                  options: [...enumValues.budget],
+                  value: selected.budget ?? enumValues.budget[0],
+                },
+                {
+                  id: "pace",
+                  label: "Pace",
+                  options: [...enumValues.pace],
+                  value: selected.days[0]?.pace ?? enumValues.pace[0],
+                },
+              ]
+            : undefined
+        }
+        onRegenerateDay={
+          aiTarget?.kind === "itinerary" && selected
+            ? async (dayIndex, ctx, request) => {
+                const target = selected.days[dayIndex];
+                if (!target) return undefined;
+                const { days } = await requestItineraryDays({
+                  request,
+                  signal: new AbortController().signal,
+                  project,
+                  itinerary: selected,
+                  days: [target],
+                  overrides: ctx.overrides,
+                  instructions: ctx.instructions,
+                  focus: aiTarget.focus,
+                });
+                return days[0];
+              }
             : undefined
         }
         onApplyText={applyItineraryAi}
-        applyLabel={aiTarget?.kind === "day" ? "Replace day" : "Replace itinerary"}
+        applyLabel={
+          aiTarget?.kind === "day"
+            ? "Replace day"
+            : aiTarget?.kind === "dayDetails"
+              ? "Apply local details"
+              : "Replace itinerary"
+        }
         fillEmptyLabel="Fill empty fields"
         appendLabel="Append to fields"
         instructionsPlaceholder={
           aiTarget?.kind === "day"
             ? "e.g. Make the afternoon less walking-heavy and add a vegetarian dinner option"
-            : undefined
+            : "e.g. Lean into hidden-gem food spots and keep mornings slow"
         }
-        instructionsSuggestions={
-          aiTarget?.kind === "day"
-            ? [
-                "Less walking",
-                "More food spots",
-                "Add a rainy-day backup",
-                "More relaxed pace",
-                "Family-friendly",
-                "Lower budget",
-              ]
-            : undefined
-        }
+        instructionsSuggestions={[
+          "Less walking",
+          "More food spots",
+          "Add a rainy-day backup",
+          "More relaxed pace",
+          "Family-friendly",
+          "More iconic sights",
+        ]}
       />
     </div>
   );
