@@ -13,6 +13,59 @@ import {
  * populated by the Phase 6 (matrix) and Phase 7 (expanded itinerary) builders.
  */
 
+/**
+ * One web-search-grounded recommendation on a day's "Local details" page
+ * (a restaurant, stay, activity, or shop). Fields default to "" so a partial
+ * AI payload still parses; `source` carries the citation the model grounded it
+ * in, and `caveat` the per-item "verify live hours/prices" reminder.
+ */
+export const dayDetailRecommendationSchema = z.object({
+  name: z.string().default(""),
+  /** Neighborhood / district within the base city. */
+  area: z.string().default(""),
+  /** Short tag, e.g. "izakaya", "design hotel", "covered market". */
+  category: z.string().default(""),
+  /** One line tying the pick to this trip's traveler context. */
+  whyItFits: z.string().default(""),
+  /** Optional rough price band, e.g. "$$", "mid-range", "€€€". */
+  priceBand: z.string().default(""),
+  /** Citation URL or title returned by web search. */
+  source: z.string().default(""),
+  /** Per-item verification note (hours/prices/booking change). */
+  caveat: z.string().default(""),
+});
+
+export type DayDetailRecommendation = z.infer<
+  typeof dayDetailRecommendationSchema
+>;
+
+/** A short, sourced cultural/contextual fact for the day's location. */
+export const dayTriviaSchema = z.object({
+  text: z.string().default(""),
+  source: z.string().default(""),
+});
+
+export type DayTrivia = z.infer<typeof dayTriviaSchema>;
+
+/**
+ * Extra "Local details" page appended after a day's plan: web-search-grounded
+ * recommendations contextual to that day's base city. Every section defaults to
+ * an empty array, so the page is rendered only for the sections that are filled.
+ */
+export const dayDetailsSchema = z.object({
+  /** Base city these recommendations are anchored to (sanity check). */
+  base: z.string().default(""),
+  restaurants: z.array(dayDetailRecommendationSchema).default([]),
+  stays: z.array(dayDetailRecommendationSchema).default([]),
+  activities: z.array(dayDetailRecommendationSchema).default([]),
+  shopping: z.array(dayDetailRecommendationSchema).default([]),
+  trivia: z.array(dayTriviaSchema).default([]),
+  /** ISO timestamp of the grounded generation, for freshness display. */
+  generatedAt: z.string().default(""),
+});
+
+export type DayDetails = z.infer<typeof dayDetailsSchema>;
+
 export const dayPlanSchema = z.object({
   day: z.number().int().positive(),
   title: z.string(),
@@ -34,6 +87,11 @@ export const dayPlanSchema = z.object({
   image: z.string().default(""),
   /** Prompt used to generate or brief the day's optional illustration. */
   imagePrompt: z.string().default(""),
+  /**
+   * Optional web-search-grounded "Local details" page (restaurants, stays,
+   * activities, shopping, trivia). Omitted until the buyer generates it.
+   */
+  details: dayDetailsSchema.optional(),
   /**
    * Set true when a route change re-based this day to a new city, so its prose
    * may still reference the old one. Cleared after an AI refresh or manual edit.
