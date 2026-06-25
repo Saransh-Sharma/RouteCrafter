@@ -10,7 +10,8 @@ export type AiTaskType =
   | "imagePrompt"
   | "imageGeneration"
   | "guide"
-  | "rewrite";
+  | "rewrite"
+  | "dayDetails";
 
 export type AiStreamEvent =
   | { type: "phase"; phase: "preparing" | "calling-provider" | "validating" }
@@ -19,6 +20,35 @@ export type AiStreamEvent =
   | { type: "error"; error: string };
 
 export type AiFieldReviewChoice = "keep" | "use-ai" | "merge";
+
+/** User-tunable levers applied to a structured itinerary draft/regeneration. */
+export interface ItineraryDraftOverrides {
+  style?: string;
+  budget?: string;
+  pace?: string;
+}
+
+/**
+ * Progress emitted while a structured itinerary is drafted across a series of
+ * AI calls (one overview call plus one call per chunk of days). The runner upserts
+ * these by `id` to drive a live checklist.
+ */
+export interface DraftProgress {
+  id: string;
+  kind: "overview" | "days";
+  label: string;
+  /** Inclusive [first, last] day numbers for day chunks. */
+  dayRange?: [number, number];
+  status: "start" | "done";
+  usage?: AiUsage;
+}
+
+/** Optional steering + progress context threaded through a custom requestText. */
+export interface AiRequestContext {
+  instructions?: string;
+  overrides?: ItineraryDraftOverrides;
+  onProgress?: (progress: DraftProgress) => void;
+}
 
 export interface BatchRunStep {
   id: string;
@@ -58,6 +88,10 @@ export interface AiTextRequest {
   topP?: number;
   maxOutputTokens?: number;
   responseFormat?: "text" | "json";
+  /** Ground the response in live web search (OpenAI Responses `web_search`). */
+  enableWebSearch?: boolean;
+  /** Cap on web searches for a grounded run (cost/latency guard). */
+  maxWebSearches?: number;
 }
 
 export interface AiImageRequest {
@@ -75,6 +109,11 @@ export interface AiImageRequest {
   aspectRatio?: string;
 }
 
+export interface AiCitation {
+  url?: string;
+  title?: string;
+}
+
 export interface AiResult {
   text?: string;
   image?: string;
@@ -86,6 +125,8 @@ export interface AiResult {
   aiRunId?: string;
   aiRunIds?: string[];
   providerAttempts?: number;
+  /** Sources the model grounded its answer in, when web search was enabled. */
+  citations?: AiCitation[];
 }
 
 export interface ResolvedAiTextRequest extends AiTextRequest {
