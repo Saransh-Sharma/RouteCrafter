@@ -245,6 +245,71 @@ describe("provider fetch retries", () => {
   });
 });
 
+describe("OpenAI web-search grounding", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("adds the web_search tool and collects deduped url citations", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      // The tool is attached only when grounding is requested.
+      expect(body.tools).toEqual([{ type: "web_search" }]);
+      return Response.json({
+        output: [
+          {
+            content: [
+              {
+                type: "output_text",
+                text: "Fuglen Tokyo is a great cafe.",
+                annotations: [
+                  {
+                    type: "url_citation",
+                    url: "https://example.com/fuglen",
+                    title: "Fuglen",
+                  },
+                  // Duplicate url should be collapsed.
+                  {
+                    type: "url_citation",
+                    url: "https://example.com/fuglen",
+                    title: "Fuglen again",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 9 },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateText({
+      ...textRequest,
+      taskType: "dayDetails",
+      enableWebSearch: true,
+    });
+
+    expect(result.text).toBe("Fuglen Tokyo is a great cafe.");
+    expect(result.citations).toEqual([
+      { url: "https://example.com/fuglen", title: "Fuglen" },
+    ]);
+  });
+
+  it("omits the tool and citations when grounding is off", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.tools).toBeUndefined();
+      return Response.json({ output_text: "Plain copy" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateText(textRequest);
+    expect(result.text).toBe("Plain copy");
+    expect(result.citations).toBeUndefined();
+  });
+});
+
 function sseResponse(events: unknown[]): Response {
   return new Response(
     events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),

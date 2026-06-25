@@ -49,6 +49,15 @@ export function providerSupports(
   return AI_PROVIDERS[provider].capabilities[capability];
 }
 
+/**
+ * Whether a provider can ground text in live web search here. Only OpenAI's
+ * Responses API (`web_search` tool) is wired — and since the server-funded
+ * fallback is OpenAI, this also covers no-personal-key users.
+ */
+export function webSearchSupported(provider: AiProviderId): boolean {
+  return provider === "openai";
+}
+
 export function resolveTextModel(provider: AiProviderId, selected: string): string {
   return selected || AI_PROVIDERS[provider].defaultTextModel;
 }

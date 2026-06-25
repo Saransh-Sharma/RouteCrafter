@@ -8,6 +8,7 @@ import {
   providerErrorFromStatus,
 } from "./errors";
 import type {
+  AiCitation,
   AiResult,
   AiUsage,
   ResolvedAiImageRequest,
@@ -256,6 +257,31 @@ function extractOpenAiText(data: unknown): string {
     .map((content) => stringValue(asRecord(content).text))
     .filter((text): text is string => Boolean(text));
   return chunks.join("\n").trim();
+}
+
+/**
+ * Collect deduped web-search citations from an OpenAI Responses payload. Each
+ * message content block may carry `annotations` of type `url_citation` with a
+ * `url`/`title` the model grounded a claim in.
+ */
+function extractOpenAiCitations(data: unknown): AiCitation[] {
+  const seen = new Set<string>();
+  const citations: AiCitation[] = [];
+  for (const item of asArray(asRecord(data).output)) {
+    for (const content of asArray(asRecord(item).content)) {
+      for (const annotation of asArray(asRecord(content).annotations)) {
+        const record = asRecord(annotation);
+        if (record.type !== "url_citation") continue;
+        const url = stringValue(record.url);
+        const title = stringValue(record.title);
+        const key = url ?? title;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        citations.push({ url, title });
+      }
+    }
+  }
+  return citations;
 }
 
 function extractAnthropicText(data: unknown): string {
@@ -631,6 +657,10 @@ async function generateOpenAiText(
       temperature: request.temperature,
       top_p: request.topP,
       max_output_tokens: request.maxOutputTokens,
+      // Live-web grounding for tasks that need real, cited venues. Never paired
+      // with json_object output — the grounded pass is prose; a second plain
+      // call formats it into JSON (see day-details-client).
+      tools: request.enableWebSearch ? [{ type: "web_search" }] : undefined,
       text:
         request.responseFormat === "json"
           ? { format: { type: "json_object" } }
@@ -643,6 +673,9 @@ async function generateOpenAiText(
   throwIfOpenAiTruncated(record);
   const text = cleanJsonText(extractOpenAiText(data));
   throwIfJsonLooksTruncated(text, request);
+  const citations = request.enableWebSearch
+    ? extractOpenAiCitations(data)
+    : undefined;
   return {
     provider: "openai",
     model: request.model,
@@ -650,6 +683,7 @@ async function generateOpenAiText(
     text,
     usage: usageFromOpenAI(record.usage),
     providerAttempts: meta.attempts,
+    citations: citations?.length ? citations : undefined,
   };
 }
 
