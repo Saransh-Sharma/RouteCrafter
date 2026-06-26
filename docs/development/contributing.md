@@ -33,10 +33,20 @@ consult the bundled docs in `node_modules/next/dist/docs/`.
 - **Everything generated stays editable.** Generation produces drafts; never lock
   output.
 - **No single-country hardcoding.** Drive everything from `GenerationContext`.
-- **Route all project writes through the store.** Use the projects-store actions
-  (which funnel through `commitProjects` for normalization + the size guard) rather
-  than mutating projects directly. See
+- **Put project mutations in project commands first.** Add pure domain behavior to
+  [`src/lib/projects/project-commands.ts`](../../src/lib/projects/project-commands.ts)
+  and let the projects-store facade call it before `commitProjects`. Cloud
+  reconciliation belongs in
+  [`project-sync-controller.ts`](../../src/lib/projects/project-sync-controller.ts),
+  and browser route calls belong in [`src/lib/client`](../../src/lib/client).
+  Route handlers should use [`route-handler.ts`](../../src/lib/api/route-handler.ts)
+  for auth/body/error scaffolding where applicable. See
   [State & persistence](../architecture/state-and-persistence.md).
+- **Keep AI and itinerary apply logic reusable.** JSON review helpers live in
+  [`src/lib/ai/json-review.ts`](../../src/lib/ai/json-review.ts), draft progress
+  helpers in [`src/lib/ai/draft-progress.ts`](../../src/lib/ai/draft-progress.ts),
+  and itinerary merge/edit helpers in
+  [`src/lib/itinerary`](../../src/lib/itinerary).
 - **AI must preview before applying.** Use `AiRunSheet`; don't write AI output to a
   project without user confirmation.
 - **Styling** uses Tailwind v4 + the `cn()` helper and the design tokens in

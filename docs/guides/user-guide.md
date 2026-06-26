@@ -207,7 +207,7 @@ Before marking a project **Ready to sell**, confirm:
 
 1. Live prices, hours, tickets, and availability are not represented as guaranteed.
 2. Final files and listing presentation were reviewed.
-3. The project is browser-local and a JSON backup was created.
+3. A portable JSON backup was created.
 
 How readiness is decided:
 
@@ -224,8 +224,8 @@ Common pitfalls:
 
 - Publish cannot verify live travel data. It only asks you to confirm that prices,
   hours, tickets, and availability are framed as details to verify.
-- A JSON backup is part of the final checklist because projects are stored in the
-  browser.
+- A JSON backup is part of the final checklist as a portable restore point even
+  though the cloud is authoritative.
 - If a blocker appears in Publish, use its link instead of hunting through the
   workspace manually.
 
@@ -237,10 +237,11 @@ header rather than repeated as competing panel-level status.
 
 ## Local data and backup
 
-Projects are stored in browser `localStorage` under `routecrafter:v1`. API keys use
-a separate settings store and are never included in project exports. Download JSON
-regularly from Project actions or Review and Publish, then use **Import project** on
-the dashboard to restore or move a project.
+Projects and assets are stored in the shared cloud workspace and mirrored to the
+browser cache under `routecrafter:v1`. API keys use a separate private settings
+store and are never included in project exports. Download JSON regularly from
+Project actions or Review and Publish, then use **Import project** on the
+dashboard to restore or move a project.
 
 ## AI usage
 

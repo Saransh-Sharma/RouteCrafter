@@ -1,10 +1,11 @@
 # Architecture Overview
 
-RouteCrafter is a **client-heavy Next.js 16 (App Router) application** with a thin
-server-side AI proxy. There is no application database: domain data lives in the
-browser via Zustand + `localStorage`. The codebase is organized around a clear
-separation between the **data model** (Zod schemas), a **pure generation engine**,
-an **optional AI layer**, and the **React UI**.
+RouteCrafter is a **Next.js 16 (App Router) application** backed by a shared
+cloud workspace. Projects and assets are authoritative in Postgres/Vercel Blob,
+while the browser keeps a Zustand `localStorage` cache for fast editing and
+local-only degradation. The codebase is organized around the **data model** (Zod
+schemas), pure project commands, the generation and AI layers, typed browser API
+clients, route handlers, and the React UI.
 
 ## System map
 
@@ -52,19 +53,21 @@ flowchart TB
   Adapters --> Gemini
 ```
 
-Server-side code is limited to authentication, the two AI route handlers, and
-the server-only provider adapters. Project content and provider settings remain
-browser-local.
+Project content is shared across authenticated users. Personal AI keys remain in
+the private browser settings store; server OpenAI credentials and cloud data stay
+server-side.
 
 ## Layers
 
 | Layer | Location | Responsibility |
 | --- | --- | --- |
 | **Data model** | [`src/lib/schemas`](../../src/lib/schemas) | Zod schemas + inferred types; the single source of truth. See [Data model](data-model.md). |
+| **Project domain** | [`src/lib/projects`](../../src/lib/projects) | Pure project commands, activity detail generation, and the cloud sync controller. |
 | **Normalization & IO** | [`src/lib/project-normalization.ts`](../../src/lib/project-normalization.ts), [`src/lib/io/project-io.ts`](../../src/lib/io/project-io.ts) | Apply schema defaults / migrate; JSON import/export. |
 | **Generation engine** | [`src/lib/generation`](../../src/lib/generation) | Pure, UI-free prompt templates + structured scaffold builders + realism rules. See [Generation engine](generation-engine.md). |
-| **AI layer** | [`src/lib/ai`](../../src/lib/ai), [`src/app/api/ai`](../../src/app/api/ai) | BYOK provider registry, prompt builders, server adapters, client, parsing. See [AI integration](ai-integration.md). |
-| **State** | [`src/lib/store`](../../src/lib/store) | Zustand stores with `localStorage` persistence. See [State & persistence](state-and-persistence.md). |
+| **AI layer** | [`src/lib/ai`](../../src/lib/ai), [`src/app/api/ai`](../../src/app/api/ai) | BYOK provider registry, prompt builders, server adapters, client, parsing, JSON review, and draft progress. See [AI integration](ai-integration.md). |
+| **Client API modules** | [`src/lib/client`](../../src/lib/client) | Typed browser-to-route calls with credentials and defensive JSON parsing. |
+| **State** | [`src/lib/store`](../../src/lib/store) | Zustand facades with `localStorage` cache and cloud reconciliation. See [State & persistence](state-and-persistence.md). |
 | **Authentication** | [`src/lib/auth`](../../src/lib/auth), [`src/app/api/auth`](../../src/app/api/auth) | Signed HttpOnly sessions, password/OTP login, Redis-backed OTP challenges, and rate limiting. |
 | **UI** | [`src/app`](../../src/app), [`src/components`](../../src/components) | App Router pages, AppShell, design-system primitives, workspace panels. See [UI & design system](ui-and-design-system.md). |
 
@@ -75,10 +78,12 @@ src/
   app/
     layout.tsx                # Root layout: fonts + AppShell
     globals.css               # Design tokens + document/print styles
-    page.tsx                  # Dashboard
-    projects/                 # list, new, [id] workspace
-    templates/page.tsx        # roadmap placeholder
-    settings/page.tsx         # AI settings
+    (main)/page.tsx           # Server dashboard shell
+    (main)/*/*Client.tsx      # Interactive client leaves
+    (main)/projects/          # list, new, [id] workspace
+    (main)/templates/page.tsx # template library shell
+    (main)/settings/page.tsx  # settings shell
+    api/projects/             # shared project workspace APIs
     api/ai/text/route.ts      # server AI text proxy
     api/ai/image/route.ts     # server AI image proxy
   components/
@@ -90,8 +95,11 @@ src/
   lib/
     schemas/                  # Zod schemas (project, trip-config, itinerary, ...)
     generation/               # context, registry, templates/, scaffolds, realism
-    ai/                        # providers, adapters, tasks, client, parse, schemas
-    store/                    # projects-store, ai-settings-store
+    ai/                        # providers, adapters, tasks, client, review helpers
+    client/                   # typed browser API modules
+    projects/                 # commands, change detail, sync controller
+    itinerary/                # pure itinerary editing and merge helpers
+    store/                    # Zustand facades
     io/                        # project-io (import/export)
     project-normalization.ts  # normalize/migrate persisted + imported data
     seed-projects.ts          # first-run demo data
@@ -118,9 +126,11 @@ and validates against a domain schema -> previewed -> applied to the project.
 
 ### Persistence
 
-Every project mutation flows through the projects store's `commitProjects`, which
-normalizes each project, enforces a size cap, and persists to `localStorage`. On
-load, persisted data is re-validated and migrated through the schema.
+Every project mutation flows through pure command helpers in
+`src/lib/projects/project-commands.ts`, then through the projects store's
+`commitProjects`, which normalizes each project, enforces a size cap, and updates
+the local cache. `project-sync-controller.ts` reconciles the shared cloud copy,
+tracks revisions, handles retries, and creates conflict records.
 
 ## Key design principles
 

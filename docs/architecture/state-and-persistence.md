@@ -30,7 +30,9 @@ and migrated through Zod on every read and write.
   a light ~20s poll (`refreshFromCloud`), and refetches a single project when its
   workspace opens (`refreshProject`). Dirty projects (pending/in-flight local edits)
   are never clobbered by a background refresh; clean projects missing from the cloud
-  were deleted by another user and are dropped locally.
+  were deleted by another user and are dropped locally. This behavior now lives in
+  [`project-sync-controller.ts`](../../src/lib/projects/project-sync-controller.ts);
+  the Zustand store delegates to it.
 - **Cheap polling.** `refreshFromCloud` first hits `GET /api/projects/revisions`
   (a lightweight `{ id, revision, updatedAt }[]` projection) and only fetches the
   full bodies that actually changed. When nothing changed it skips the body fetch,
@@ -103,8 +105,8 @@ The full runtime state adds non-persisted fields:
 | `getById(id)` | Lookup by id. |
 | `importProject(raw)` | Normalize; assign a new id on collision. |
 | `hydrateSeeds()` | Load demo projects if not yet initialized. |
-| `hydrateCloudProjects()` | Initial load of the shared cloud list; migrates local-only projects up. |
-| `refreshFromCloud()` | Dirty-aware reconcile of the shared list (focus/visibility/poll). |
+| `hydrateCloudProjects()` | Delegates to the sync controller for initial load of the shared cloud list; migrates local-only projects up. |
+| `refreshFromCloud()` | Delegates to the sync controller for dirty-aware reconcile of the shared list (focus/visibility/poll). |
 | `refreshProject(id)` | Refetch one project when its workspace opens. |
 | `resolveConflictReload(id)` / `resolveConflictOverwrite(id)` | Resolve a 409 conflict. |
 | `setExpandHint` / `clearPersistenceError` | UI coordination. |
@@ -250,8 +252,9 @@ flowchart TD
 
 ## Backups and portability
 
-Since data is browser-local, JSON import/export is the backup/transfer mechanism.
-`importProject` reuses the same normalization path and assigns a fresh id on
+The cloud is authoritative, but JSON import/export remains the portable
+backup/transfer mechanism and a useful pre-publish checkpoint. `importProject`
+reuses the same project command and normalization path and assigns a fresh id on
 collision so imports are non-destructive. See
 [Data model -> Import / export](data-model.md#import--export) and the
 [user guide](../guides/user-guide.md#export).

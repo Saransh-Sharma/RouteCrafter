@@ -8,7 +8,8 @@ custom travel-planning services. It helps you repeatedly produce premium,
 editorial, configurable itinerary products for any country, traveler type, trip
 length, budget, and deliverable format — without hardcoding any single country.
 
-Project content remains local-first in the browser: every artifact can be
+Projects and assets live in a shared cloud workspace (Postgres + Vercel Blob)
+with a browser local cache for fast editing. Every artifact can still be
 produced through copy-paste prompts without an AI API key. Access to the app is
 protected by password or email-OTP authentication. Optional AI assist lets you
 use server-funded OpenAI by default or bring your own provider key (OpenAI,
@@ -20,7 +21,7 @@ Anthropic, or Gemini) to draft content directly inside the app.
 - TypeScript
 - Tailwind CSS v4
 - [Zod](https://zod.dev) schemas as the single source of truth for the data model
-- [Zustand](https://zustand.docs.pmnd.rs) + `localStorage` for persistence
+- Postgres/Vercel Blob shared workspace plus Zustand `localStorage` cache
 - Signed HttpOnly JWT sessions, Resend email OTP, and Upstash Redis rate limits
 - Hand-built UI component system (`src/components/ui`)
 - `lucide-react` icons, `clsx` + `tailwind-merge` for class composition
@@ -54,12 +55,10 @@ npm run build    # Production build
 ```
 src/
   app/
-    page.tsx                 # Dashboard
-    projects/page.tsx        # All projects
-    projects/new/page.tsx    # Create project
-    projects/[id]/page.tsx   # Project workspace shell
-    templates/page.tsx       # Template library (roadmap placeholder)
-    settings/page.tsx        # AI provider keys + defaults
+    (main)/page.tsx          # Server dashboard shell
+    (main)/*/*Client.tsx     # Interactive client leaves
+    (main)/projects/         # List, new, and [id] workspace
+    api/projects/            # Shared project workspace API
     api/ai/text/route.ts     # Server-side AI text proxy
     api/ai/image/route.ts    # Server-side AI image proxy
     layout.tsx, globals.css  # Shell + design system
@@ -72,8 +71,11 @@ src/
   lib/
     schemas/                 # Zod schemas + data model (source of truth)
     generation/              # Pure prompt-template + scaffold engine
-    ai/                       # Server OpenAI + personal-key provider layer
-    store/                   # Zustand stores (projects, ai-settings)
+    ai/                       # AI clients, provider layer, JSON review helpers
+    client/                  # Typed browser API modules
+    projects/                # Project commands + cloud sync controller
+    itinerary/               # Pure itinerary editing/merge helpers
+    store/                   # Zustand facades (projects, ai-settings)
     io/                       # Project JSON import/export
     project-normalization.ts # Schema migration/normalization
     seed-projects.ts         # First-run demo data

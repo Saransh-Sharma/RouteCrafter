@@ -31,7 +31,7 @@ want to understand or extend the code.
 | [Data model](architecture/data-model.md) | The `Project` aggregate, all nested entities, enums, the ER diagram, normalization, and the JSON import/export format. |
 | [Generation engine](architecture/generation-engine.md) | The pure `src/lib/generation` engine: context, registry, the 13 prompt templates, the 4 scaffold builders, and realism rules. |
 | [AI integration](architecture/ai-integration.md) | The BYOK proxy: providers, task types, API routes, output parsing, the `AiRunSheet` workflow, and security. |
-| [State & persistence](architecture/state-and-persistence.md) | The Zustand stores, `localStorage` persistence, normalization on hydrate, and the SSR-safe mount pattern. |
+| [State & persistence](architecture/state-and-persistence.md) | The shared cloud workspace, Zustand local cache, sync controller, conflict handling, and the SSR-safe mount pattern. |
 | [UI & design system](architecture/ui-and-design-system.md) | Routing, AppShell/nav, the `components/ui` primitives, the workspace tabs, design tokens, and the PDF builder. |
 
 ## Development
