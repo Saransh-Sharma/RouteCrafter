@@ -157,7 +157,7 @@ export function ListingPanel({
       responseFormat="json"
       validateText={validateListing}
       onApplyText={applyAiListing}
-      applyLabel="Replace listing"
+      applyLabel="Apply selected fields"
       fillEmptyLabel="Fill empty sections"
       appendLabel="Append new options"
     />
