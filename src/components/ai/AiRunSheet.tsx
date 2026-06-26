@@ -34,16 +34,26 @@ import { useAiConfig } from "./AiConfigProvider";
 import { resolveClientAiRun } from "@/lib/ai/runtime";
 import { estimateAiRunCost, formatCostEstimate } from "@/lib/ai/pricing";
 import { isRetryableErrorMessage } from "@/lib/ai/errors";
+import {
+  applyJsonReviewChoices,
+  cloneJson,
+  defaultReviewChoice,
+  flattenJsonRows,
+  initialMergeValues,
+  initialReviewChoices,
+  parseJsonValue,
+  stringifyJsonValue,
+  type AiReviewChoice,
+  type AiReviewRow,
+} from "@/lib/ai/json-review";
+import {
+  draftedDayCount,
+  upsertProgress,
+  visibleDraftProgress,
+} from "@/lib/ai/draft-progress";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 type RunState = "idle" | "running" | "result" | "error";
-type AiReviewChoice = "keep-current" | "use-ai" | "merge";
-
-interface AiReviewRow {
-  path: string;
-  currentValue: unknown;
-  aiValue: unknown;
-}
 
 /** A user-tunable lever (e.g. Travel style) surfaced in the run + review UI. */
 export interface AiTuningControl {
@@ -81,6 +91,7 @@ export interface AiRunSheetProps {
     dayIndex: number,
     ctx: AiRequestContext,
     request: AiTextRequest,
+    signal: AbortSignal,
   ) => Promise<unknown>;
   validateText?: (text: string) => string | null;
   requestText?: (
@@ -723,6 +734,7 @@ function AiRunSheetDialog({
                                   dayIndex,
                                   requestContext(),
                                   buildTextRequest(),
+                                  abortRef.current?.signal ?? new AbortController().signal,
                                 )
                             : undefined
                         }
@@ -921,24 +933,10 @@ function AiReviewPanel({
   const rows = aiState ? flattenJsonRows(aiState, current) : [];
 
   const [choices, setChoices] = React.useState<Record<string, AiReviewChoice>>(
-    () =>
-      Object.fromEntries(
-        rows.map((row) => [
-          row.path,
-          isEmptyJsonValue(row.currentValue) ? "use-ai" : "keep-current",
-        ]),
-      ),
+    () => initialReviewChoices(rows),
   );
   const [mergeValues, setMergeValues] = React.useState<Record<string, string>>(
-    () =>
-      Object.fromEntries(
-        rows.map((row) => [
-          row.path,
-          typeof row.currentValue === "string" && typeof row.aiValue === "string"
-            ? [row.currentValue, row.aiValue].filter(Boolean).join("\n\n")
-            : stringifyJsonValue(row.aiValue),
-        ]),
-      ),
+    () => initialMergeValues(rows),
   );
   const [openDays, setOpenDays] = React.useState<Set<number>>(new Set());
   const [regenDay, setRegenDay] = React.useState<number | null>(null);
@@ -956,10 +954,7 @@ function AiReviewPanel({
   const groups = groupReviewRows(rows);
 
   function choiceFor(row: AiReviewRow): AiReviewChoice {
-    return (
-      choices[row.path] ??
-      (isEmptyJsonValue(row.currentValue) ? "use-ai" : "keep-current")
-    );
+    return choices[row.path] ?? defaultReviewChoice(row);
   }
 
   function setChoice(path: string, choice: AiReviewChoice) {
@@ -979,19 +974,15 @@ function AiReviewPanel({
   }
 
   function applySelected(mode: ApplyMode) {
-    const base = cloneJson(
-      current && typeof current === "object" && !Array.isArray(current)
-        ? current
-        : aiState,
-    );
-    for (const row of rows) {
-      if (choiceFor(row) === "keep-current") continue;
-      setJsonPath(
-        base,
-        row.path,
-        choiceFor(row) === "merge" ? mergeValues[row.path] : row.aiValue,
-      );
-    }
+    const base = applyJsonReviewChoices({
+      current:
+        current && typeof current === "object" && !Array.isArray(current)
+          ? current
+          : aiState,
+      rows,
+      choices,
+      mergeValues,
+    });
     onApply(JSON.stringify(base, null, 2), mode);
   }
 
@@ -1028,7 +1019,7 @@ function AiReviewPanel({
       <div className="rounded-2xl border border-[var(--rc-ai-border)] bg-paper p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-ink">Review the draft</p>
+            <p className="text-sm font-semibold text-ink">Field review</p>
             <p className="mt-1 text-xs text-ink-muted">
               Empty fields default to Use AI; existing fields default to Keep
               mine. Choose per field, per day, or all at once.
@@ -1180,7 +1171,7 @@ function AiReviewPanel({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="sticky bottom-0 z-10 -mx-3 mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--rc-ai-border)] bg-[var(--rc-ai-surface)]/95 px-3 py-3 backdrop-blur">
         <Button variant="outline" onClick={() => applySelected("append")}>
           {appendLabel}
         </Button>
@@ -1454,25 +1445,8 @@ function DraftProgressList({
   progress: DraftProgress[];
   totalDays: number;
 }) {
-  const daysDone = progress
-    .filter((step) => step.kind === "days" && step.status === "done")
-    .reduce(
-      (total, step) =>
-        total +
-        (step.dayRange ? step.dayRange[1] - step.dayRange[0] + 1 : 0),
-      0,
-    );
-  const steps =
-    progress.length === 0
-      ? [
-          {
-            id: "overview",
-            kind: "overview" as const,
-            label: "Overview & guides",
-            status: "start" as const,
-          },
-        ]
-      : progress;
+  const daysDone = draftedDayCount(progress);
+  const steps = visibleDraftProgress(progress);
 
   return (
     <div className="space-y-2">
@@ -1507,17 +1481,6 @@ function DraftProgressList({
   );
 }
 
-function upsertProgress(
-  prev: DraftProgress[],
-  event: DraftProgress,
-): DraftProgress[] {
-  const index = prev.findIndex((step) => step.id === event.id);
-  if (index === -1) return [...prev, event];
-  const next = [...prev];
-  next[index] = event;
-  return next;
-}
-
 function MiniValue({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="rounded-lg bg-paper/75 p-2">
@@ -1529,88 +1492,6 @@ function MiniValue({ title, value }: { title: string; value: unknown }) {
       </p>
     </div>
   );
-}
-
-function parseJsonValue(text: string): unknown | null {
-  if (!text.trim()) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function stringifyJsonValue(value: unknown): string {
-  if (value === undefined || value === null) return "";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
-}
-
-function isEmptyJsonValue(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
-  if (typeof value === "string") return value.trim() === "";
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === "object") return Object.keys(value).length === 0;
-  return false;
-}
-
-function flattenJsonRows(ai: unknown, current: unknown, prefix = ""): AiReviewRow[] {
-  if (ai && typeof ai === "object" && !Array.isArray(ai)) {
-    return Object.entries(ai as Record<string, unknown>).flatMap(([key, value]) =>
-      flattenJsonRows(value, getJsonPath(current, key), prefix ? `${prefix}.${key}` : key),
-    );
-  }
-  if (Array.isArray(ai)) {
-    if (ai.every((item) => !item || typeof item !== "object")) {
-      return [{ path: prefix, currentValue: getJsonPath(current, ""), aiValue: ai }];
-    }
-    return ai.flatMap((value, index) =>
-      flattenJsonRows(value, getJsonPath(current, String(index)), `${prefix}.${index}`),
-    );
-  }
-  return [{ path: prefix, currentValue: current, aiValue: ai }];
-}
-
-function getJsonPath(value: unknown, path: string): unknown {
-  if (!path) return value;
-  return path.split(".").reduce<unknown>((current, part) => {
-    if (current === null || current === undefined) return undefined;
-    if (Array.isArray(current)) return current[Number(part)];
-    if (typeof current === "object") {
-      return (current as Record<string, unknown>)[part];
-    }
-    return undefined;
-  }, value);
-}
-
-function setJsonPath(target: unknown, path: string, value: unknown): void {
-  const parts = path.split(".");
-  let current = target as Record<string, unknown> | unknown[];
-  parts.forEach((part, index) => {
-    const last = index === parts.length - 1;
-    if (last) {
-      if (Array.isArray(current)) current[Number(part)] = value;
-      else current[part] = value;
-      return;
-    }
-    const nextPart = parts[index + 1];
-    const existing = Array.isArray(current)
-      ? current[Number(part)]
-      : current[part];
-    const next =
-      existing && typeof existing === "object"
-        ? existing
-        : /^\d+$/.test(nextPart)
-          ? []
-          : {};
-    if (Array.isArray(current)) current[Number(part)] = next;
-    else current[part] = next;
-    current = next as Record<string, unknown> | unknown[];
-  });
 }
 
 function InlineError({ message }: { message: string }) {
