@@ -57,7 +57,6 @@ export async function requestDayDetails({
       label: `${request.label ?? "Local details"} - research day ${day.day}`,
       prompt: buildDayDetailsResearchPrompt({ project, itinerary, day }),
       enableWebSearch: true,
-      maxWebSearches: request.maxWebSearches ?? 5,
       responseFormat: undefined,
       maxOutputTokens: Math.max(
         request.maxOutputTokens ?? 4000,
@@ -100,6 +99,8 @@ export async function requestDayDetails({
       .filter((id): id is string => Boolean(id)),
     usage: sumUsage([research, formatted]),
     citations: research.citations,
+    // Grounding is determined by the research pass (the only one with search).
+    grounded: research.grounded,
     text: formatted.text,
   };
 }

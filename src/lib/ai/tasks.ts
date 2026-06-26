@@ -300,7 +300,9 @@ export function buildDayDetailsResearchPrompt({
   day: DayPlan;
 }): string {
   const ctx = buildContext(project, editionContextOptions(project, itinerary));
-  const base = day.base || itinerary.routeSummary || project.country;
+  // Prefer a concrete city anchor; fall back to country, never the prose
+  // routeSummary (a poor grounding target for a venue search).
+  const base = day.base || itinerary.country || project.country;
   return `Use web search to research REAL local recommendations for Day ${day.day} of a trip, based in ${base}.
 
 Traveler & trip context:
@@ -341,6 +343,7 @@ Rules:
 - Map each place to { name, area, category, whyItFits, priceBand, source, caveat }.
 - restaurants, stays, activities, shopping are arrays of that shape; trivia is an array of { text, source }.
 - Carry each place's cited source URL or guide title into "source". Keep "caveat" to one short verify line.
+- Every recommendation MUST carry a "source" drawn from the brief. If a place has no citable source in the brief, omit it rather than guessing a source.
 - Keep each field to one concise sentence or phrase so the JSON always finishes.
 - Omit a section (use an empty array) rather than padding it with weak or generic entries.
 

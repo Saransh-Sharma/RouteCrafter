@@ -63,6 +63,13 @@ const GEMINI_IMAGE_OUTPUT: Record<string, Record<string, number>> = {
   },
 };
 
+/**
+ * Approximate flat fee OpenAI bills per web-search tool call, on top of token
+ * cost. Tiered/variable in practice; this is a conservative planning figure so
+ * grounded runs are not shown as cheaper than they are.
+ */
+export const WEB_SEARCH_PER_CALL_USD = 0.01;
+
 type EstimateInput =
   | {
       mode: "text";
@@ -71,6 +78,8 @@ type EstimateInput =
       prompt: string;
       taskType: AiTaskType;
       maxOutputTokens: number;
+      /** Adds a web-search surcharge to the estimate when grounding is on. */
+      enableWebSearch?: boolean;
     }
   | {
       mode: "image";
@@ -106,15 +115,20 @@ export function estimateAiRunCost(
       TASK_OUTPUT_FLOOR[input.taskType],
       outputTokensHigh,
     );
+    const webSearch = input.enableWebSearch ? WEB_SEARCH_PER_CALL_USD : 0;
     return {
       currency: "USD",
       lowUsd:
         tokenCost(inputTokensLow, pricing.inputPerMillion) +
-        tokenCost(outputTokensLow, pricing.outputPerMillion),
+        tokenCost(outputTokensLow, pricing.outputPerMillion) +
+        webSearch,
       highUsd:
         tokenCost(inputTokensHigh, pricing.inputPerMillion) +
-        tokenCost(outputTokensHigh, pricing.outputPerMillion),
-      basis: `${input.model} prompt estimate and ${outputTokensLow}-${outputTokensHigh} output tokens`,
+        tokenCost(outputTokensHigh, pricing.outputPerMillion) +
+        webSearch,
+      basis: `${input.model} prompt estimate and ${outputTokensLow}-${outputTokensHigh} output tokens${
+        webSearch ? " + web search" : ""
+      }`,
       inputTokensLow,
       inputTokensHigh,
       outputTokensLow,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  WEB_SEARCH_PER_CALL_USD,
   estimateAiRunCost,
   formatCostEstimate,
   formatUsd,
@@ -26,6 +27,27 @@ describe("AI cost estimates", () => {
     expect(estimate?.lowUsd).toBeCloseTo(0.0076875);
     expect(estimate?.highUsd).toBeCloseTo(0.06025);
     expect(formatCostEstimate(estimate)).toBe("$0.008-$0.060");
+  });
+
+  it("adds a web-search surcharge when grounding is enabled", () => {
+    const args = {
+      mode: "text" as const,
+      provider: "openai" as const,
+      model: "gpt-5.4",
+      prompt: "a".repeat(300),
+      taskType: "dayDetails" as const,
+      maxOutputTokens: 4000,
+    };
+    const plain = estimateAiRunCost(args);
+    const grounded = estimateAiRunCost({ ...args, enableWebSearch: true });
+
+    expect(grounded?.lowUsd).toBeCloseTo(
+      (plain?.lowUsd ?? 0) + WEB_SEARCH_PER_CALL_USD,
+    );
+    expect(grounded?.highUsd).toBeCloseTo(
+      (plain?.highUsd ?? 0) + WEB_SEARCH_PER_CALL_USD,
+    );
+    expect(grounded?.basis).toContain("web search");
   });
 
   it("uses published GPT Image 2 output pricing for medium 1024 images", () => {

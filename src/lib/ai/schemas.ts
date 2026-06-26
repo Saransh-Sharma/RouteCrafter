@@ -38,7 +38,6 @@ export const aiTextRequestSchema = z.object({
   maxOutputTokens: z.number().int().min(1).max(32000).optional(),
   responseFormat: z.enum(["text", "json"]).optional(),
   enableWebSearch: z.boolean().optional(),
-  maxWebSearches: z.number().int().min(1).max(10).optional(),
 });
 
 export const aiImageRequestSchema = z.object({
@@ -64,4 +63,8 @@ export const aiResultSchema = z.object({
   provider: aiProviderIdSchema,
   model: z.string(),
   credentialSource: z.enum(["server", "personal"]),
+  citations: z
+    .array(z.object({ url: z.string().optional(), title: z.string().optional() }))
+    .optional(),
+  grounded: z.boolean().optional(),
 });

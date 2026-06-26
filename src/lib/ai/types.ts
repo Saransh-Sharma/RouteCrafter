@@ -90,8 +90,6 @@ export interface AiTextRequest {
   responseFormat?: "text" | "json";
   /** Ground the response in live web search (OpenAI Responses `web_search`). */
   enableWebSearch?: boolean;
-  /** Cap on web searches for a grounded run (cost/latency guard). */
-  maxWebSearches?: number;
 }
 
 export interface AiImageRequest {
@@ -127,6 +125,12 @@ export interface AiResult {
   providerAttempts?: number;
   /** Sources the model grounded its answer in, when web search was enabled. */
   citations?: AiCitation[];
+  /**
+   * True when a web-search-enabled run actually performed a search (detected
+   * from a `web_search_call` in the provider output). Undefined when web search
+   * was not requested.
+   */
+  grounded?: boolean;
 }
 
 export interface ResolvedAiTextRequest extends AiTextRequest {

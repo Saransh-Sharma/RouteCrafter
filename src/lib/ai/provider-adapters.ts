@@ -676,6 +676,13 @@ async function generateOpenAiText(
   const citations = request.enableWebSearch
     ? extractOpenAiCitations(data)
     : undefined;
+  // A `web_search_call` item proves a search ran, even if it yielded no cited
+  // text — a stronger "grounded" signal than citation count alone.
+  const grounded = request.enableWebSearch
+    ? asArray(record.output).some(
+        (item) => asRecord(item).type === "web_search_call",
+      )
+    : undefined;
   return {
     provider: "openai",
     model: request.model,
@@ -684,6 +691,7 @@ async function generateOpenAiText(
     usage: usageFromOpenAI(record.usage),
     providerAttempts: meta.attempts,
     citations: citations?.length ? citations : undefined,
+    grounded,
   };
 }
 
