@@ -46,6 +46,13 @@ export async function POST(request: NextRequest) {
       ...parsed.data,
       ...resolveTextCredential(parsed.data),
     };
+    // Web search is only wired for OpenAI's Responses API. If grounding is
+    // requested but the resolved provider isn't OpenAI (e.g. the server path
+    // resolved away from it), clear the flag so the run is honest rather than
+    // silently ungrounded.
+    if (resolved.enableWebSearch && resolved.provider !== "openai") {
+      resolved.enableWebSearch = false;
+    }
     requestSummary = {
       provider: resolved.provider,
       model: resolved.model,

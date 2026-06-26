@@ -1,76 +1,60 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
-import { unauthorizedResponse } from "@/lib/auth/http";
-import { errorResponse } from "@/lib/api/errors";
+import { parseBody, withUser } from "@/lib/api/route-handler";
 import { createActivity, listProjectActivity } from "@/lib/db/activity";
 import { getProject } from "@/lib/db/projects";
-import { ensureRequestUser } from "@/lib/db/request-user";
 import { activityCreateSchema } from "@/lib/persistence/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
+export const GET = withUser(async (
+  _auth,
   request: Request,
   context: { params: Promise<{ id: string }> },
-) {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    await ensureRequestUser(user);
-    const { id } = await context.params;
-    const project = await getProject(id);
-    if (!project) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
-    const url = new URL(request.url);
-    const limit = Math.min(
-      100,
-      Math.max(1, Number(url.searchParams.get("limit") ?? 50)),
-    );
-    const entries = await listProjectActivity({
-      projectId: id,
-      limit,
-      cursor: url.searchParams.get("cursor"),
-    });
-    return NextResponse.json({ entries });
-  } catch (error) {
-    return errorResponse(error);
+): Promise<Response> => {
+  const { id } = await context.params;
+  const project = await getProject(id);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
-}
+  const url = new URL(request.url);
+  const limit = Math.min(
+    100,
+    Math.max(1, Number(url.searchParams.get("limit") ?? 50)),
+  );
+  const entries = await listProjectActivity({
+    projectId: id,
+    limit,
+    cursor: url.searchParams.get("cursor"),
+  });
+  return NextResponse.json({ entries });
+});
 
-export async function POST(
+export const POST = withUser(async (
+  { requestUser },
   request: Request,
   context: { params: Promise<{ id: string }> },
-) {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
-    const { id } = await context.params;
-    const project = await getProject(id);
-    if (!project) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
-    const parsed = activityCreateSchema.safeParse(await request.json());
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Missing or invalid activity payload." },
-        { status: 400 },
-      );
-    }
-    await createActivity({
-      projectId: id,
-      ownerUserId: requestUser.id,
-      actor: requestUser,
-      action: parsed.data.action,
-      detail: parsed.data.detail,
-      entityType: parsed.data.entityType,
-      entityId: parsed.data.entityId,
-      metadata: parsed.data.metadata,
-      clientEventId: parsed.data.clientEventId,
-    });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return errorResponse(error);
+): Promise<Response> => {
+  const { id } = await context.params;
+  const project = await getProject(id);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
-}
+  const parsed = await parseBody(
+    request,
+    activityCreateSchema,
+    "Missing or invalid activity payload.",
+  );
+  if (!parsed.ok) return parsed.response;
+  await createActivity({
+    projectId: id,
+    ownerUserId: requestUser.id,
+    actor: requestUser,
+    action: parsed.data.action,
+    detail: parsed.data.detail,
+    entityType: parsed.data.entityType,
+    entityId: parsed.data.entityId,
+    metadata: parsed.data.metadata,
+    clientEventId: parsed.data.clientEventId,
+  });
+  return NextResponse.json({ ok: true });
+});

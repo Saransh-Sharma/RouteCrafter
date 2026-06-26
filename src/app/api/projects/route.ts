@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
-import { unauthorizedResponse } from "@/lib/auth/http";
-import { errorResponse } from "@/lib/api/errors";
-import { ensureRequestUser } from "@/lib/db/request-user";
+import { jsonNoStore, parseBody, withUser } from "@/lib/api/route-handler";
 import {
   listProjects,
   upsertProjectForUser,
@@ -11,41 +8,22 @@ import { projectMutationSchema } from "@/lib/persistence/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    await ensureRequestUser(user);
-    return NextResponse.json(
-      { projects: await listProjects() },
-      { headers: { "Cache-Control": "no-store" } },
-    );
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
+export const GET = withUser(async () =>
+  jsonNoStore({ projects: await listProjects() }),
+);
 
-export async function POST(request: Request) {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
-    const body = await request.json();
-    const parsed = projectMutationSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Missing or invalid project payload." },
-        { status: 400 },
-      );
-    }
-    const project = await upsertProjectForUser({
-      user: requestUser,
-      project: parsed.data.project,
-      expectedRevision: parsed.data.expectedRevision,
-      activityDetail: parsed.data.activityDetail,
-    });
-    return NextResponse.json({ project });
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
+export const POST = withUser(async ({ requestUser }, request: Request) => {
+  const parsed = await parseBody(
+    request,
+    projectMutationSchema,
+    "Missing or invalid project payload.",
+  );
+  if (!parsed.ok) return parsed.response;
+  const project = await upsertProjectForUser({
+    user: requestUser,
+    project: parsed.data.project,
+    expectedRevision: parsed.data.expectedRevision,
+    activityDetail: parsed.data.activityDetail,
+  });
+  return NextResponse.json({ project });
+});

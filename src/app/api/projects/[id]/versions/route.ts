@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSessionUser } from "@/lib/auth/session";
-import { unauthorizedResponse } from "@/lib/auth/http";
-import { errorResponse } from "@/lib/api/errors";
+import { withUser } from "@/lib/api/route-handler";
 import { getProject } from "@/lib/db/projects";
-import { ensureRequestUser } from "@/lib/db/request-user";
 import {
   createProjectVersion,
   listProjectVersions,
@@ -26,49 +23,39 @@ const createVersionSchema = z.object({
     .default("manual-backup"),
 });
 
-export async function GET(
+export const GET = withUser(async (
+  _auth,
   _request: Request,
   context: { params: Promise<{ id: string }> },
-) {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    await ensureRequestUser(user);
-    const { id } = await context.params;
-    const project = await getProject(id);
-    if (!project) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
-    return NextResponse.json({
-      versions: await listProjectVersions({ projectId: id }),
-    });
-  } catch (error) {
-    return errorResponse(error);
+): Promise<Response> => {
+  const { id } = await context.params;
+  const project = await getProject(id);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
-}
+  return NextResponse.json({
+    versions: await listProjectVersions({ projectId: id }),
+  });
+});
 
-export async function POST(
+export const POST = withUser(async (
+  { requestUser },
   request: Request,
   context: { params: Promise<{ id: string }> },
-) {
-  try {
-    const user = await getSessionUser();
-    if (!user) return unauthorizedResponse();
-    const requestUser = await ensureRequestUser(user);
-    const { id } = await context.params;
-    const project = await getProject(id);
-    if (!project) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
-    const parsed = createVersionSchema.safeParse(await request.json().catch(() => ({})));
-    await createProjectVersion({
-      project: project.project,
-      userId: requestUser.id,
-      revision: project.revision,
-      reason: (parsed.success ? parsed.data.reason : "manual-backup") as ProjectVersionReason,
-    });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return errorResponse(error);
+): Promise<Response> => {
+  const { id } = await context.params;
+  const project = await getProject(id);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
-}
+  const parsed = createVersionSchema.safeParse(await request.json().catch(() => ({})));
+  await createProjectVersion({
+    project: project.project,
+    userId: requestUser.id,
+    revision: project.revision,
+    reason: (parsed.success
+      ? parsed.data.reason
+      : "manual-backup") as ProjectVersionReason,
+  });
+  return NextResponse.json({ ok: true });
+});
