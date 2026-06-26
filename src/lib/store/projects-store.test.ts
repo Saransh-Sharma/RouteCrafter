@@ -112,6 +112,7 @@ describe("projects store mutations", () => {
               rainyDayAlternative: "",
               whyThisWorks: "",
               image: "",
+              imagePrompt: "",
               needsRefresh: false,
             },
           ],
@@ -1088,11 +1089,14 @@ describe("shared workspace cloud freshness and conflicts", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUD_PERSISTENCE_ENABLED", "true");
     const project = useProjectsStore.getState().projects[0];
     const fetchMock = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ ok: true }), {
+      async (url: string | URL | Request, init?: RequestInit) => {
+        void url;
+        void init;
+        return new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: jsonHeaders,
-        }),
+        });
+      },
     );
     vi.stubGlobal("fetch", fetchMock);
     useProjectsStore.setState({
@@ -1115,11 +1119,13 @@ describe("shared workspace cloud freshness and conflicts", () => {
     expect(
       useProjectsStore.getState().projects.find((p) => p.id === project.id),
     ).toBeUndefined();
-    const deleteCall = fetchMock.mock.calls.find(
-      (call) => (call[1] as RequestInit)?.method === "DELETE",
+    const deleteCall = fetchMock.mock.calls.find(([, init]) =>
+      (init as RequestInit | undefined)?.method === "DELETE",
     );
     expect(deleteCall).toBeTruthy();
-    const body = JSON.parse(String((deleteCall![1] as RequestInit).body));
+    const deleteInit = deleteCall?.[1] as RequestInit | undefined;
+    expect(deleteInit).toBeTruthy();
+    const body = JSON.parse(String(deleteInit?.body));
     expect(body.expectedRevision).toBe(8);
     expect(
       useProjectsStore.getState().conflictByProject[project.id],
