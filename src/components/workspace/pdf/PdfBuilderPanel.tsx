@@ -20,14 +20,26 @@ import { ItineraryDocument } from "./ItineraryDocument";
 import { PdfTextControls } from "./PdfTextControls";
 import { PdfThemeControls } from "./PdfThemeControls";
 import { prepareDocumentForPdf } from "./pdf-assets";
-import { captureAsset, recordAssetUsage } from "@/lib/assets/capture";
+import {
+  captureAsset,
+  markAiRunApplied,
+  recordAssetUsage,
+} from "@/lib/assets/capture";
 import { useAiSettingsStore } from "@/lib/store/ai-settings-store";
 import { useAiConfig } from "@/components/ai/AiConfigProvider";
+import { AiCostBadge } from "@/components/ai/AiCostButton";
 import { resolveClientAiRun } from "@/lib/ai/runtime";
 import { webSearchSupported } from "@/lib/ai/providers";
+import { estimateAiRunCost } from "@/lib/ai/pricing";
 import { requestDayDetails } from "@/lib/ai/day-details-client";
+import {
+  buildDayDetailsFormatPrompt,
+  buildDayDetailsResearchPrompt,
+} from "@/lib/ai/tasks";
+import { createAiRunMetadata } from "@/lib/ai/metadata";
 import { normalizeAiDayDetails } from "@/lib/ai/itinerary-normalization";
 import { parseJsonObject } from "@/lib/ai/parse";
+import type { AiAcceptedRun } from "@/lib/ai/types";
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) =>
@@ -52,15 +64,25 @@ export function PdfBuilderPanel({
   const [capturing, setCapturing] = React.useState(false);
   const docRef = React.useRef<HTMLDivElement>(null);
   const patchItinerary = useProjectsStore((state) => state.patchItinerary);
+  const update = useProjectsStore((state) => state.update);
   const textDefaults = useAiSettingsStore((state) => state.text);
   const getApiKey = useAiSettingsStore((state) => state.getApiKey);
   const { config } = useAiConfig();
   const [detailsRunning, setDetailsRunning] = React.useState(false);
+  const [detailsConfirm, setDetailsConfirm] = React.useState(false);
   const [detailsProgress, setDetailsProgress] = React.useState({
     done: 0,
     total: 0,
   });
   const [detailsError, setDetailsError] = React.useState<string | null>(null);
+  const [detailsNotice, setDetailsNotice] = React.useState<string | null>(null);
+  const detailsAbortRef = React.useRef<AbortController | null>(null);
+
+  // Abort any in-flight batch when the panel unmounts so paid calls stop.
+  React.useEffect(
+    () => () => detailsAbortRef.current?.abort(),
+    [],
+  );
 
   const aiSelection = resolveClientAiRun({
     mode: "text",
@@ -73,6 +95,53 @@ export function PdfBuilderPanel({
 
   const selected =
     itineraries.find((it) => it.id === selectedId) ?? itineraries[0] ?? null;
+
+  // Whole-batch estimate: (research + format) per day, with the web-search
+  // surcharge on the research pass. Two paid calls per day.
+  const detailsEstimate = React.useMemo(() => {
+    const days = selected?.days.length ?? 0;
+    if (!selected || !days) return null;
+    const research = estimateAiRunCost({
+      mode: "text",
+      provider: aiSelection.provider,
+      model: aiSelection.model,
+      prompt: buildDayDetailsResearchPrompt({
+        project,
+        itinerary: selected,
+        day: selected.days[0],
+      }),
+      taskType: "dayDetails",
+      maxOutputTokens: textDefaults.maxOutputTokens,
+      enableWebSearch: true,
+    });
+    const format = estimateAiRunCost({
+      mode: "text",
+      provider: aiSelection.provider,
+      model: aiSelection.model,
+      prompt: buildDayDetailsFormatPrompt(""),
+      taskType: "dayDetails",
+      maxOutputTokens: textDefaults.maxOutputTokens,
+    });
+    if (!research || !format) return null;
+    return {
+      currency: "USD" as const,
+      lowUsd: (research.lowUsd + format.lowUsd) * days,
+      highUsd: (research.highUsd + format.highUsd) * days,
+      basis: `${days} day${days === 1 ? "" : "s"} × 2 grounded calls`,
+    };
+  }, [
+    selected,
+    aiSelection.provider,
+    aiSelection.model,
+    project,
+    textDefaults.maxOutputTokens,
+  ]);
+
+  // Stop the batch (and surface a neutral notice) if the user switches edition
+  // mid-run.
+  React.useEffect(() => {
+    detailsAbortRef.current?.abort();
+  }, [selectedId]);
   const selectedDocId = selected?.id ?? "";
   const docEditor = React.useMemo(
     () => ({
@@ -189,8 +258,10 @@ export function PdfBuilderPanel({
       );
       return;
     }
+    setDetailsConfirm(false);
     setDetailsRunning(true);
     setDetailsError(null);
+    setDetailsNotice(null);
     const days = selected.days;
     setDetailsProgress({ done: 0, total: days.length });
     const baseRequest: AiTextRequest = {
@@ -208,8 +279,13 @@ export function PdfBuilderPanel({
       maxOutputTokens: textDefaults.maxOutputTokens,
     };
     const controller = new AbortController();
+    detailsAbortRef.current = controller;
+    const runs: AiAcceptedRun[] = [];
+    let completed = 0;
+    let ungrounded = 0;
     try {
       for (let i = 0; i < days.length; i += 1) {
+        if (controller.signal.aborted) break;
         const day = days[i];
         const result = await requestDayDetails({
           request: baseRequest,
@@ -228,15 +304,53 @@ export function PdfBuilderPanel({
             d.day === day.day ? { ...d, details } : d,
           ),
         }));
-        setDetailsProgress({ done: i + 1, total: days.length });
+        if (result.grounded === false) ungrounded += 1;
+        runs.push(
+          createAiRunMetadata({
+            result,
+            taskType: "dayDetails",
+            label: `Local details day ${day.day}`,
+            source: "pdf-builder",
+          }),
+        );
+        void markAiRunApplied({
+          aiRunId: result.aiRunId,
+          aiRunIds: result.aiRunIds,
+          projectId: project.id,
+        });
+        completed += 1;
+        setDetailsProgress({ done: completed, total: days.length });
       }
-    } catch (error) {
-      setDetailsError(
-        error instanceof Error
-          ? error.message
-          : "Could not generate local details.",
+      const ungroundedNote =
+        ungrounded > 0
+          ? ` ${ungrounded} had no web sources — review before selling.`
+          : "";
+      setDetailsNotice(
+        controller.signal.aborted
+          ? `Stopped — ${completed}/${days.length} days done.${ungroundedNote}`
+          : `Added local details to ${completed} day${
+              completed === 1 ? "" : "s"
+            }.${ungroundedNote}`,
       );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setDetailsNotice(`Stopped — ${completed}/${days.length} days done.`);
+      } else {
+        setDetailsError(
+          error instanceof Error
+            ? error.message
+            : "Could not generate local details.",
+        );
+      }
     } finally {
+      // Append all accepted runs in one update so loop iterations don't clobber
+      // each other (appendAiRun reads a single project snapshot).
+      if (runs.length) {
+        update(project.id, {
+          aiRuns: [...(project.aiRuns ?? []), ...runs],
+        });
+      }
+      if (detailsAbortRef.current === controller) detailsAbortRef.current = null;
       setDetailsRunning(false);
     }
   }
@@ -304,22 +418,35 @@ export function PdfBuilderPanel({
               </>
             )}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={addLocalDetails}
-            disabled={!canAddDetails || detailsRunning || downloading}
-            title={
-              canAddDetails
-                ? "Generate web-search-grounded recommendations for every day"
-                : "Needs server OpenAI or a personal OpenAI key for web search"
-            }
-          >
-            <MapPin className="size-4" />
-            {detailsRunning
-              ? `Adding details ${detailsProgress.done}/${detailsProgress.total}...`
-              : "Add local details"}
-          </Button>
+          {detailsRunning ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => detailsAbortRef.current?.abort()}
+            >
+              <MapPin className="size-4" />
+              Cancel ({detailsProgress.done}/{detailsProgress.total})
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDetailsNotice(null);
+                setDetailsError(null);
+                setDetailsConfirm((open) => !open);
+              }}
+              disabled={!canAddDetails || downloading}
+              title={
+                canAddDetails
+                  ? "Generate web-search-grounded recommendations for every day"
+                  : "Needs server OpenAI or a personal OpenAI key for web search"
+              }
+            >
+              <MapPin className="size-4" />
+              Add local details
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -339,6 +466,37 @@ export function PdfBuilderPanel({
           </Button>
         </div>
       </div>
+      {detailsConfirm && !detailsRunning ? (
+        <div className="rc-no-print flex flex-col gap-3 rounded-2xl border border-[var(--rc-ai-border)] bg-[var(--rc-ai-gold-soft)]/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2 text-sm text-ink-soft">
+            <MapPin className="mt-0.5 size-4 shrink-0 text-[var(--rc-ai-brown)]" />
+            <p>
+              Research real, web-cited recommendations for all{" "}
+              <span className="font-semibold text-ink">
+                {selected.days.length}
+              </span>{" "}
+              days. This makes{" "}
+              <span className="font-semibold text-ink">
+                {selected.days.length * 2}
+              </span>{" "}
+              paid AI calls (research + format per day) and uses web search.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <AiCostBadge estimate={detailsEstimate} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDetailsConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={addLocalDetails}>
+              Confirm &amp; run
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {detailsError ? (
         <p className="rc-no-print text-sm text-terracotta">{detailsError}</p>
       ) : detailsRunning ? (
@@ -347,6 +505,8 @@ export function PdfBuilderPanel({
           {detailsProgress.done}/{detailsProgress.total} done. This uses web
           search and may take a moment per day.
         </p>
+      ) : detailsNotice ? (
+        <p className="rc-no-print text-sm text-ink-muted">{detailsNotice}</p>
       ) : null}
       {downloadError ? (
         <p className="rc-no-print text-sm text-terracotta">{downloadError}</p>
