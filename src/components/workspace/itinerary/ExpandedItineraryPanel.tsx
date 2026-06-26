@@ -21,7 +21,7 @@ import {
   buildContext,
   buildItinerary,
 } from "@/lib/generation";
-import { dayPlanSchema, enumValues } from "@/lib/schemas";
+import { enumValues } from "@/lib/schemas";
 import { useProjectsStore } from "@/lib/store/projects-store";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -52,6 +52,14 @@ import { DayCard } from "./DayCard";
 import { downloadItineraryMarkdown } from "./export-itinerary";
 import type { ExpandHint } from "@/lib/store/projects-store";
 import { editionRoute, itineraryBlockers, itineraryForEdition } from "@/lib/workflow";
+import {
+  addItineraryDay,
+  mergeDayPlan,
+  mergeItinerary,
+  moveItineraryDay,
+  removeItineraryDay,
+  type ItineraryMergeMode,
+} from "@/lib/itinerary/itinerary-editor";
 
 const TOP_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -179,34 +187,19 @@ export function ExpandedItineraryPanel({
     updateItinerary({ ...selected, [key]: value });
   }
 
-  function renumber(days: ItineraryOutput["days"]) {
-    return days.map((d, i) => ({ ...d, day: i + 1 }));
-  }
-
   function addDay() {
     if (!selected) return;
-    const next = dayPlanSchema.parse({
-      day: selected.days.length + 1,
-      title: `Day ${selected.days.length + 1}`,
-    });
-    setField("days", [...selected.days, next]);
+    setField("days", addItineraryDay(selected.days));
   }
 
   function removeDay(index: number) {
     if (!selected) return;
-    setField(
-      "days",
-      renumber(selected.days.filter((_, i) => i !== index)),
-    );
+    setField("days", removeItineraryDay(selected.days, index));
   }
 
   function moveDay(index: number, dir: -1 | 1) {
     if (!selected) return;
-    const target = index + dir;
-    if (target < 0 || target >= selected.days.length) return;
-    const days = [...selected.days];
-    [days[index], days[target]] = [days[target], days[index]];
-    setField("days", renumber(days));
+    setField("days", moveItineraryDay(selected.days, index, dir));
   }
 
   function deleteItinerary(id: string) {
@@ -249,84 +242,10 @@ export function ExpandedItineraryPanel({
     }
   }
 
-  function mergeText(current: string, incoming: string, mode: string): string {
-    if (mode === "replace") return incoming;
-    if (mode === "append") return [current, incoming].filter(Boolean).join("\n\n");
-    return current || incoming;
-  }
-
-  function mergeDay(
-    current: ItineraryOutput["days"][number],
-    incoming: ItineraryOutput["days"][number],
-    mode: "replace" | "fill-empty" | "append",
-  ) {
-    if (mode === "replace") return { ...incoming, day: current.day };
-    const next = { ...current };
-    for (const key of Object.keys(incoming) as (keyof typeof incoming)[]) {
-      if (key === "day") continue;
-      const currentValue = current[key];
-      const incomingValue = incoming[key];
-      if (typeof currentValue === "string" && typeof incomingValue === "string") {
-        (next as Record<string, unknown>)[key] = mergeText(
-          currentValue,
-          incomingValue,
-          mode,
-        );
-      } else if (!currentValue && incomingValue) {
-        (next as Record<string, unknown>)[key] = incomingValue;
-      }
-    }
-    return next;
-  }
-
-  function mergeItinerary(
-    current: ItineraryOutput | null,
-    incoming: ItineraryOutput,
-    mode: "replace" | "fill-empty" | "append",
-  ): ItineraryOutput {
-    if (!current || mode === "replace") return incoming;
-    return {
-      ...current,
-      title: mergeText(current.title, incoming.title, mode),
-      subtitle: mergeText(current.subtitle, incoming.subtitle, mode),
-      overview: mergeText(current.overview, incoming.overview, mode),
-      whoFor: mergeText(current.whoFor, incoming.whoFor, mode),
-      routeSummary: mergeText(current.routeSummary, incoming.routeSummary, mode),
-      bestStayAreas: mergeText(current.bestStayAreas, incoming.bestStayAreas, mode),
-      foodGuide: mergeText(current.foodGuide, incoming.foodGuide, mode),
-      transportGuide: mergeText(current.transportGuide, incoming.transportGuide, mode),
-      packingList: mergeText(current.packingList, incoming.packingList, mode),
-      etiquetteSafety: mergeText(
-        current.etiquetteSafety,
-        incoming.etiquetteSafety,
-        mode,
-      ),
-      bookingChecklist: mergeText(
-        current.bookingChecklist,
-        incoming.bookingChecklist,
-        mode,
-      ),
-      personalizationQuestions: mergeText(
-        current.personalizationQuestions,
-        incoming.personalizationQuestions,
-        mode,
-      ),
-      verificationNotes: mergeText(
-        current.verificationNotes,
-        incoming.verificationNotes,
-        mode,
-      ),
-      days: current.days.map((day, index) =>
-        incoming.days[index] ? mergeDay(day, incoming.days[index], mode) : day,
-      ),
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
   function applyItineraryAi(
     text: string,
     result: Parameters<typeof createAiRunMetadata>[0]["result"],
-    mode: "replace" | "fill-empty" | "append",
+    mode: ItineraryMergeMode,
   ) {
     if (!aiTarget) return;
     if (aiTarget.kind === "dayDetails" && selected) {
@@ -344,7 +263,7 @@ export function ExpandedItineraryPanel({
         selected.days[aiTarget.index],
       );
       const nextDays = selected.days.map((day, index) =>
-        index === aiTarget.index ? mergeDay(day, incoming, mode) : day,
+        index === aiTarget.index ? mergeDayPlan(day, incoming, mode) : day,
       );
       updateItinerary({ ...selected, days: nextDays });
     } else {
@@ -861,12 +780,12 @@ export function ExpandedItineraryPanel({
         }
         onRegenerateDay={
           aiTarget?.kind === "itinerary" && selected
-            ? async (dayIndex, ctx, request) => {
+            ? async (dayIndex, ctx, request, signal) => {
                 const target = selected.days[dayIndex];
                 if (!target) return undefined;
                 const { days } = await requestItineraryDays({
                   request,
-                  signal: new AbortController().signal,
+                  signal,
                   project,
                   itinerary: selected,
                   days: [target],
