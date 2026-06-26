@@ -75,13 +75,17 @@ const template: Template = {
       footerDisclaimer:
         "Live opening hours, prices, tickets, and availability should be verified before travel.",
     },
-    productionPlan: {
-      offerModel: "digital",
-      channels: ["etsy"],
-      outputs: [],
-      editions: [],
-      review: {},
-    },
+      productionPlan: {
+        offerModel: "digital",
+        channels: ["etsy"],
+        outputs: [],
+        editions: [],
+        review: {
+          liveDataVerified: false,
+          presentationReviewed: false,
+          backupConfirmed: false,
+        },
+      },
     tripConfigs: [],
     pdfTheme: "beige",
     promptTweaks: {},

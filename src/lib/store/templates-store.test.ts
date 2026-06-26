@@ -28,7 +28,11 @@ const template: Template = {
       channels: ["etsy"],
       outputs: [],
       editions: [],
-      review: {},
+      review: {
+        liveDataVerified: false,
+        presentationReviewed: false,
+        backupConfirmed: false,
+      },
     },
     tripConfigs: [],
     pdfTheme: "beige",
@@ -76,7 +80,7 @@ describe("templates store cloud sync", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/templates/${encodeURIComponent(template.id)}`,
-      { method: "DELETE", credentials: "include" },
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
     );
   });
 
