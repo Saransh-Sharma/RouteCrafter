@@ -5,6 +5,10 @@ import { Copy, Download, FileText, Images, Trash2, X } from "lucide-react";
 import type { AssetDTO, AssetType } from "@/lib/persistence/types";
 import { Button } from "@/components/ui/Button";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import {
+  deleteAsset as deleteCloudAsset,
+  listAssets,
+} from "@/lib/client/assets-api";
 import { cn } from "@/lib/utils";
 
 const TYPES: { id: AssetType | "all"; label: string }[] = [
@@ -32,21 +36,11 @@ export function AssetLibraryPage() {
 
   React.useEffect(() => {
     let active = true;
-    const params = new URLSearchParams({ limit: "100" });
-    if (country !== "all") params.set("country", country);
-    if (type !== "all") params.set("assetType", type);
-    fetch(`/api/assets?${params.toString()}`, {
-      credentials: "include",
-      headers: { Accept: "application/json" },
+    listAssets({
+      limit: 100,
+      country: country === "all" ? undefined : country,
+      assetType: type === "all" ? undefined : type,
     })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.error ?? "Could not load assets.");
-        return body as {
-          assets?: AssetDTO[];
-          facets?: { countries?: string[]; assetTypes?: AssetType[] };
-        };
-      })
       .then((body) => {
         if (active) {
           setAssets(body.assets ?? []);
@@ -82,13 +76,9 @@ export function AssetLibraryPage() {
   }, [facets]);
 
   async function deleteAsset(asset: AssetDTO) {
-    const response = await fetch(`/api/assets/${asset.id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setError(body.error ?? "Could not delete asset.");
+    const result = await deleteCloudAsset(asset.id);
+    if (!result.ok) {
+      setError(result.body.error ?? "Could not delete asset.");
       return;
     }
     setAssets((current) => current.filter((item) => item.id !== asset.id));

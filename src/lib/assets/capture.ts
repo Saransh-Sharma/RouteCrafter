@@ -6,6 +6,11 @@ import type {
   AssetType,
   AssetUsageType,
 } from "@/lib/persistence/types";
+import {
+  markAiRunApplied as markAiRunAppliedRequest,
+  recordAssetUsage as recordAssetUsageRequest,
+  uploadAsset,
+} from "@/lib/client/assets-api";
 
 export function dataUrlToBlob(dataUrl: string): Blob {
   const [header, payload] = dataUrl.split(",");
@@ -55,16 +60,9 @@ export async function captureAsset({
   void fieldPath;
   if (editionLabel) form.set("editionLabel", editionLabel);
 
-  const response = await fetch("/api/assets/upload", {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.error ?? "Could not save asset to the library.");
-  }
-  return body.asset as AssetDTO;
+  const body = await uploadAsset(form);
+  if (!body.asset) throw new Error("Could not save asset to the library.");
+  return body.asset;
 }
 
 export async function recordAssetUsage({
@@ -82,22 +80,14 @@ export async function recordAssetUsage({
   projectRevision?: number;
   replaceExisting?: boolean;
 }): Promise<void> {
-  const response = await fetch(`/api/assets/${assetId}/usage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      usageType,
-      entityId,
-      fieldPath,
-      projectRevision,
-      replaceExisting,
-    }),
+  await recordAssetUsageRequest({
+    assetId,
+    usageType,
+    entityId,
+    fieldPath,
+    projectRevision,
+    replaceExisting,
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? "Could not record asset usage.");
-  }
 }
 
 export async function markAiRunApplied({
@@ -122,11 +112,10 @@ export async function markAiRunApplied({
   );
   await Promise.all(
     ids.map((id) =>
-      fetch(`/api/ai/runs/${id}/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ projectId, projectRevision, assetId }),
+      markAiRunAppliedRequest(id, {
+        projectId,
+        projectRevision,
+        assetId,
       }).catch(() => undefined),
     ),
   );

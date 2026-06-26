@@ -3,6 +3,10 @@
 import { create as createZustand } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { AI_PROVIDERS, AI_PROVIDER_IDS } from "@/lib/ai/providers";
+import {
+  getPreferences as getCloudPreferences,
+  putPreferences,
+} from "@/lib/client/preferences-api";
 import { isCloudPersistenceEnabled } from "@/lib/persistence/config";
 import type {
   AiImageDefaults,
@@ -126,16 +130,12 @@ export const useAiSettingsStore = createZustand<AiSettingsState>()(
           return;
         }
         try {
-          const response = await fetch("/api/preferences", {
-            credentials: "include",
-            headers: { Accept: "application/json" },
-          });
-          if (!response.ok) {
+          const result = await getCloudPreferences();
+          if (!result.ok) {
             set({ cloudHydrated: true });
             return;
           }
-          const body = await response.json();
-          const preferences = body.preferences as
+          const preferences = result.body.preferences as
             | {
                 aiDefaults?: { text?: AiTextDefaults; image?: AiImageDefaults };
                 customModels?: Partial<
@@ -332,15 +332,10 @@ async function syncCloudPreferences(state: Pick<
       { customTextModel: string; customImageModel: string }
     >,
   );
-  await fetch("/api/preferences", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      aiDefaults: { text: state.text, image: state.image },
-      customModels,
-      dismissedCoachMarks: [],
-      libraryView: {},
-    }),
+  await putPreferences({
+    aiDefaults: { text: state.text, image: state.image },
+    customModels,
+    dismissedCoachMarks: [],
+    libraryView: {},
   }).catch(() => undefined);
 }

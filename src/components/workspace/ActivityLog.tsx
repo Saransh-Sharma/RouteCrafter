@@ -3,6 +3,7 @@
 import * as React from "react";
 import { History, Clock, ChevronDown } from "lucide-react";
 import { useActivityStore } from "@/lib/store/activity-store";
+import { listProjectActivity } from "@/lib/client/activity-api";
 import { useMounted } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import type { ActivityAction, ActivityLogEntry } from "@/lib/schemas/activity";
@@ -115,14 +116,7 @@ export function ActivityLog({ projectId }: { projectId: string }) {
   React.useEffect(() => {
     if (!mounted) return;
     let active = true;
-    fetch(`/api/projects/${projectId}/activity?limit=100`, {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Activity unavailable.");
-        return (await response.json()) as { entries?: typeof localEntries };
-      })
+    listProjectActivity(projectId, 100)
       .then((body) => {
         if (active) setCloudEntries(body.entries ?? []);
       })

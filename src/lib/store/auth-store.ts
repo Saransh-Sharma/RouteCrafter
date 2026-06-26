@@ -1,4 +1,12 @@
 import { create as createZustand } from "zustand";
+import {
+  getCurrentUser,
+  login as loginRequest,
+  logout as logoutRequest,
+  sendOtp as sendOtpRequest,
+  verifyOtp as verifyOtpRequest,
+} from "@/lib/client/auth-api";
+import { ClientApiError } from "@/lib/client/http";
 import type { User } from "../schemas/auth";
 
 interface AuthState {
@@ -35,13 +43,8 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
   refresh: async () => {
     try {
       set({ isHydrating: true, error: null });
-      const res = await fetch("/api/auth/me", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        set({ user: data.user, isHydrating: false });
-      } else {
-        set({ user: null, isHydrating: false });
-      }
+      const data = await getCurrentUser();
+      set({ user: data.user ?? null, isHydrating: false });
     } catch {
       set({ user: null, isHydrating: false });
     }
@@ -50,21 +53,12 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
   login: async (username, password) => {
     set({ isSubmitting: true, error: null });
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-        credentials: "include",
-      });
-      const data = await readJson(res);
-      if (!res.ok) {
-        const message = data.error || "Login failed";
-        set({ isSubmitting: false, error: message });
-        throw new AuthRequestError(message);
-      }
-      set({ user: data.user, isSubmitting: false, error: null });
+      const data = await loginRequest(username, password);
+      set({ user: data.user ?? null, isSubmitting: false, error: null });
     } catch (e) {
-      if (!(e instanceof AuthRequestError)) {
+      if (e instanceof ClientApiError) {
+        set({ isSubmitting: false, error: e.message });
+      } else {
         set({
           isSubmitting: false,
           error: "Network error. Please try again.",
@@ -77,20 +71,12 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
   sendOtp: async (username) => {
     set({ isSubmitting: true, error: null });
     try {
-      const res = await fetch("/api/auth/otp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      });
-      const data = await readJson(res);
-      if (!res.ok) {
-        const message = data.error || "Failed to send OTP";
-        set({ isSubmitting: false, error: message });
-        throw new AuthRequestError(message);
-      }
+      await sendOtpRequest(username);
       set({ isSubmitting: false });
     } catch (e) {
-      if (!(e instanceof AuthRequestError)) {
+      if (e instanceof ClientApiError) {
+        set({ isSubmitting: false, error: e.message });
+      } else {
         set({
           isSubmitting: false,
           error: "Network error. Please try again.",
@@ -103,21 +89,12 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
   verifyOtp: async (username, code) => {
     set({ isSubmitting: true, error: null });
     try {
-      const res = await fetch("/api/auth/otp/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, code }),
-        credentials: "include",
-      });
-      const data = await readJson(res);
-      if (!res.ok) {
-        const message = data.error || "Verification failed";
-        set({ isSubmitting: false, error: message });
-        throw new AuthRequestError(message);
-      }
-      set({ user: data.user, isSubmitting: false, error: null });
+      const data = await verifyOtpRequest(username, code);
+      set({ user: data.user ?? null, isSubmitting: false, error: null });
     } catch (e) {
-      if (!(e instanceof AuthRequestError)) {
+      if (e instanceof ClientApiError) {
+        set({ isSubmitting: false, error: e.message });
+      } else {
         set({
           isSubmitting: false,
           error: "Network error. Please try again.",
@@ -129,10 +106,7 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
 
   logout: async () => {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      await logoutRequest();
     } finally {
       set({
         user: null,
@@ -145,18 +119,3 @@ export const useAuthStore = createZustand<AuthState>()((set) => ({
 
   clearError: () => set({ error: null }),
 }));
-
-class AuthRequestError extends Error {}
-
-interface AuthResponseBody {
-  error?: string;
-  user?: User;
-}
-
-async function readJson(response: Response): Promise<AuthResponseBody> {
-  try {
-    return (await response.json()) as AuthResponseBody;
-  } catch {
-    return {};
-  }
-}

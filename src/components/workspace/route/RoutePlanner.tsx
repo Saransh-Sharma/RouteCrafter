@@ -10,14 +10,8 @@ import { LegConnector } from "./LegConnector";
 import { useUndoableAction } from "@/hooks/useUndoableAction";
 import { RouteMap } from "./RouteMap";
 import { useToast } from "@/components/ui";
-
-interface GeocodeCandidate {
-  lat: number;
-  lng: number;
-  label: string;
-  provider: string;
-  confidence?: number;
-}
+import { searchGeocode } from "@/lib/client/geocode-api";
+import type { GeocodeCandidate } from "@/lib/geocoding/cache";
 
 interface PendingGeocodeStop {
   stopId: string;
@@ -110,16 +104,11 @@ export function RoutePlanner({
     try {
       const pending: PendingGeocodeStop[] = [];
       for (const stop of missing) {
-        const response = await fetch("/api/geocode/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: stop.city, country, limit: 3 }),
+        const body = await searchGeocode({
+          query: stop.city,
+          country,
+          limit: 3,
         });
-        const body = (await response.json().catch(() => ({}))) as {
-          candidates?: GeocodeCandidate[];
-          error?: string;
-        };
-        if (!response.ok) throw new Error(body.error ?? "Geocoding failed.");
         if (body.candidates?.length) {
           pending.push({
             stopId: stop.id,
