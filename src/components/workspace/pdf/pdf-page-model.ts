@@ -61,6 +61,14 @@ export interface PdfDayNote extends PdfTextBlock<DayNoteKey> {
   conclusion: boolean;
 }
 
+export type DetailSectionKey = "restaurants" | "stays" | "activities" | "shopping";
+
+export interface PdfLocalDetailSection {
+  key: DetailSectionKey;
+  label: string;
+  itemIndexes: number[];
+}
+
 export type PdfPage =
   | {
       type: "cover";
@@ -81,12 +89,16 @@ export type PdfPage =
   | {
       type: "day-notes";
       dayIndex: number;
+      continuation: boolean;
       notes: PdfDayNote[];
       estimatedHeightMm: number;
     }
   | {
       type: "local-details";
       dayIndex: number;
+      continuation: boolean;
+      sections: PdfLocalDetailSection[];
+      triviaIndexes: number[];
       estimatedHeightMm: number;
     }
   | {
@@ -124,6 +136,16 @@ const GUIDE_FIELDS: { key: GuideKey; label: string }[] = [
   { key: "bookingChecklist", label: "Booking checklist" },
 ];
 
+export const LOCAL_DETAIL_SECTIONS: {
+  key: DetailSectionKey;
+  label: string;
+}[] = [
+  { key: "restaurants", label: "Restaurants & cafes" },
+  { key: "stays", label: "Stays" },
+  { key: "activities", label: "Activities & experiences" },
+  { key: "shopping", label: "Shopping" },
+];
+
 export function buildPdfPages(itinerary: ItineraryOutput): PdfPage[] {
   const pages: PdfPage[] = [
     {
@@ -147,12 +169,9 @@ export function buildPdfPages(itinerary: ItineraryOutput): PdfPage[] {
     pages.push(...dayPages);
     if (notesVisible) pages.push(...paginateDayNotes(dayIndex, notes));
 
-    if (hasDayDetails(day) && !isHidden(itinerary, `${dayKey}:details`)) {
-      pages.push({
-        type: "local-details",
-        dayIndex,
-        estimatedHeightMm: 180,
-      });
+    const detailsKey = `${dayKey}:details`;
+    if (hasDayDetails(day) && !isHidden(itinerary, detailsKey)) {
+      pages.push(...paginateLocalDetails(dayIndex, day, itinerary, detailsKey));
     }
   });
 
@@ -278,6 +297,7 @@ function paginateDayNotes(dayIndex: number, notes: PdfDayNote[]): PdfPage[] {
     pages.push({
       type: "day-notes",
       dayIndex,
+      continuation: !first,
       notes: selected,
       estimatedHeightMm: fixed + used,
     });
@@ -286,6 +306,126 @@ function paginateDayNotes(dayIndex: number, notes: PdfDayNote[]): PdfPage[] {
   }
 
   return pages;
+}
+
+type PdfLocalDetailBlock =
+  | {
+      kind: "detail";
+      sectionKey: DetailSectionKey;
+      sectionLabel: string;
+      itemIndex: number;
+      estimatedHeightMm: number;
+    }
+  | {
+      kind: "trivia";
+      itemIndex: number;
+      estimatedHeightMm: number;
+    };
+
+function paginateLocalDetails(
+  dayIndex: number,
+  day: ItineraryOutput["days"][number],
+  itinerary: ItineraryOutput,
+  detailsKey: string,
+): PdfPage[] {
+  const details = day.details;
+  if (!details) return [];
+
+  const blocks: PdfLocalDetailBlock[] = [
+    ...LOCAL_DETAIL_SECTIONS.filter(
+      (section) => !isHidden(itinerary, `${detailsKey}:${section.key}`),
+    ).flatMap((section) =>
+      details[section.key].map((item, itemIndex) => ({
+        kind: "detail" as const,
+        sectionKey: section.key,
+        sectionLabel: section.label,
+        itemIndex,
+        estimatedHeightMm: estimateLocalDetailItem(item),
+      })),
+    ),
+    ...(!isHidden(itinerary, `${detailsKey}:trivia`)
+      ? details.trivia.map((item, itemIndex) => ({
+          kind: "trivia" as const,
+          itemIndex,
+          estimatedHeightMm: estimateLocalTriviaItem(item),
+        }))
+      : []),
+  ];
+
+  const pages: PdfPage[] = [];
+  let remaining = blocks;
+  let first = true;
+
+  while (remaining.length) {
+    const fixed =
+      (first ? 31 : PDF_PAGE_MODEL.continuationHeaderMm) +
+      PDF_PAGE_MODEL.notesGapMm;
+    const capacity =
+      PDF_PAGE_MODEL.bodyHeightMm - fixed - PDF_PAGE_MODEL.pageSafetyMm;
+    const { selected, rest, used } = takeFittingBlocks(remaining, capacity, 2);
+    pages.push({
+      type: "local-details",
+      dayIndex,
+      continuation: !first,
+      sections: groupLocalDetailSections(selected),
+      triviaIndexes: selected
+        .filter((block) => block.kind === "trivia")
+        .map((block) => block.itemIndex),
+      estimatedHeightMm: fixed + used,
+    });
+    remaining = rest;
+    first = false;
+  }
+
+  return pages;
+}
+
+function groupLocalDetailSections(
+  blocks: PdfLocalDetailBlock[],
+): PdfLocalDetailSection[] {
+  const sections = new Map<DetailSectionKey, PdfLocalDetailSection>();
+  for (const block of blocks) {
+    if (block.kind !== "detail") continue;
+    const current =
+      sections.get(block.sectionKey) ??
+      ({
+        key: block.sectionKey,
+        label: block.sectionLabel,
+        itemIndexes: [],
+      } satisfies PdfLocalDetailSection);
+    current.itemIndexes.push(block.itemIndex);
+    sections.set(block.sectionKey, current);
+  }
+  return [...sections.values()];
+}
+
+function estimateLocalDetailItem(
+  item: NonNullable<
+    ItineraryOutput["days"][number]["details"]
+  >["restaurants"][number],
+): number {
+  const lines = estimateLines(
+    [
+      item.name,
+      item.area,
+      item.category,
+      item.priceBand,
+      item.whyItFits,
+      item.caveat,
+      item.source,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    58,
+  );
+  return 13 + Math.max(1, lines) * 3.8;
+}
+
+function estimateLocalTriviaItem(
+  item: NonNullable<ItineraryOutput["days"][number]["details"]>["trivia"][number],
+): number {
+  const lines = estimateLines([item.text, item.source].filter(Boolean).join(" "), 72);
+  return 9 + Math.max(1, lines) * 3.8;
 }
 
 function buildGuidePages(itinerary: ItineraryOutput): PdfPage[] {
@@ -489,12 +629,27 @@ function splitLongParagraph(text: string, maxChars: number): string[] {
   let current = "";
 
   for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (current && next.length > maxChars) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = next;
+    const pieces =
+      word.length > maxChars
+        ? word.match(new RegExp(`.{1,${maxChars}}`, "g")) ?? [word]
+        : [word];
+    for (const piece of pieces) {
+      if (piece.length === maxChars) {
+        if (current) {
+          chunks.push(current);
+          current = "";
+        }
+        chunks.push(piece);
+        continue;
+      }
+
+      const next = current ? `${current} ${piece}` : piece;
+      if (current && next.length > maxChars) {
+        chunks.push(current);
+        current = piece;
+      } else {
+        current = next;
+      }
     }
   }
 
