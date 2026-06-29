@@ -309,6 +309,29 @@
   --doc-accent-soft: #f1ddcc;
   --doc-border: #e2d6bf;
   --doc-on-accent: #fbf8f1;
+  --pdf-page-w: 210mm;
+  --pdf-page-h: 297mm;
+  --pdf-margin-x: 16mm;
+  --pdf-margin-y: 15mm;
+  --pdf-gap-2xs: 1.5mm;
+  --pdf-gap-xs: 2.5mm;
+  --pdf-gap-sm: 4mm;
+  --pdf-gap-md: 6mm;
+  --pdf-gap-lg: 9mm;
+  --pdf-gap-xl: 13mm;
+  --pdf-gap-2xl: 18mm;
+  --pdf-radius-sm: 3mm;
+  --pdf-radius-md: 5mm;
+  --pdf-radius-lg: 7mm;
+  --pdf-hairline: 0.25mm;
+  --pdf-body-size: 9.2pt;
+  --pdf-body-leading: 1.42;
+  --pdf-small-size: 7.8pt;
+  --pdf-eyebrow-size: 6.8pt;
+  --pdf-day-title-size: 23pt;
+  --pdf-day-title-leading: 1.13;
+  --pdf-cover-title-size: 54pt;
+  --pdf-cover-title-leading: 0.98;
 
   background: var(--doc-bg);
   color: var(--doc-ink);
@@ -326,14 +349,34 @@
 
 .rc-print-page {
   position: relative;
-  width: 210mm;
-  min-width: 210mm;
-  min-height: 297mm;
+  width: var(--pdf-page-w);
+  height: var(--pdf-page-h);
+  min-width: var(--pdf-page-w);
+  min-height: var(--pdf-page-h);
+  max-width: var(--pdf-page-w);
+  max-height: var(--pdf-page-h);
+  overflow: hidden;
   margin-inline: auto;
   background: var(--doc-paper);
+  break-after: page;
+  page-break-after: always;
 }
 
-/* Ensure themed backgrounds + photos render in browser print and html2pdf. */
+.rc-print-page:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+
+.rc-doc-overview-page,
+.rc-doc-day-page,
+.rc-doc-day-notes-page,
+.rc-doc-day-details-page,
+.rc-doc-guides-page,
+.rc-doc-closing-page {
+  padding: var(--pdf-margin-y) var(--pdf-margin-x);
+}
+
+/* Ensure themed backgrounds + photos render in browser print and PDF export. */
 .rc-doc,
 .rc-print-page,
 .rc-doc-cover,
@@ -344,18 +387,19 @@
 
 /* --- Document building blocks --- */
 .rc-doc-eyebrow {
-  font-size: 0.72rem;
+  font-size: var(--pdf-eyebrow-size);
+  line-height: 1.15;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.26em;
   color: var(--doc-accent);
 }
 
 .rc-doc-rule {
-  height: 2px;
-  width: 44px;
+  height: var(--pdf-hairline);
+  width: 16mm;
   background: var(--doc-accent);
-  border-radius: 2px;
+  border-radius: var(--pdf-hairline);
 }
 
 .rc-doc-hairline {
@@ -368,17 +412,16 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid var(--doc-border);
+  border: var(--pdf-hairline) solid var(--doc-border);
   background: var(--doc-accent-soft);
   color: var(--doc-ink-soft);
-  padding: 0.25rem 0.75rem;
-  font-size: 0.8rem;
+  padding: 1.7mm 5.8mm;
+  font-size: 9pt;
+  line-height: 1;
   font-weight: 600;
 }
 
-/* Day illustration: ratio-locked 3:2 frame (matches generated 1536x1024). The
-   padding-bottom technique is used instead of `aspect-ratio` for reliable
-   html2canvas/PDF rendering. */
+/* Ratio-locked 3:2 frame for custom image blocks. */
 .rc-doc-img-frame {
   position: relative;
   width: 100%;
@@ -394,19 +437,32 @@
   display: block;
 }
 
-.rc-doc-day-image {
-  margin-top: 1.5rem;
-}
-
 /* Cover */
 .rc-doc-cover {
   position: relative;
   overflow: hidden;
-  min-height: 297mm;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  padding: 0;
   background: var(--doc-accent-soft);
+}
+
+.rc-doc-cover.no-photo {
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.58), transparent 58%),
+    var(--doc-accent-soft);
+}
+
+.rc-doc-cover-watermark {
+  position: absolute;
+  left: 17mm;
+  right: 14mm;
+  top: 31mm;
+  font-family: var(--font-serif);
+  font-size: 71pt;
+  line-height: 0.92;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--doc-accent) 17%, transparent);
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 .rc-doc-cover-photo {
@@ -422,47 +478,160 @@
   inset: 0;
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.78) 0%,
-    rgba(0, 0, 0, 0.45) 30%,
-    rgba(0, 0, 0, 0.12) 55%,
-    transparent 75%
+    rgba(20, 16, 12, 0.82) 0%,
+    rgba(20, 16, 12, 0.54) 35%,
+    rgba(20, 16, 12, 0.18) 66%,
+    rgba(20, 16, 12, 0.04) 100%
   );
 }
 
 .rc-doc-cover-inner {
-  position: relative;
-  padding: 3.5rem;
-}
-
-/* Soft text plate behind the cover title so it stays legible over any image.
-   No backdrop-filter — html2canvas does not render blur reliably. */
-.rc-doc-cover.has-photo .rc-doc-cover-inner::before {
-  content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.42) 0%,
-    rgba(0, 0, 0, 0.22) 55%,
-    transparent 100%
-  );
-  border-radius: 1.5rem 1.5rem 0 0;
-  pointer-events: none;
-  z-index: -1;
+  padding: 26mm 22mm 28mm;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48mm;
+  grid-template-rows: 1fr auto;
+  column-gap: 14mm;
+}
+
+.rc-doc-cover-copy {
+  grid-column: 1 / -1;
+  align-self: end;
+  max-width: 142mm;
+}
+
+.rc-doc-cover.no-photo .rc-doc-cover-copy {
+  grid-column: 1;
+}
+
+.rc-doc-cover-side {
+  grid-column: 2;
+  align-self: end;
+  border-left: var(--pdf-hairline) solid var(--doc-border);
+  padding-left: 7mm;
+  color: var(--doc-ink-muted);
+  font-size: 8.8pt;
+  line-height: 1.42;
+}
+
+.rc-doc-cover-side p + p {
+  margin-top: 3mm;
+}
+
+.rc-doc-cover-rule {
+  margin-top: 6mm;
+}
+
+.rc-doc-cover-title {
+  margin-top: 11mm;
+  font-size: var(--pdf-cover-title-size);
+  line-height: var(--pdf-cover-title-leading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--doc-ink);
+  overflow-wrap: anywhere;
+}
+
+.rc-doc-cover-subtitle {
+  margin-top: 4.5mm;
+  max-width: 136mm;
+  font-size: 19pt;
+  line-height: 1.18;
+  color: var(--doc-ink-soft);
+}
+
+.rc-doc-cover-meta {
+  margin-top: 4mm;
+  font-size: 13pt;
+  line-height: 1.25;
+  color: var(--doc-ink-muted);
+}
+
+.rc-doc-cover-chips {
+  margin-top: 8mm;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3mm;
 }
 
 .rc-doc-cover.has-photo .rc-doc-cover-inner,
-.rc-doc-cover.has-photo .rc-doc-eyebrow {
+.rc-doc-cover.has-photo .rc-doc-eyebrow,
+.rc-doc-cover.has-photo .rc-doc-cover-title {
   color: #fff;
 }
 
-.rc-doc-cover.has-photo h1,
-.rc-doc-cover.has-photo .rc-doc-eyebrow {
-  color: #fff;
+.rc-doc-cover.has-photo .rc-doc-cover-subtitle {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rc-doc-cover.has-photo .rc-doc-cover-meta {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .rc-doc-cover.has-photo .rc-doc-rule {
   background: #fff;
+}
+
+.rc-doc-cover.has-photo .rc-doc-chip {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 244, 232, 0.92);
+  color: rgba(58, 51, 40, 0.92);
+}
+
+.rc-doc-title-rule {
+  margin-top: var(--pdf-gap-sm);
+}
+
+.rc-doc-page-title {
+  margin-top: var(--pdf-gap-md);
+  font-size: 23pt;
+  line-height: 1.08;
+  font-weight: 600;
+}
+
+.rc-doc-overview-grid {
+  margin-top: 8mm;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 11mm;
+  row-gap: 6mm;
+}
+
+.rc-doc-overview-lede-wrap {
+  grid-column: 1 / -1;
+}
+
+.rc-doc-overview-lede {
+  color: var(--doc-ink-soft);
+  font-size: var(--pdf-body-size);
+  line-height: var(--pdf-body-leading);
+  white-space: pre-wrap;
+}
+
+.rc-doc-field-label {
+  font-size: 7.3pt;
+  line-height: 1.18;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--doc-ink-muted);
+}
+
+.rc-doc-field-body {
+  margin-top: 1.6mm;
+  color: var(--doc-ink-soft);
+  font-size: 9.2pt;
+  line-height: 1.38;
+  white-space: pre-wrap;
+}
+
+.rc-doc-continuation-header {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 5mm;
+  margin-bottom: 7mm;
 }
 
 /* --- PDF editor affordances (screen-only; never exported/printed) --- */
@@ -631,34 +800,96 @@
 }
 
 /* Day time-block row: label column + content */
+.rc-doc-day-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14mm;
+  align-items: start;
+  column-gap: 10mm;
+  min-height: 32mm;
+}
+
+.rc-doc-day-heading {
+  min-width: 0;
+}
+
+.rc-doc-day-title {
+  margin-top: var(--pdf-gap-sm) !important;
+  max-width: 138mm;
+  font-size: var(--pdf-day-title-size) !important;
+  line-height: var(--pdf-day-title-leading) !important;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rc-doc-day-base {
+  margin-top: var(--pdf-gap-xs) !important;
+  font-size: 8.2pt !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0.18em !important;
+}
+
+.rc-doc-day-image {
+  margin-top: var(--pdf-gap-sm);
+  overflow: hidden;
+  border: var(--pdf-hairline) solid var(--doc-border);
+  border-radius: var(--pdf-radius-lg);
+}
+
+.rc-doc-day-img-frame {
+  height: 70mm;
+  padding-bottom: 0;
+}
+
+.rc-doc-day-schedule {
+  margin-top: var(--pdf-gap-md);
+}
+
 .rc-day-row {
   display: grid;
-  grid-template-columns: 116px 1fr;
-  gap: 1rem;
-  padding: 0.85rem 0;
-  border-top: 1px solid var(--doc-border);
+  grid-template-columns: 25mm 1fr;
+  gap: 6mm;
+  align-items: first baseline;
+  padding: 3.2mm 0 3.4mm;
+  border-top: var(--pdf-hairline) solid var(--doc-border);
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
+.rc-day-row.is-continuation {
+  grid-template-columns: 1fr;
+  gap: 1.5mm;
+}
+
 .rc-day-row-label {
-  font-size: 0.72rem;
+  font-size: 7.2pt;
+  line-height: var(--pdf-body-leading);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.13em;
   color: var(--doc-accent);
-  padding-top: 0.15rem;
+  padding-top: 0;
+}
+
+.rc-row-part {
+  display: block;
+  margin-top: 1mm;
+  color: var(--doc-ink-muted);
+  font-size: 6.5pt;
+  letter-spacing: 0.08em;
 }
 
 .rc-day-row-body {
   color: var(--doc-ink-soft);
-  font-size: 0.95rem;
-  line-height: 1.55;
+  font-size: var(--pdf-body-size);
+  line-height: var(--pdf-body-leading);
+  white-space: pre-wrap;
 }
 
 .rc-day-num {
   font-family: var(--font-serif);
-  font-size: 2.6rem;
+  justify-self: end;
+  padding-top: 5mm;
+  font-size: 29pt;
   line-height: 1;
   color: var(--doc-accent);
 }
@@ -674,11 +905,67 @@
 }
 
 .rc-day-notes {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
+  margin-top: var(--pdf-gap-md);
+  padding: 5mm 5.5mm;
+  border-radius: var(--pdf-radius-md);
+  background: var(--doc-accent-soft);
+}
+
+.rc-day-notes-grid {
+  margin-top: var(--pdf-gap-sm);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 10mm;
+  row-gap: 2.4mm;
+}
+
+.rc-day-note {
+  font-size: 8.1pt !important;
+  line-height: 1.33;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rc-day-note-label {
+  font-weight: 700;
+  color: var(--doc-ink);
+}
+
+.rc-day-note-body {
+  color: var(--doc-ink-soft);
+  white-space: pre-wrap;
+}
+
+.rc-day-note-conclusion {
+  grid-column: 1 / -1;
+  margin-top: 1.5mm;
+  padding-top: 3mm;
+  border-top: var(--pdf-hairline) solid var(--doc-border);
+}
+
+.rc-doc-day-notes-page .rc-day-notes {
+  margin-top: 1mm;
+}
+
+.rc-doc-empty-page-note {
+  margin-top: 8mm;
+  color: var(--doc-ink-muted);
+  font-size: 8.5pt;
+}
+
+.rc-doc-restore-page {
+  display: grid;
+  place-items: center;
 }
 
 /* Per-day "Local details" page */
+.rc-detail-list,
+.rc-detail-items,
+.rc-detail-trivia-list,
+.rc-doc-guide-list {
+  margin-top: 6mm;
+}
+
 .rc-detail-section {
   padding-top: 0.25rem;
 }
@@ -688,7 +975,7 @@
 }
 
 .rc-detail-item {
-  padding: 0.6rem 0;
+  padding: 2.4mm 0;
   border-top: 1px solid var(--doc-border);
   break-inside: avoid;
   page-break-inside: avoid;
@@ -697,7 +984,7 @@
 .rc-detail-name {
   font-weight: 600;
   color: var(--doc-ink);
-  font-size: 1rem;
+  font-size: 10.2pt;
 }
 
 .rc-detail-meta {
@@ -708,8 +995,8 @@
 
 .rc-detail-why {
   margin-top: 0.25rem;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 8.8pt;
+  line-height: 1.42;
   color: var(--doc-ink-soft);
 }
 
@@ -728,8 +1015,8 @@
 }
 
 .rc-detail-trivia {
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 8.8pt;
+  line-height: 1.42;
   color: var(--doc-ink-soft);
   padding-left: 0.9rem;
   position: relative;
@@ -744,159 +1031,49 @@
   color: var(--doc-accent);
 }
 
-/*
-  Download-only PDF capture mode. The on-screen preview can keep a generous
-  editorial layout; html2pdf needs tighter, deterministic A4 geometry so it
-  does not slice day sections into arbitrary pages.
-*/
-.rc-doc-export {
-  background: var(--doc-paper);
+.rc-guide-section + .rc-guide-section {
+  margin-top: 6mm;
 }
 
-.rc-doc-export .rc-print-page {
-  width: 210mm;
-  min-width: 210mm;
-  min-height: auto;
-  margin-inline: 0;
+.rc-guide-title {
+  display: flex;
+  align-items: baseline;
+  gap: 3mm;
+  margin-bottom: 2.5mm;
+  font-size: 13pt;
+  line-height: 1.18;
+  font-weight: 600;
 }
 
-.rc-doc-export .rc-doc-cover {
-  min-height: 297mm;
+.rc-guide-part {
+  font-family: var(--font-sans);
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--doc-ink-muted);
 }
 
-.rc-doc-export .rc-doc-closing-page {
-  min-height: 297mm;
+.rc-guide-body {
+  margin-top: 3mm;
+  color: var(--doc-ink-soft);
+  font-size: 8.8pt;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
-.rc-doc-export .rc-doc-day-page {
-  padding: 11mm 14mm !important;
+.rc-doc-closing-title {
+  margin-top: 5mm;
+  font-size: 15pt;
+  line-height: 1.22;
+  font-weight: 600;
 }
 
-.rc-doc-export .rc-doc-day-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3rem;
-  align-items: start;
-  column-gap: 8mm;
-  min-height: 20mm;
-}
-
-.rc-doc-export .rc-doc-day-heading {
-  min-width: 0;
-}
-
-.rc-doc-export .rc-doc-day-title {
-  margin-top: 0.2rem !important;
-  font-size: 1.65rem !important;
-  line-height: 1.06 !important;
-  overflow-wrap: anywhere;
-}
-
-.rc-doc-export .rc-doc-day-base {
-  margin-top: 0.15rem !important;
-  font-size: 0.72rem !important;
-  line-height: 1 !important;
-  letter-spacing: 0.16em !important;
-}
-
-.rc-doc-export .rc-day-num {
-  justify-self: end;
-  padding-top: 0.3rem;
-  font-size: 2.25rem;
-}
-
-.rc-doc-export .rc-doc-day-image {
+.rc-doc-disclaimer {
   margin-top: 4mm;
-  border-radius: 0.85rem !important;
-}
-
-.rc-doc-export .rc-doc-day-img-frame {
-  height: 78mm;
-  padding-bottom: 0;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-}
-
-.rc-doc-export .rc-doc-day-img-frame .rc-doc-img {
-  opacity: 0;
-}
-
-.rc-doc-export .rc-doc-day-schedule {
-  margin-top: 6mm !important;
-}
-
-.rc-doc-export .rc-day-row {
-  grid-template-columns: 24mm 1fr;
-  gap: 5mm;
-  padding: 2.4mm 0;
-}
-
-.rc-doc-export .rc-day-row-label {
-  font-size: 0.58rem;
-  line-height: 1;
-  letter-spacing: 0.13em;
-  padding-top: 0.1rem;
-}
-
-.rc-doc-export .rc-day-row-body {
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.rc-doc-export .rc-day-notes {
-  margin-top: 5mm;
-  padding: 4mm 5mm;
-  border-radius: 0.85rem;
-}
-
-.rc-doc-export .rc-day-notes .rc-doc-eyebrow {
-  font-size: 0.58rem;
-}
-
-.rc-doc-export .rc-day-notes-grid {
-  margin-top: 2.5mm !important;
-  column-gap: 7mm !important;
-  row-gap: 1.5mm !important;
-}
-
-.rc-doc-export .rc-day-note {
-  font-size: 0.68rem;
-  line-height: 1.28;
-}
-
-.rc-doc-export .rc-doc-day-details-page {
-  padding: 11mm 14mm !important;
-}
-
-.rc-doc-export .rc-detail-section + .rc-detail-section {
-  margin-top: 5mm;
-}
-
-.rc-doc-export .rc-detail-item {
-  padding: 1.8mm 0;
-}
-
-.rc-doc-export .rc-detail-name {
-  font-size: 0.82rem;
-}
-
-.rc-doc-export .rc-detail-meta {
-  font-size: 0.6rem;
-}
-
-.rc-doc-export .rc-detail-why {
-  font-size: 0.72rem;
-  line-height: 1.32;
-}
-
-.rc-doc-export .rc-detail-caveat,
-.rc-doc-export .rc-detail-source {
-  font-size: 0.58rem;
-}
-
-.rc-doc-export .rc-detail-trivia {
-  font-size: 0.72rem;
-  line-height: 1.32;
+  max-width: 142mm;
+  color: var(--doc-ink-muted);
+  font-size: 7.8pt;
+  line-height: 1.45;
 }
 
 /* Print-friendly base for the PDF builder */
@@ -932,9 +1109,12 @@
   }
 
   .rc-print-page {
-    width: 210mm;
-    min-width: 210mm;
-    min-height: 297mm;
+    width: var(--pdf-page-w);
+    height: var(--pdf-page-h);
+    min-width: var(--pdf-page-w);
+    min-height: var(--pdf-page-h);
+    max-width: var(--pdf-page-w);
+    max-height: var(--pdf-page-h);
     break-after: page;
     page-break-after: always;
   }
