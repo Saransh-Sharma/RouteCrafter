@@ -70,9 +70,15 @@ test("print route composes stress PDF pages without DOM overflow", async ({
   await page.evaluate(async () => {
     await document.fonts.ready;
     await Promise.all(
-      Array.from(document.images).map((image) =>
-        image.complete ? image.decode().catch(() => undefined) : undefined,
-      ),
+      Array.from(document.images).map((image) => {
+        if (image.complete) {
+          return image.decode?.().catch(() => undefined);
+        }
+        return new Promise<void>((resolve, reject) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => reject(), { once: true });
+        }).then(() => image.decode?.().catch(() => undefined));
+      }),
     );
   });
 
@@ -121,6 +127,7 @@ test("print route composes stress PDF pages without DOM overflow", async ({
         );
       }),
   );
+  expect(rowDeltas.length).toBeGreaterThan(0);
   expect(Math.max(...rowDeltas)).toBeLessThanOrEqual(4);
 });
 
