@@ -18,6 +18,7 @@ import {
   buildPdfPages,
   type DayNoteKey,
   type DayTimeKey,
+  type DetailSectionKey,
   type GuideKey,
   type OverviewKey,
   type PdfDayNote,
@@ -25,15 +26,6 @@ import {
   type PdfPage,
   type PdfTextBlock,
 } from "./pdf-page-model";
-
-type DetailSectionKey = "restaurants" | "stays" | "activities" | "shopping";
-
-const DETAIL_SECTIONS: { key: DetailSectionKey; label: string }[] = [
-  { key: "restaurants", label: "Restaurants & cafes" },
-  { key: "stays", label: "Stays" },
-  { key: "activities", label: "Activities & experiences" },
-  { key: "shopping", label: "Shopping" },
-];
 
 /** Premium, print-optimized itinerary document (screen preview + PDF source). */
 export const ItineraryDocument = React.forwardRef<
@@ -455,13 +447,12 @@ export const ItineraryDocument = React.forwardRef<
   ) => {
     const day = itinerary.days[page.dayIndex];
     const dayKey = `day:${day.day}`;
-    const firstChunk = page.notes.some((note) => note.chunkIndex === 0);
     return (
       <section
         key={`page-${index}-day-notes-${day.day}`}
         className="rc-print-page rc-doc-day-page rc-doc-day-notes-page"
       >
-        {firstChunk ? (
+        {!page.continuation ? (
           <DayHeader
             day={day}
             editable={isEdit}
@@ -508,12 +499,16 @@ export const ItineraryDocument = React.forwardRef<
     const detailsKey = `${dayKey}:details`;
     const details = day.details;
     if (!details) return null;
-    const filledSections = DETAIL_SECTIONS.filter((s) => details[s.key].length);
-    const hasTrivia = Boolean(details.trivia.length);
+    const filledSections = page.sections.filter((section) =>
+      section.itemIndexes.some((itemIndex) => details[section.key][itemIndex]),
+    );
+    const hasTrivia = page.triviaIndexes.some((itemIndex) => details.trivia[itemIndex]);
     return (
       <section
         key={`page-${index}-details-${day.day}`}
-        className="rc-print-page rc-doc-day-details-page"
+        className={`rc-print-page rc-doc-day-details-page${
+          page.continuation ? " rc-doc-continuation-page" : ""
+        }`}
       >
         {isEdit ? (
           <button
@@ -525,11 +520,19 @@ export const ItineraryDocument = React.forwardRef<
             <Trash2 className="size-3.5" />
           </button>
         ) : null}
-        <p className="rc-doc-eyebrow">
-          Local details{day.base ? ` - ${day.base}` : ""}
-        </p>
-        <div className="rc-doc-rule rc-doc-title-rule" />
-        <h3 className="rc-doc-page-title">Where to eat, stay &amp; explore</h3>
+        {page.continuation ? (
+          <ContinuationHeader
+            label={`Day ${String(day.day).padStart(2, "0")} local details continued`}
+          />
+        ) : (
+          <>
+            <p className="rc-doc-eyebrow">
+              Local details{day.base ? ` - ${day.base}` : ""}
+            </p>
+            <div className="rc-doc-rule rc-doc-title-rule" />
+            <h3 className="rc-doc-page-title">Where to eat, stay &amp; explore</h3>
+          </>
+        )}
         <div className="rc-detail-list">
           {filledSections.map((section) => (
             <Removable
@@ -542,7 +545,9 @@ export const ItineraryDocument = React.forwardRef<
               <div className="rc-doc-section rc-detail-section">
                 <p className="rc-doc-eyebrow">{section.label}</p>
                 <div className="rc-detail-items">
-                  {details[section.key].map((item, itemIndex) => {
+                  {section.itemIndexes.map((itemIndex) => {
+                    const item = details[section.key][itemIndex];
+                    if (!item) return null;
                     const meta = [item.area, item.category, item.priceBand]
                       .filter(Boolean)
                       .join(" · ");
@@ -607,33 +612,39 @@ export const ItineraryDocument = React.forwardRef<
               <div className="rc-doc-section rc-detail-section">
                 <p className="rc-doc-eyebrow">Local trivia</p>
                 <ul className="rc-detail-trivia-list">
-                  {details.trivia.map((item, itemIndex) => (
-                    <li key={itemIndex} className="rc-detail-trivia">
-                      <EditableText
-                        as="span"
-                        value={item.text}
-                        editable={isEdit}
-                        placeholder="Trivia"
-                        onCommit={(next) =>
-                          setTriviaText(day.day, itemIndex, next)
-                        }
-                      />
-                      {item.source ? (
-                        <span className="rc-detail-source"> - {item.source}</span>
-                      ) : null}
-                    </li>
-                  ))}
+                  {page.triviaIndexes.map((itemIndex) => {
+                    const item = details.trivia[itemIndex];
+                    if (!item) return null;
+                    return (
+                      <li key={itemIndex} className="rc-detail-trivia">
+                        <EditableText
+                          as="span"
+                          value={item.text}
+                          editable={isEdit}
+                          placeholder="Trivia"
+                          onCommit={(next) =>
+                            setTriviaText(day.day, itemIndex, next)
+                          }
+                        />
+                        {item.source ? (
+                          <span className="rc-detail-source"> - {item.source}</span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </Removable>
           ) : null}
         </div>
-        <AnchorSlot
-          anchor={detailsKey}
-          itinerary={itinerary}
-          editable={isEdit}
-          patch={patch}
-        />
+        {!page.continuation ? (
+          <AnchorSlot
+            anchor={detailsKey}
+            itinerary={itinerary}
+            editable={isEdit}
+            patch={patch}
+          />
+        ) : null}
       </section>
     );
   };
