@@ -359,12 +359,10 @@
   margin-inline: auto;
   background: var(--doc-paper);
   break-after: page;
-  page-break-after: always;
 }
 
 .rc-print-page:last-child {
   break-after: auto;
-  page-break-after: auto;
 }
 
 .rc-doc-overview-page,
@@ -852,7 +850,6 @@
   padding: 3.2mm 0 3.4mm;
   border-top: var(--pdf-hairline) solid var(--doc-border);
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-day-row.is-continuation {
@@ -896,12 +893,10 @@
 
 .rc-doc-section {
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-doc-block {
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-day-notes {
@@ -923,7 +918,6 @@
   font-size: 8.1pt !important;
   line-height: 1.33;
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-day-note-label {
@@ -978,7 +972,6 @@
   padding: 2.4mm 0;
   border-top: 1px solid var(--doc-border);
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-detail-name {
@@ -1021,7 +1014,6 @@
   padding-left: 0.9rem;
   position: relative;
   break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .rc-detail-trivia::before {
@@ -1116,12 +1108,10 @@
     max-width: var(--pdf-page-w);
     max-height: var(--pdf-page-h);
     break-after: page;
-    page-break-after: always;
   }
 
   .rc-print-page:last-child {
     break-after: auto;
-    page-break-after: auto;
   }
 
   .rc-doc img {
