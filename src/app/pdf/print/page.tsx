@@ -15,6 +15,20 @@ function nextFrame(): Promise<void> {
   );
 }
 
+async function waitForImages(): Promise<void> {
+  await Promise.all(
+    Array.from(document.images).map((image) => {
+      if (image.complete) {
+        return image.decode?.().catch(() => undefined);
+      }
+      return new Promise<void>((resolve, reject) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => reject(), { once: true });
+      }).then(() => image.decode?.().catch(() => undefined));
+    }),
+  );
+}
+
 export default function PdfPrintPage() {
   const [payload, setPayload] = React.useState<PdfPrintPayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -61,10 +75,13 @@ export default function PdfPrintPage() {
     async function markReady() {
       if (document.fonts?.ready) await document.fonts.ready;
       await nextFrame();
+      await waitForImages();
       if (cancelled) return;
       setReady(true);
       if (new URLSearchParams(window.location.search).get("autoprint") === "1") {
         await nextFrame();
+        await waitForImages();
+        if (cancelled) return;
         window.print();
       }
     }
