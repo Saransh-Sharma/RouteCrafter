@@ -34,11 +34,15 @@ export function pdfFilename(project: Project, itineraryId: string): string {
   const itinerary = project.itineraries.find((item) => item.id === itineraryId);
   const country = project.country || itinerary?.country || "project";
   const duration = itinerary?.duration || "itinerary";
-  const slug = country
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const compactDuration = duration.replace(/\s+/g, "");
-  return `${slug || "project"}-${compactDuration}-itinerary.pdf`;
+  const slug = sanitizeFilenameSegment(country, "project");
+  const durationSlug = sanitizeFilenameSegment(duration, "itinerary");
+  return `${slug}-${durationSlug}-itinerary.pdf`;
 }
 
+function sanitizeFilenameSegment(value: string, fallback: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "") || fallback;
+}

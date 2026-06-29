@@ -33,8 +33,26 @@ describe("pdf print payload", () => {
     project.itineraries = [itinerary];
 
     expect(pdfFilename(project, "itinerary")).toBe(
-      "new-zealand-10days-itinerary.pdf",
+      "new-zealand-10-days-itinerary.pdf",
+    );
+  });
+
+  it("sanitizes duration before using it in a PDF filename", () => {
+    const project = structuredClone(seedProjects[0]);
+    const itinerary = buildItinerary(buildContext(project), {
+      duration: "7 days / 6 nights",
+    });
+    itinerary.id = "itinerary";
+    project.country = "Japan";
+    project.itineraries = [itinerary];
+
+    expect(pdfFilename(project, "itinerary")).toBe(
+      "japan-7-days-6-nights-itinerary.pdf",
+    );
+
+    itinerary.duration = '3 "perfect" days';
+    expect(pdfFilename(project, "itinerary")).toBe(
+      "japan-3-perfect-days-itinerary.pdf",
     );
   });
 });
-
