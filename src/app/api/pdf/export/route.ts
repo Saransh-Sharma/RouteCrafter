@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { chromium } from "playwright";
 import { z } from "zod";
 import {
   PDF_PRINT_PAYLOAD_KEY,
@@ -8,6 +7,7 @@ import {
   selectedPrintItinerary,
 } from "@/components/workspace/pdf/pdf-print-payload";
 import { projectSchema } from "@/lib/schemas";
+import { launchPdfChromium, type PdfChromiumBrowser } from "./chromium";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,10 +40,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const origin = new URL(request.url).origin;
   const filename = pdfFilename(payload.project, payload.itineraryId);
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
+  let browser: PdfChromiumBrowser | null = null;
 
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await launchPdfChromium();
     const context = await browser.newContext({
       viewport: { width: 1240, height: 1754 },
     });

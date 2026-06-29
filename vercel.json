@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm ci && PLAYWRIGHT_BROWSERS_PATH=0 npm run install:chromium",
   "functions": {
     "src/app/api/ai/image/route.ts": {
       "maxDuration": 300

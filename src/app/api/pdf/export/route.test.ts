@@ -60,7 +60,7 @@ describe("POST /api/pdf/export", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
     expect(response.headers.get("Content-Disposition")).toContain(
-      "japan-3days-itinerary.pdf",
+      "japan-3-days-itinerary.pdf",
     );
     expect(new TextDecoder().decode(await response.arrayBuffer())).toContain(
       "%PDF",
@@ -112,5 +112,37 @@ describe("POST /api/pdf/export", () => {
       error:
         "Chromium could not start for PDF export. Install Playwright browser binaries in this runtime or configure a browserless renderer.",
     });
+  });
+
+  it("points Playwright at the hermetic Chromium install on Vercel", async () => {
+    const previousVercel = process.env.VERCEL;
+    const previousBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    process.env.VERCEL = "1";
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+
+    try {
+      const project = structuredClone(seedProjects[0]);
+      const itinerary = buildItinerary(buildContext(project), {
+        duration: "3 days",
+      });
+      itinerary.id = "current-itinerary";
+      project.itineraries = [itinerary];
+
+      const response = await POST(
+        new Request("https://routecrafter.test/api/pdf/export", {
+          method: "POST",
+          body: JSON.stringify({ project, itineraryId: itinerary.id }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(process.env.PLAYWRIGHT_BROWSERS_PATH).toBe("0");
+    } finally {
+      if (previousVercel === undefined) delete process.env.VERCEL;
+      else process.env.VERCEL = previousVercel;
+      if (previousBrowsersPath === undefined)
+        delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      else process.env.PLAYWRIGHT_BROWSERS_PATH = previousBrowsersPath;
+    }
   });
 });
