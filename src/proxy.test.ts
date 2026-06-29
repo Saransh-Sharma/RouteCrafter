@@ -55,6 +55,12 @@ describe("authentication proxy", () => {
     expect(forged.status).toBe(401);
   });
 
+  it("allows the print renderer without a session", async () => {
+    const response = await proxy(new NextRequest("http://localhost/pdf/print"));
+
+    expect(response.status).toBe(200);
+  });
+
   it("allows protected requests with a valid signed session", async () => {
     const token = await signToken({
       userId: "user_admin",

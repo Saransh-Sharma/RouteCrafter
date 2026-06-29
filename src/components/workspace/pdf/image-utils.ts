@@ -9,7 +9,7 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
  * Read an uploaded image file, downscale it to fit within MAX_EDGE, and return
- * a compressed JPEG data URL. Data URLs embed reliably in the html2pdf export
+ * a compressed JPEG data URL. Data URLs embed reliably in the PDF export
  * (no cross-origin canvas tainting) and survive localStorage persistence.
  */
 export async function compressImageFile(file: File): Promise<string> {
