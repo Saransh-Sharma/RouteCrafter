@@ -6,6 +6,9 @@
     },
     "src/app/api/ai/text/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/pdf/export/route.ts": {
+      "maxDuration": 300
     }
   }
 }

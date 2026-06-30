@@ -4,7 +4,7 @@ This guide gets RouteCrafter running locally and explains where your data lives.
 
 ## Prerequisites
 
-- **Node.js 20** (the CI pipeline runs on Node 20; see
+- **Node.js 24** (the CI pipeline runs on Node 24; see
   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 - **npm** (the repo uses `package-lock.json`).
 - A modern browser. The app keeps a `localStorage` cache, so use a normal (non
