@@ -1,18 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { seedProjects } from "@/lib/seed-projects";
 import { buildContext, buildItinerary } from "@/lib/generation";
 import { ItineraryDocument } from "./ItineraryDocument";
-import {
-  isEmbeddedImageSource,
-  prepareDocumentForPdf,
-} from "./pdf-assets";
 
 describe("ItineraryDocument", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("marks photo covers and does not force cross-origin image loading", () => {
     const project = structuredClone(seedProjects[0]);
     const itinerary = {
@@ -27,13 +19,6 @@ describe("ItineraryDocument", () => {
       container.querySelector(".rc-doc-cover")?.classList.contains("has-photo"),
     ).toBe(true);
     expect(screen.getByAltText("Japan cover").hasAttribute("crossorigin")).toBe(
-      false,
-    );
-  });
-
-  it("classifies external URLs as requiring PDF embed validation", () => {
-    expect(isEmbeddedImageSource("data:image/jpeg;base64,abc")).toBe(true);
-    expect(isEmbeddedImageSource("https://images.example.com/a.jpg")).toBe(
       false,
     );
   });
@@ -73,9 +58,10 @@ describe("ItineraryDocument", () => {
     );
 
     expect(container.querySelector(".rc-doc-overview-page")).toBeTruthy();
-    expect(container.querySelectorAll(".rc-doc-day-page")).toHaveLength(
+    expect(container.querySelectorAll(".rc-doc-day-page").length).toBeGreaterThanOrEqual(
       itinerary.days.length,
     );
+    expect(container.querySelector(".rc-doc-day-notes-page")).toBeTruthy();
     expect(container.querySelector(".rc-doc-guides-page")).toBeTruthy();
     expect(container.querySelector(".rc-doc-closing-page")).toBeTruthy();
   });
@@ -140,24 +126,40 @@ describe("ItineraryDocument", () => {
     );
   });
 
-  it("applies export mode only when requested", () => {
+  it("uses one canonical document layout without export-only classes", () => {
     const project = structuredClone(seedProjects[0]);
     const itinerary = buildItinerary(buildContext(project), { duration: "3 days" });
 
-    const { container, rerender } = render(
+    const { container } = render(
       <ItineraryDocument itinerary={itinerary} project={project} />,
     );
 
     expect(container.querySelector(".rc-doc")?.classList).not.toContain(
       "rc-doc-export",
     );
+    expect(container.querySelector(".rc-print-page")).toBeTruthy();
+    expect(
+      container.querySelector(".rc-print-page")?.classList.contains(
+        "rc-doc-cover",
+      ),
+    ).toBe(true);
+  });
 
-    rerender(
-      <ItineraryDocument itinerary={itinerary} project={project} exportMode />,
-    );
+  it("renders why-this-works as a full-width good-to-know conclusion", () => {
+    const project = structuredClone(seedProjects[0]);
+    const itinerary = buildItinerary(buildContext(project), { duration: "3 days" });
+    itinerary.days[0].transportNotes = "Use taxi on arrival.";
+    itinerary.days[0].bookingNotes = "Pre-book timed entry.";
+    itinerary.days[0].whyThisWorks = "This keeps the fixed priority early.";
 
-    expect(container.querySelector(".rc-doc")?.classList).toContain(
-      "rc-doc-export",
+    render(<ItineraryDocument itinerary={itinerary} project={project} />);
+
+    const conclusion = screen
+      .getByText("This keeps the fixed priority early.")
+      .closest(".rc-day-note");
+
+    expect(conclusion?.classList.contains("rc-day-note-conclusion")).toBe(
+      true,
     );
   });
 
@@ -179,51 +181,4 @@ describe("ItineraryDocument", () => {
     );
   });
 
-  it("uses an export-only day image background to preserve aspect ratio", () => {
-    const project = structuredClone(seedProjects[0]);
-    const itinerary = buildItinerary(buildContext(project), { duration: "3 days" });
-    itinerary.days[0].image = 'https://images.example.com/day "one".jpg';
-
-    render(
-      <ItineraryDocument itinerary={itinerary} project={project} exportMode />,
-    );
-
-    const image = screen.getByAltText("Day 1");
-    const frame = image.closest(".rc-doc-day-img-frame") as HTMLElement | null;
-
-    expect(image.getAttribute("src")).toBe(
-      'https://images.example.com/day "one".jpg',
-    );
-    expect(frame?.style.backgroundImage).toContain(
-      "https://images.example.com/day",
-    );
-  });
-
-  it("blocks PDF preparation when a remote image is not canvas-safe", async () => {
-    class RejectedCorsImage {
-      crossOrigin = "";
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-
-      set src(_value: string) {
-        queueMicrotask(() => this.onerror?.());
-      }
-    }
-    vi.stubGlobal("Image", RejectedCorsImage);
-
-    const image = {
-      complete: true,
-      naturalWidth: 100,
-      currentSrc: "https://images.example.com/cover.jpg",
-      src: "https://images.example.com/cover.jpg",
-      decode: vi.fn().mockResolvedValue(undefined),
-    } as unknown as HTMLImageElement;
-    const root = {
-      querySelectorAll: () => [image],
-    } as unknown as HTMLElement;
-
-    await expect(prepareDocumentForPdf(root)).rejects.toThrow(
-      "Upload that image instead",
-    );
-  });
 });

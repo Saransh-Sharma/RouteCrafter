@@ -202,7 +202,12 @@ test("scrolls PDF presentation controls and preview independently", async ({
   const controlsScrollAfterWheel = await controls.evaluate(
     (element) => element.scrollTop,
   );
-  await preview.hover();
+  const previewBox = await preview.boundingBox();
+  expect(previewBox).not.toBeNull();
+  await page.mouse.move(
+    previewBox!.x + previewBox!.width / 2,
+    previewBox!.y + previewBox!.height / 2,
+  );
   await page.mouse.wheel(0, 500);
   await expect
     .poll(() => preview.evaluate((element) => element.scrollTop))

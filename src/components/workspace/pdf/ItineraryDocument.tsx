@@ -14,51 +14,18 @@ import {
   isHidden,
   type DocEditor,
 } from "./doc-editing";
-
-const TIME_FIELDS: { key: keyof ItineraryOutput["days"][number]; label: string }[] =
-  [
-    { key: "morning", label: "Morning" },
-    { key: "lunch", label: "Lunch" },
-    { key: "afternoon", label: "Afternoon" },
-    { key: "evening", label: "Evening" },
-    { key: "dinner", label: "Dinner" },
-  ];
-
-const NOTE_FIELDS: { key: keyof ItineraryOutput["days"][number]; label: string }[] =
-  [
-    { key: "transportNotes", label: "Transport" },
-    { key: "bookingNotes", label: "Booking" },
-    { key: "optionalUpgrade", label: "Upgrade" },
-    { key: "lowEnergyAlternative", label: "Low-energy" },
-    { key: "rainyDayAlternative", label: "Rainy day" },
-    { key: "whyThisWorks", label: "Why it works" },
-  ];
-
-type DetailSectionKey = "restaurants" | "stays" | "activities" | "shopping";
-
-const DETAIL_SECTIONS: { key: DetailSectionKey; label: string }[] = [
-  { key: "restaurants", label: "Restaurants & cafes" },
-  { key: "stays", label: "Stays" },
-  { key: "activities", label: "Activities & experiences" },
-  { key: "shopping", label: "Shopping" },
-];
-
-const GUIDE_FIELDS: { key: keyof ItineraryOutput; label: string }[] = [
-  { key: "foodGuide", label: "Food & cafe guide" },
-  { key: "transportGuide", label: "Transport guide" },
-  { key: "packingList", label: "Packing list" },
-  { key: "etiquetteSafety", label: "Etiquette & safety" },
-  { key: "bookingChecklist", label: "Booking checklist" },
-];
-
-function cssImageUrl(src: string): string {
-  return `url("${src
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\a ")
-    .replace(/\r/g, "\\d ")
-    .replace(/\f/g, "\\c ")}")`;
-}
+import {
+  buildPdfPages,
+  type DayNoteKey,
+  type DayTimeKey,
+  type DetailSectionKey,
+  type GuideKey,
+  type OverviewKey,
+  type PdfDayNote,
+  type PdfDayRow,
+  type PdfPage,
+  type PdfTextBlock,
+} from "./pdf-page-model";
 
 /** Premium, print-optimized itinerary document (screen preview + PDF source). */
 export const ItineraryDocument = React.forwardRef<
@@ -68,7 +35,6 @@ export const ItineraryDocument = React.forwardRef<
     project: Project;
     onAssetSettled?: () => void;
     editable?: boolean;
-    exportMode?: boolean;
     editor?: DocEditor;
   }
 >(function ItineraryDocument(
@@ -77,16 +43,13 @@ export const ItineraryDocument = React.forwardRef<
     project,
     onAssetSettled,
     editable = false,
-    exportMode = false,
     editor,
   },
   ref,
 ) {
   const isEdit = editable && Boolean(editor);
-  const patch = React.useMemo(
-    () => editor?.patch ?? (() => {}),
-    [editor],
-  );
+  const patch = React.useMemo(() => editor?.patch ?? (() => {}), [editor]);
+  const pages = React.useMemo(() => buildPdfPages(itinerary), [itinerary]);
 
   const setField = React.useCallback(
     <K extends keyof ItineraryOutput>(key: K, value: ItineraryOutput[K]) => {
@@ -157,6 +120,7 @@ export const ItineraryDocument = React.forwardRef<
     },
     [patch],
   );
+
   const hidden = (key: string) => isHidden(itinerary, key);
   const toggle = (key: string) => {
     patch((it) => {
@@ -168,7 +132,6 @@ export const ItineraryDocument = React.forwardRef<
   };
 
   const country = itinerary.country || project.country || "Your trip";
-  const guides = GUIDE_FIELDS.filter((g) => itinerary[g.key]);
   const theme = getTheme(itinerary.pdfTheme);
   const businessName = project.brandStyle?.businessName?.trim();
   const disclaimer =
@@ -176,55 +139,112 @@ export const ItineraryDocument = React.forwardRef<
     project.brandStyle?.footerDisclaimer ||
     "Verify live opening hours, prices, tickets, and hotel/restaurant availability before travel. Nothing here is presented as guaranteed real-time data.";
 
-  return (
-    <div
-      ref={ref}
-      className={`rc-doc rc-print-root${isEdit ? " rc-doc-editing" : ""}${
-        exportMode ? " rc-doc-export" : ""
+  const renderEditableOverview = (
+    field: PdfTextBlock<OverviewKey>,
+  ): React.ReactNode => {
+    if (field.key === "paceStyle") {
+      return <p className="rc-doc-field-body">{field.value}</p>;
+    }
+    if (field.key === "overview") {
+      return (
+        <EditableText
+          as="p"
+          value={field.value}
+          editable={isEdit && field.chunkCount === 1}
+          placeholder="Trip overview..."
+          onCommit={(next) => setField("overview", next)}
+          className="rc-doc-overview-lede"
+        />
+      );
+    }
+    const commitOverviewField = (next: string) => {
+      if (
+        field.key === "whoFor" ||
+        field.key === "routeSummary" ||
+        field.key === "bestStayAreas"
+      ) {
+        setField(field.key, next);
+      }
+    };
+    return (
+      <EditableText
+        as="p"
+        value={field.value}
+        editable={isEdit && field.chunkCount === 1}
+        placeholder={`${field.label}...`}
+        onCommit={commitOverviewField}
+        className="rc-doc-field-body"
+      />
+    );
+  };
+
+  const renderPage = (page: PdfPage, index: number) => {
+    switch (page.type) {
+      case "cover":
+        return renderCover(index);
+      case "overview":
+      case "overview-continuation":
+        return renderOverview(page, index);
+      case "day-plan":
+      case "day-image-plan":
+      case "day-plan-continuation":
+        return renderDayPlan(page, index);
+      case "day-notes":
+        return renderDayNotes(page, index);
+      case "local-details":
+        return renderDetails(page, index);
+      case "guides":
+      case "guides-continuation":
+        return renderGuides(page, index);
+      case "closing":
+        return renderClosing(index);
+      default:
+        return null;
+    }
+  };
+
+  const renderCover = (index: number) => (
+    <section
+      key={`page-${index}-cover`}
+      className={`rc-print-page rc-doc-cover${
+        itinerary.coverImage ? " has-photo" : " no-photo"
       }`}
-      style={themeVars(theme)}
     >
-      {/* Cover */}
-      <section
-        className={`rc-print-page rc-doc-cover${
-          itinerary.coverImage ? " has-photo" : ""
-        }`}
-      >
-        {itinerary.coverImage ? (
-          <>
-            <img
-              className="rc-doc-cover-photo"
-              src={itinerary.coverImage}
-              alt={`${country} cover`}
-              onLoad={onAssetSettled}
-              onError={onAssetSettled}
-            />
-            <div className="rc-doc-cover-scrim" />
-          </>
-        ) : null}
-        <div className="rc-doc-cover-inner">
+      {itinerary.coverImage ? (
+        <>
+          <img
+            className="rc-doc-cover-photo"
+            src={itinerary.coverImage}
+            alt={`${country} cover`}
+            onLoad={onAssetSettled}
+            onError={onAssetSettled}
+          />
+          <div className="rc-doc-cover-scrim" />
+        </>
+      ) : (
+        <div aria-hidden="true" className="rc-doc-cover-watermark">
+          {country}
+        </div>
+      )}
+      <div className="rc-doc-cover-inner">
+        <div className="rc-doc-cover-copy">
           <p className="rc-doc-eyebrow">
             {businessName || "Custom Travel Itinerary"}
           </p>
-          <div className="rc-doc-rule mt-4" />
+          <div className="rc-doc-rule rc-doc-cover-rule" />
           <EditableText
             as="h1"
             value={country}
             editable={isEdit}
             onCommit={(next) => setField("country", next)}
-            className="mt-5 text-6xl font-semibold leading-[1.04]"
+            className="rc-doc-cover-title"
           />
           <EditableText
             as="p"
             value={itinerary.title}
             editable={isEdit}
             onCommit={(next) => setField("title", next)}
-            className="mt-3 text-2xl"
-            style={{
-              color: itinerary.coverImage
-                ? "rgba(255,255,255,0.92)"
-                : "var(--doc-ink-soft)",
-            }}
+            className="rc-doc-cover-subtitle"
           />
           {itinerary.subtitle || isEdit ? (
             <Removable
@@ -239,16 +259,11 @@ export const ItineraryDocument = React.forwardRef<
                 editable={isEdit}
                 placeholder="Subtitle"
                 onCommit={(next) => setField("subtitle", next)}
-                className="mt-1 text-base"
-                style={{
-                  color: itinerary.coverImage
-                    ? "rgba(255,255,255,0.8)"
-                    : "var(--doc-ink-muted)",
-                }}
+                className="rc-doc-cover-meta"
               />
             </Removable>
           ) : null}
-          <div className="mt-7 flex flex-wrap gap-2">
+          <div className="rc-doc-cover-chips">
             <span className="rc-doc-chip">{itinerary.duration}</span>
             <span className="rc-doc-chip">{itinerary.travelerType}</span>
             {itinerary.style ? (
@@ -265,471 +280,620 @@ export const ItineraryDocument = React.forwardRef<
             patch={patch}
           />
         </div>
-      </section>
-
-      {/* Overview */}
-      <section className="rc-print-page rc-doc-overview-page px-14 py-16">
-        <p className="rc-doc-eyebrow">The trip at a glance</p>
-        <div className="rc-doc-rule mt-3" />
-        <h2 className="mt-5 text-3xl font-semibold">Trip overview</h2>
-        {itinerary.overview || isEdit ? (
-          <Removable
-            editable={isEdit}
-            hidden={hidden("overview")}
-            onToggle={() => toggle("overview")}
-            label="overview"
-          >
-            <EditableText
-              as="p"
-              value={itinerary.overview}
-              editable={isEdit}
-              placeholder="Trip overview..."
-              onCommit={(next) => setField("overview", next)}
-              className="mt-4 text-base leading-relaxed"
-              style={{ color: "var(--doc-ink-soft)" }}
-            />
-          </Removable>
+        {!itinerary.coverImage ? (
+          <div className="rc-doc-cover-side">
+            <p>{itinerary.duration}</p>
+            <p>{itinerary.routeSummary || project.regions.join(" - ")}</p>
+          </div>
         ) : null}
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <DocField
-            label="Who it's for"
-            value={itinerary.whoFor}
-            editable={isEdit}
-            onCommit={(next) => setField("whoFor", next)}
-          />
-          <DocField
-            label="Route"
-            value={itinerary.routeSummary}
-            editable={isEdit}
-            onCommit={(next) => setField("routeSummary", next)}
-          />
-          <DocField
-            label="Best stay areas"
-            value={itinerary.bestStayAreas}
-            editable={isEdit}
-            onCommit={(next) => setField("bestStayAreas", next)}
-          />
-          <DocField label="Pace & style" value={paceStyle(itinerary)} />
-        </div>
+      </div>
+    </section>
+  );
+
+  const renderOverview = (
+    page: Extract<PdfPage, { type: "overview" | "overview-continuation" }>,
+    index: number,
+  ) => (
+    <section
+      key={`page-${index}-${page.type}`}
+      className={`rc-print-page rc-doc-overview-page${
+        page.type === "overview-continuation" ? " rc-doc-continuation-page" : ""
+      }`}
+    >
+      {page.type === "overview" ? (
+        <>
+          <p className="rc-doc-eyebrow">The trip at a glance</p>
+          <div className="rc-doc-rule rc-doc-title-rule" />
+          <h2 className="rc-doc-page-title">Trip overview</h2>
+        </>
+      ) : (
+        <ContinuationHeader label="Trip overview continued" />
+      )}
+      <div className="rc-doc-overview-grid">
+        {page.fields.map((field) => {
+          const key = `${field.key}-${field.chunkIndex}`;
+          if (field.key === "overview") {
+            return (
+              <Removable
+                key={key}
+                editable={isEdit}
+                hidden={hidden("overview")}
+                onToggle={() => toggle("overview")}
+                label="overview"
+              >
+                <div className="rc-doc-overview-lede-wrap">
+                  {field.chunkCount > 1 ? (
+                    <p className="rc-doc-field-label">
+                      Overview {field.chunkIndex + 1}/{field.chunkCount}
+                    </p>
+                  ) : null}
+                  {renderEditableOverview(field)}
+                </div>
+              </Removable>
+            );
+          }
+          return (
+            <div key={key} className="rc-doc-field">
+              <p className="rc-doc-field-label">
+                {field.label}
+                {field.chunkCount > 1
+                  ? ` ${field.chunkIndex + 1}/${field.chunkCount}`
+                  : ""}
+              </p>
+              {renderEditableOverview(field)}
+            </div>
+          );
+        })}
+      </div>
+      {page.type === "overview" ? (
         <AnchorSlot
           anchor="overview"
           itinerary={itinerary}
           editable={isEdit}
           patch={patch}
         />
-      </section>
+      ) : null}
+    </section>
+  );
 
-      {/* Days */}
-      {itinerary.days.map((day) => {
-        const dayKey = `day:${day.day}`;
-        const times = TIME_FIELDS.filter((f) => day[f.key] || isEdit);
-        const notes = NOTE_FIELDS.filter((f) => day[f.key]);
-        if (hidden(dayKey)) {
-          if (!isEdit) return null;
-          return (
-            <section
-              key={day.day}
-              className="rc-print-page rc-doc-day-page rc-edit-only flex items-center justify-center px-14 py-14"
-            >
-              <button
-                type="button"
-                onClick={() => toggle(dayKey)}
-                className="rc-restore-bar"
-                title={`Restore day ${day.day}`}
-              >
-                <Eye className="size-3.5" />
-                Restore Day {day.day}
-              </button>
-            </section>
-          );
-        }
-        const detailsKey = `${dayKey}:details`;
-        const details = day.details;
-        const filledSections = details
-          ? DETAIL_SECTIONS.filter((s) => details[s.key].length)
-          : [];
-        const hasTrivia = Boolean(details?.trivia.length);
-        const hasDetails = filledSections.length > 0 || hasTrivia;
-        return (
-          <React.Fragment key={day.day}>
-          <section className="rc-print-page rc-doc-day-page px-14 py-14">
-            {isEdit ? (
-              <button
-                type="button"
-                onClick={() => toggle(dayKey)}
-                className="rc-edit-only rc-remove-btn rc-remove-day"
-                title={`Remove day ${day.day}`}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            ) : null}
-            <div className="rc-doc-day-header flex items-end justify-between gap-4">
-              <div className="rc-doc-day-heading min-w-0">
-                <p className="rc-doc-eyebrow">
-                  Day {String(day.day).padStart(2, "0")}
-                </p>
-                <EditableText
-                  as="h3"
-                  value={day.title}
-                  editable={isEdit}
-                  placeholder="Day title"
-                  onCommit={(next) => setDayField(day.day, "title", next)}
-                  className="rc-doc-day-title mt-1 text-3xl font-semibold"
+  const renderDayPlan = (
+    page: Extract<
+      PdfPage,
+      { type: "day-plan" | "day-image-plan" | "day-plan-continuation" }
+    >,
+    index: number,
+  ) => {
+    const day = itinerary.days[page.dayIndex];
+    const dayKey = `day:${day.day}`;
+    return (
+      <section
+        key={`page-${index}-${page.type}-${day.day}`}
+        className={`rc-print-page rc-doc-day-page rc-doc-${page.type}${
+          page.type === "day-plan-continuation"
+            ? " rc-doc-continuation-page"
+            : ""
+        }`}
+      >
+        {isEdit && page.type !== "day-plan-continuation" ? (
+          <button
+            type="button"
+            onClick={() => toggle(dayKey)}
+            className="rc-edit-only rc-remove-btn rc-remove-day"
+            title={`Remove day ${day.day}`}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
+        {page.type === "day-plan-continuation" ? (
+          <ContinuationHeader
+            label={`Day ${String(day.day).padStart(2, "0")} continued`}
+          />
+        ) : (
+          <DayHeader
+            day={day}
+            editable={isEdit}
+            onTitle={(next) => setDayField(day.day, "title", next)}
+            onBase={(next) => setDayField(day.day, "base", next)}
+          />
+        )}
+
+        {page.showImage ? (
+          <Removable
+            editable={isEdit}
+            hidden={hidden(`${dayKey}:image`)}
+            onToggle={() => toggle(`${dayKey}:image`)}
+            label="day image"
+            className="rc-doc-day-image-slot"
+          >
+            <div className="rc-doc-day-image">
+              <div className="rc-doc-img-frame rc-doc-day-img-frame">
+                <img
+                  className="rc-doc-img"
+                  src={day.image ?? ""}
+                  alt={`Day ${day.day}`}
+                  onLoad={onAssetSettled}
+                  onError={onAssetSettled}
                 />
-                {day.base || isEdit ? (
-                  <EditableText
-                    as="p"
-                    value={day.base}
-                    editable={isEdit}
-                    placeholder="Base city"
-                    onCommit={(next) => setDayField(day.day, "base", next)}
-                    className="rc-doc-day-base mt-1 text-sm uppercase tracking-[0.18em]"
-                    style={{ color: "var(--doc-ink-muted)" }}
-                  />
-                ) : null}
               </div>
-              <span className="rc-day-num">{day.day}</span>
             </div>
+          </Removable>
+        ) : null}
 
-            {day.image ? (
-              <Removable
-                editable={isEdit}
-                hidden={hidden(`${dayKey}:image`)}
-                onToggle={() => toggle(`${dayKey}:image`)}
-                label="day image"
-                className="rc-doc-day-image-slot"
-              >
-                <div
-                  className="rc-doc-day-image overflow-hidden rounded-2xl"
-                  style={{ border: "1px solid var(--doc-border)" }}
-                >
-                  <div
-                    className="rc-doc-img-frame rc-doc-day-img-frame"
-                    style={
-                      exportMode
-                        ? { backgroundImage: cssImageUrl(day.image) }
-                        : undefined
-                    }
-                  >
-                    <img
-                      className="rc-doc-img"
-                      src={day.image ?? ""}
-                      alt={`Day ${day.day}`}
-                      onLoad={onAssetSettled}
-                      onError={onAssetSettled}
-                    />
-                  </div>
-                </div>
-              </Removable>
-            ) : null}
+        {page.rows.length ? (
+          <DaySchedule
+            rows={page.rows}
+            editable={isEdit}
+            onCommit={(key, next) => setDayField(day.day, key, next)}
+          />
+        ) : (
+          <p className="rc-doc-empty-page-note">Schedule continues on notes.</p>
+        )}
 
-            <div className="rc-doc-day-schedule mt-7">
-              {times.map((f) => (
-                <div key={f.key as string} className="rc-day-row">
-                  <div className="rc-day-row-label">{f.label}</div>
-                  <EditableText
-                    as="div"
-                    value={(day[f.key] as string) ?? ""}
-                    editable={isEdit}
-                    placeholder={`${f.label}...`}
-                    onCommit={(next) => setDayField(day.day, f.key, next)}
-                    className="rc-day-row-body"
-                  />
-                </div>
-              ))}
-            </div>
-
-            {notes.length ? (
-              <Removable
-                editable={isEdit}
-                hidden={hidden(`${dayKey}:notes`)}
-                onToggle={() => toggle(`${dayKey}:notes`)}
-                label="notes"
-                className="rc-doc-day-notes-slot"
-              >
-                <div
-                  className="rc-doc-section rc-day-notes rounded-2xl"
-                  style={{ background: "var(--doc-accent-soft)" }}
-                >
-                  <p className="rc-doc-eyebrow">Good to know</p>
-                  <div className="rc-day-notes-grid mt-3 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
-                    {notes.map((f) => (
-                      <div key={f.key as string} className="rc-day-note text-sm">
-                        <span
-                          className="font-semibold"
-                          style={{ color: "var(--doc-ink)" }}
-                        >
-                          {f.label}:{" "}
-                        </span>
-                        <EditableText
-                          as="span"
-                          value={(day[f.key] as string) ?? ""}
-                          editable={isEdit}
-                          onCommit={(next) => setDayField(day.day, f.key, next)}
-                          style={{ color: "var(--doc-ink-soft)" }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Removable>
-            ) : null}
-
-            <AnchorSlot
-              anchor={dayKey}
-              itinerary={itinerary}
-              editable={isEdit}
-              patch={patch}
-            />
-          </section>
-
-          {/* Extra "Local details" page — only when the day has recommendations */}
-          {hasDetails && hidden(detailsKey) && isEdit ? (
-            <section className="rc-print-page rc-doc-day-details-page rc-edit-only flex items-center justify-center px-14 py-14">
-              <button
-                type="button"
-                onClick={() => toggle(detailsKey)}
-                className="rc-restore-bar"
-                title={`Restore Day ${day.day} local details`}
-              >
-                <Eye className="size-3.5" />
-                Restore Day {day.day} details
-              </button>
-            </section>
-          ) : hasDetails && !hidden(detailsKey) ? (
-            <section className="rc-print-page rc-doc-day-details-page px-14 py-14">
-              {isEdit ? (
-                <button
-                  type="button"
-                  onClick={() => toggle(detailsKey)}
-                  className="rc-edit-only rc-remove-btn rc-remove-day"
-                  title={`Remove Day ${day.day} local details`}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              ) : null}
-              <p className="rc-doc-eyebrow">
-                Local details{day.base ? ` - ${day.base}` : ""}
-              </p>
-              <div className="rc-doc-rule mt-3" />
-              <h3 className="mt-4 text-3xl font-semibold">
-                Where to eat, stay &amp; explore
-              </h3>
-              <div className="mt-6 space-y-6">
-                {filledSections.map((section) => (
-                  <Removable
-                    key={section.key}
-                    editable={isEdit}
-                    hidden={hidden(`${detailsKey}:${section.key}`)}
-                    onToggle={() => toggle(`${detailsKey}:${section.key}`)}
-                    label={section.label}
-                  >
-                    <div className="rc-doc-section rc-detail-section">
-                      <p className="rc-doc-eyebrow">{section.label}</p>
-                      <div className="mt-3 space-y-3">
-                        {details![section.key].map((item, index) => {
-                          const meta = [item.area, item.category, item.priceBand]
-                            .filter(Boolean)
-                            .join(" · ");
-                          return (
-                            <div key={index} className="rc-detail-item">
-                              <EditableText
-                                as="p"
-                                value={item.name}
-                                editable={isEdit}
-                                placeholder="Name"
-                                onCommit={(next) =>
-                                  setDetailField(
-                                    day.day,
-                                    section.key,
-                                    index,
-                                    "name",
-                                    next,
-                                  )
-                                }
-                                className="rc-detail-name"
-                              />
-                              {meta ? (
-                                <p className="rc-detail-meta">{meta}</p>
-                              ) : null}
-                              {item.whyItFits || isEdit ? (
-                                <EditableText
-                                  as="p"
-                                  value={item.whyItFits}
-                                  editable={isEdit}
-                                  placeholder="Why it fits"
-                                  onCommit={(next) =>
-                                    setDetailField(
-                                      day.day,
-                                      section.key,
-                                      index,
-                                      "whyItFits",
-                                      next,
-                                    )
-                                  }
-                                  className="rc-detail-why"
-                                />
-                              ) : null}
-                              {item.caveat ? (
-                                <p className="rc-detail-caveat">{item.caveat}</p>
-                              ) : null}
-                              {item.source ? (
-                                <p className="rc-detail-source">
-                                  Source: {item.source}
-                                </p>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </Removable>
-                ))}
-
-                {hasTrivia ? (
-                  <Removable
-                    editable={isEdit}
-                    hidden={hidden(`${detailsKey}:trivia`)}
-                    onToggle={() => toggle(`${detailsKey}:trivia`)}
-                    label="local trivia"
-                  >
-                    <div className="rc-doc-section rc-detail-section">
-                      <p className="rc-doc-eyebrow">Local trivia</p>
-                      <ul className="mt-3 space-y-2">
-                        {details!.trivia.map((item, index) => (
-                          <li key={index} className="rc-detail-trivia">
-                            <EditableText
-                              as="span"
-                              value={item.text}
-                              editable={isEdit}
-                              placeholder="Trivia"
-                              onCommit={(next) =>
-                                setTriviaText(day.day, index, next)
-                              }
-                            />
-                            {item.source ? (
-                              <span className="rc-detail-source">
-                                {" "}
-                                — {item.source}
-                              </span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </Removable>
-                ) : null}
-              </div>
-              <AnchorSlot
-                anchor={detailsKey}
-                itinerary={itinerary}
-                editable={isEdit}
-                patch={patch}
-              />
-            </section>
-          ) : null}
-          </React.Fragment>
-        );
-      })}
-
-      {/* Guides */}
-      {guides.length || isEdit ? (
-        <section className="rc-print-page rc-doc-guides-page px-14 py-16">
-          <p className="rc-doc-eyebrow">Plan with confidence</p>
-          <div className="rc-doc-rule mt-3" />
-          <h2 className="mt-5 text-3xl font-semibold">Guides & checklists</h2>
-          <div className="mt-6 space-y-6">
-            {guides.map((g) => (
-              <Removable
-                key={g.key}
-                editable={isEdit}
-                hidden={hidden(`guide:${g.key}`)}
-                onToggle={() => toggle(`guide:${g.key}`)}
-                label={g.label}
-              >
-                <div className="rc-doc-section">
-                  <h3 className="text-lg font-semibold">{g.label}</h3>
-                  <div className="rc-doc-hairline mt-2" />
-                  <EditableText
-                    as="p"
-                    value={itinerary[g.key] as string}
-                    editable={isEdit}
-                    onCommit={(next) => setField(g.key, next)}
-                    className="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
-                    style={{ color: "var(--doc-ink-soft)" }}
-                  />
-                </div>
-              </Removable>
-            ))}
-          </div>
+        {page.type !== "day-plan-continuation" ? (
           <AnchorSlot
-            anchor="guides"
+            anchor={dayKey}
             itinerary={itinerary}
             editable={isEdit}
             patch={patch}
           />
-        </section>
-      ) : null}
+        ) : null}
+      </section>
+    );
+  };
 
-      {/* Closing / disclaimer */}
-      <section className="rc-print-page rc-doc-closing-page px-14 py-16">
-        <div className="rc-doc-rule" />
-        <p className="mt-5 text-xl font-semibold">
-          {businessName || "Thank you & safe travels"}
-        </p>
-        <EditableText
-          as="p"
-          value={disclaimer}
+  const renderDayNotes = (
+    page: Extract<PdfPage, { type: "day-notes" }>,
+    index: number,
+  ) => {
+    const day = itinerary.days[page.dayIndex];
+    const dayKey = `day:${day.day}`;
+    return (
+      <section
+        key={`page-${index}-day-notes-${day.day}`}
+        className="rc-print-page rc-doc-day-page rc-doc-day-notes-page"
+      >
+        {!page.continuation ? (
+          <DayHeader
+            day={day}
+            editable={isEdit}
+            onTitle={(next) => setDayField(day.day, "title", next)}
+            onBase={(next) => setDayField(day.day, "base", next)}
+            titleSuffix="Good to know"
+          />
+        ) : (
+          <ContinuationHeader
+            label={`Day ${String(day.day).padStart(2, "0")} notes continued`}
+          />
+        )}
+        <Removable
           editable={isEdit}
-          onCommit={(next) => setField("verificationNotes", next)}
-          className="mt-4 max-w-2xl text-xs leading-relaxed"
-          style={{ color: "var(--doc-ink-muted)" }}
-        />
+          hidden={hidden(`${dayKey}:notes`)}
+          onToggle={() => toggle(`${dayKey}:notes`)}
+          label="notes"
+          className="rc-doc-day-notes-slot"
+        >
+          <div className="rc-doc-section rc-day-notes">
+            <p className="rc-doc-eyebrow">Good to know</p>
+            <div className="rc-day-notes-grid">
+              {page.notes.map((note) => (
+                <DayNote
+                  key={`${note.key}-${note.chunkIndex}`}
+                  note={note}
+                  editable={isEdit}
+                  onCommit={(key, next) => setDayField(day.day, key, next)}
+                />
+              ))}
+            </div>
+          </div>
+        </Removable>
+      </section>
+    );
+  };
+
+  const renderDetails = (
+    page: Extract<PdfPage, { type: "local-details" }>,
+    index: number,
+  ) => {
+    const day = itinerary.days[page.dayIndex];
+    const dayKey = `day:${day.day}`;
+    const detailsKey = `${dayKey}:details`;
+    const details = day.details;
+    if (!details) return null;
+    const filledSections = page.sections.filter((section) =>
+      section.itemIndexes.some((itemIndex) => details[section.key][itemIndex]),
+    );
+    const hasTrivia = page.triviaIndexes.some((itemIndex) => details.trivia[itemIndex]);
+    return (
+      <section
+        key={`page-${index}-details-${day.day}`}
+        className={`rc-print-page rc-doc-day-details-page${
+          page.continuation ? " rc-doc-continuation-page" : ""
+        }`}
+      >
+        {isEdit ? (
+          <button
+            type="button"
+            onClick={() => toggle(detailsKey)}
+            className="rc-edit-only rc-remove-btn rc-remove-day"
+            title={`Remove Day ${day.day} local details`}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
+        {page.continuation ? (
+          <ContinuationHeader
+            label={`Day ${String(day.day).padStart(2, "0")} local details continued`}
+          />
+        ) : (
+          <>
+            <p className="rc-doc-eyebrow">
+              Local details{day.base ? ` - ${day.base}` : ""}
+            </p>
+            <div className="rc-doc-rule rc-doc-title-rule" />
+            <h3 className="rc-doc-page-title">Where to eat, stay &amp; explore</h3>
+          </>
+        )}
+        <div className="rc-detail-list">
+          {filledSections.map((section) => (
+            <Removable
+              key={section.key}
+              editable={isEdit}
+              hidden={hidden(`${detailsKey}:${section.key}`)}
+              onToggle={() => toggle(`${detailsKey}:${section.key}`)}
+              label={section.label}
+            >
+              <div className="rc-doc-section rc-detail-section">
+                <p className="rc-doc-eyebrow">{section.label}</p>
+                <div className="rc-detail-items">
+                  {section.itemIndexes.map((itemIndex) => {
+                    const item = details[section.key][itemIndex];
+                    if (!item) return null;
+                    const meta = [item.area, item.category, item.priceBand]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <div key={itemIndex} className="rc-detail-item">
+                        <EditableText
+                          as="p"
+                          value={item.name}
+                          editable={isEdit}
+                          placeholder="Name"
+                          onCommit={(next) =>
+                            setDetailField(
+                              day.day,
+                              section.key,
+                              itemIndex,
+                              "name",
+                              next,
+                            )
+                          }
+                          className="rc-detail-name"
+                        />
+                        {meta ? <p className="rc-detail-meta">{meta}</p> : null}
+                        {item.whyItFits || isEdit ? (
+                          <EditableText
+                            as="p"
+                            value={item.whyItFits}
+                            editable={isEdit}
+                            placeholder="Why it fits"
+                            onCommit={(next) =>
+                              setDetailField(
+                                day.day,
+                                section.key,
+                                itemIndex,
+                                "whyItFits",
+                                next,
+                              )
+                            }
+                            className="rc-detail-why"
+                          />
+                        ) : null}
+                        {item.caveat ? (
+                          <p className="rc-detail-caveat">{item.caveat}</p>
+                        ) : null}
+                        {item.source ? (
+                          <p className="rc-detail-source">Source: {item.source}</p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Removable>
+          ))}
+
+          {hasTrivia ? (
+            <Removable
+              editable={isEdit}
+              hidden={hidden(`${detailsKey}:trivia`)}
+              onToggle={() => toggle(`${detailsKey}:trivia`)}
+              label="local trivia"
+            >
+              <div className="rc-doc-section rc-detail-section">
+                <p className="rc-doc-eyebrow">Local trivia</p>
+                <ul className="rc-detail-trivia-list">
+                  {page.triviaIndexes.map((itemIndex) => {
+                    const item = details.trivia[itemIndex];
+                    if (!item) return null;
+                    return (
+                      <li key={itemIndex} className="rc-detail-trivia">
+                        <EditableText
+                          as="span"
+                          value={item.text}
+                          editable={isEdit}
+                          placeholder="Trivia"
+                          onCommit={(next) =>
+                            setTriviaText(day.day, itemIndex, next)
+                          }
+                        />
+                        {item.source ? (
+                          <span className="rc-detail-source"> - {item.source}</span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </Removable>
+          ) : null}
+        </div>
+        {!page.continuation ? (
+          <AnchorSlot
+            anchor={detailsKey}
+            itinerary={itinerary}
+            editable={isEdit}
+            patch={patch}
+          />
+        ) : null}
+      </section>
+    );
+  };
+
+  const renderGuides = (
+    page: Extract<PdfPage, { type: "guides" | "guides-continuation" }>,
+    index: number,
+  ) => (
+    <section
+      key={`page-${index}-${page.type}`}
+      className={`rc-print-page rc-doc-guides-page${
+        page.type === "guides-continuation" ? " rc-doc-continuation-page" : ""
+      }`}
+    >
+      {page.type === "guides" ? (
+        <>
+          <p className="rc-doc-eyebrow">Plan with confidence</p>
+          <div className="rc-doc-rule rc-doc-title-rule" />
+          <h2 className="rc-doc-page-title">Guides &amp; checklists</h2>
+        </>
+      ) : (
+        <ContinuationHeader label="Guides & checklists continued" />
+      )}
+      <div className="rc-doc-guide-list">
+        {page.guides.map((guide) => (
+          <GuideBlock
+            key={`${guide.key}-${guide.chunkIndex}`}
+            guide={guide}
+            editable={isEdit && guide.chunkCount === 1}
+            onCommit={(key, next) => setField(key, next)}
+          />
+        ))}
+      </div>
+      {page.type === "guides" ? (
         <AnchorSlot
-          anchor="closing"
+          anchor="guides"
           itinerary={itinerary}
           editable={isEdit}
           patch={patch}
         />
-      </section>
+      ) : null}
+    </section>
+  );
+
+  const renderClosing = (index: number) => (
+    <section
+      key={`page-${index}-closing`}
+      className="rc-print-page rc-doc-closing-page"
+    >
+      <div className="rc-doc-rule" />
+      <p className="rc-doc-closing-title">
+        {businessName || "Thank you & safe travels"}
+      </p>
+      <EditableText
+        as="p"
+        value={disclaimer}
+        editable={isEdit}
+        onCommit={(next) => setField("verificationNotes", next)}
+        className="rc-doc-disclaimer"
+      />
+      <AnchorSlot
+        anchor="closing"
+        itinerary={itinerary}
+        editable={isEdit}
+        patch={patch}
+      />
+    </section>
+  );
+
+  return (
+    <div
+      ref={ref}
+      className={`rc-doc rc-print-root${isEdit ? " rc-doc-editing" : ""}`}
+      style={themeVars(theme)}
+    >
+      {pages.map(renderPage)}
+      {isEdit
+        ? itinerary.days.map((day) =>
+            hidden(`day:${day.day}`) ? (
+              <section
+                key={`restore-day-${day.day}`}
+                className="rc-print-page rc-doc-day-page rc-edit-only rc-doc-restore-page"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggle(`day:${day.day}`)}
+                  className="rc-restore-bar"
+                  title={`Restore day ${day.day}`}
+                >
+                  <Eye className="size-3.5" />
+                  Restore Day {day.day}
+                </button>
+              </section>
+            ) : null,
+          )
+        : null}
     </div>
   );
 });
 
-function paceStyle(itinerary: ItineraryOutput): string {
-  return [itinerary.travelerType, itinerary.style, itinerary.budget]
-    .filter(Boolean)
-    .join(" - ");
+function DayHeader({
+  day,
+  editable,
+  onTitle,
+  onBase,
+  titleSuffix,
+}: {
+  day: ItineraryOutput["days"][number];
+  editable: boolean;
+  onTitle: (next: string) => void;
+  onBase: (next: string) => void;
+  titleSuffix?: string;
+}) {
+  return (
+    <div className="rc-doc-day-header">
+      <div className="rc-doc-day-heading">
+        <p className="rc-doc-eyebrow">
+          Day {String(day.day).padStart(2, "0")}
+        </p>
+        <EditableText
+          as="h3"
+          value={titleSuffix ?? day.title}
+          editable={editable && !titleSuffix}
+          placeholder="Day title"
+          onCommit={onTitle}
+          className="rc-doc-day-title"
+        />
+        {day.base || editable ? (
+          <EditableText
+            as="p"
+            value={day.base}
+            editable={editable}
+            placeholder="Base city"
+            onCommit={onBase}
+            className="rc-doc-day-base"
+          />
+        ) : null}
+      </div>
+      <span className="rc-day-num">{day.day}</span>
+    </div>
+  );
 }
 
-function DocField({
-  label,
-  value,
-  editable = false,
+function ContinuationHeader({ label }: { label: string }) {
+  return (
+    <div className="rc-doc-continuation-header">
+      <p className="rc-doc-eyebrow">{label}</p>
+      <div className="rc-doc-hairline" />
+    </div>
+  );
+}
+
+function DaySchedule({
+  rows,
+  editable,
   onCommit,
 }: {
-  label: string;
-  value: string;
-  editable?: boolean;
-  onCommit?: (next: string) => void;
+  rows: PdfDayRow[];
+  editable: boolean;
+  onCommit: (key: DayTimeKey, next: string) => void;
 }) {
-  if (!value && !editable) return null;
   return (
-    <div>
-      <p
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "var(--doc-ink-muted)" }}
-      >
-        {label}
-      </p>
+    <div className="rc-doc-day-schedule">
+      {rows.map((row) => (
+        <div
+          key={`${row.key}-${row.chunkIndex}`}
+          className={`rc-day-row${row.continuationRow ? " is-continuation" : ""}`}
+        >
+          <div className="rc-day-row-label">
+            {row.label}
+            {row.chunkCount > 1 ? (
+              <span className="rc-row-part">
+                {row.chunkIndex + 1}/{row.chunkCount}
+              </span>
+            ) : null}
+          </div>
+          <EditableText
+            as="div"
+            value={row.value}
+            editable={editable && row.chunkCount === 1}
+            placeholder={`${row.label}...`}
+            onCommit={(next) => onCommit(row.key, next)}
+            className="rc-day-row-body"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DayNote({
+  note,
+  editable,
+  onCommit,
+}: {
+  note: PdfDayNote;
+  editable: boolean;
+  onCommit: (key: DayNoteKey, next: string) => void;
+}) {
+  return (
+    <div
+      className={`rc-day-note${
+        note.conclusion ? " rc-day-note-conclusion" : ""
+      }`}
+    >
+      <span className="rc-day-note-label">
+        {note.label}
+        {note.chunkCount > 1
+          ? ` ${note.chunkIndex + 1}/${note.chunkCount}`
+          : ""}
+        :{" "}
+      </span>
+      <EditableText
+        as="span"
+        value={note.value}
+        editable={editable && note.chunkCount === 1}
+        onCommit={(next) => onCommit(note.key, next)}
+        className="rc-day-note-body"
+      />
+    </div>
+  );
+}
+
+function GuideBlock({
+  guide,
+  editable,
+  onCommit,
+}: {
+  guide: PdfTextBlock<GuideKey>;
+  editable: boolean;
+  onCommit: (key: GuideKey, next: string) => void;
+}) {
+  return (
+    <div className="rc-doc-section rc-guide-section">
+      <h3 className="rc-guide-title">
+        {guide.label}
+        {guide.chunkCount > 1 ? (
+          <span className="rc-guide-part">
+            {guide.chunkIndex + 1}/{guide.chunkCount}
+          </span>
+        ) : null}
+      </h3>
+      <div className="rc-doc-hairline" />
       <EditableText
         as="p"
-        value={value}
-        editable={editable && Boolean(onCommit)}
-        placeholder={`${label}...`}
-        onCommit={(next) => onCommit?.(next)}
-        className="mt-1 text-sm"
-        style={{ color: "var(--doc-ink-soft)" }}
+        value={guide.value}
+        editable={editable}
+        onCommit={(next) => onCommit(guide.key, next)}
+        className="rc-guide-body"
       />
     </div>
   );

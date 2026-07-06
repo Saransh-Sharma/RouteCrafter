@@ -19,7 +19,11 @@ import { Select } from "@/components/ui/field";
 import { ItineraryDocument } from "./ItineraryDocument";
 import { PdfTextControls } from "./PdfTextControls";
 import { PdfThemeControls } from "./PdfThemeControls";
-import { prepareDocumentForPdf } from "./pdf-assets";
+import {
+  PDF_PRINT_PAYLOAD_KEY,
+  createPdfPrintPayload,
+  pdfFilename,
+} from "./pdf-print-payload";
 import {
   captureAsset,
   markAiRunApplied,
@@ -41,12 +45,6 @@ import { normalizeAiDayDetails } from "@/lib/ai/itinerary-normalization";
 import { parseJsonObject } from "@/lib/ai/parse";
 import type { AiAcceptedRun } from "@/lib/ai/types";
 
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-  );
-}
-
 export function PdfBuilderPanel({
   project,
   onNavigate,
@@ -61,7 +59,6 @@ export function PdfBuilderPanel({
   const [downloading, setDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState(false);
-  const [capturing, setCapturing] = React.useState(false);
   const docRef = React.useRef<HTMLDivElement>(null);
   const patchItinerary = useProjectsStore((state) => state.patchItinerary);
   const update = useProjectsStore((state) => state.update);
@@ -169,46 +166,25 @@ export function PdfBuilderPanel({
     expectedAssets === 0 || assetState.settled >= expectedAssets;
 
   async function downloadPdf() {
-    if (!docRef.current || !selected) return;
+    if (!selected) return;
     setDownloading(true);
     setDownloadError(null);
-    // Render the clean (non-edit) document for capture so no edit chrome leaks
-    // into the PDF.
-    setCapturing(true);
-    await nextFrame();
     try {
-      const documentElement = docRef.current;
-      if (!documentElement) return;
-      await prepareDocumentForPdf(documentElement);
-      const exportBounds = documentElement.getBoundingClientRect();
-      const exportWidth = Math.ceil(
-        Math.max(documentElement.scrollWidth, exportBounds.width),
-      );
-      const html2pdf = (await import("html2pdf.js")).default;
-      const slug = (project.country || "project").toLowerCase();
-      const filename = `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`;
-      const pdfBlob = await html2pdf()
-        .set({
-          margin: 0,
-          filename,
-          image: { type: "jpeg", quality: 0.96 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-            windowWidth: exportWidth,
-            ignoreElements: (element: Element) =>
-              element.classList?.contains("rc-edit-only"),
-          },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: {
-            mode: ["css", "legacy"],
-            before: ".rc-print-page:not(:first-child):not(.rc-doc-overview-page)",
-            avoid: [".rc-doc-section", ".rc-day-row", ".rc-doc-block"],
-          },
-        })
-        .from(documentElement)
-        .output("blob");
+      const filename = pdfFilename(project, selected.id);
+      const response = await fetch("/api/pdf/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, itineraryId: selected.id }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(
+          typeof body?.error === "string"
+            ? body.error
+            : "Could not generate the PDF.",
+        );
+      }
+      const pdfBlob = await response.blob();
       const url = URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
       link.href = url;
@@ -241,12 +217,28 @@ export function PdfBuilderPanel({
         );
       }
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not generate the PDF.";
       setDownloadError(
-        error instanceof Error ? error.message : "Could not generate the PDF.",
+        `${message} Use Print / Save as PDF as a fallback.`,
       );
     } finally {
       setDownloading(false);
-      setCapturing(false);
+    }
+  }
+
+  function openPrintPdf() {
+    if (!selected) return;
+    try {
+      window.localStorage.setItem(
+        PDF_PRINT_PAYLOAD_KEY,
+        JSON.stringify(createPdfPrintPayload(project, selected.id)),
+      );
+      window.open("/pdf/print?autoprint=1", "_blank", "noopener,noreferrer");
+    } catch {
+      setDownloadError(
+        "Could not prepare the print preview. Remove a large uploaded image and try again.",
+      );
     }
   }
 
@@ -450,7 +442,7 @@ export function PdfBuilderPanel({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
+            onClick={openPrintPdf}
             disabled={!assetsReady || downloading}
           >
             <Printer className="size-4" />
@@ -540,8 +532,7 @@ export function PdfBuilderPanel({
             ref={docRef}
             itinerary={selected}
             project={project}
-            editable={editing && !capturing}
-            exportMode={capturing}
+            editable={editing}
             editor={docEditor}
             onAssetSettled={() =>
               setAssetState((current) =>

@@ -106,7 +106,7 @@ add or extend a colocated `*.test.ts(x)` file.
 ## Continuous integration
 
 CI runs on pull requests and pushes to `main`
-([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) on **Node 20**:
+([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) on **Node 24**:
 
 ```8:20:.github/workflows/ci.yml
 jobs:
@@ -116,7 +116,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run lint
