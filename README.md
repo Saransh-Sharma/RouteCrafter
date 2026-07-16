@@ -1,32 +1,48 @@
 # RouteCrafter
 
-A premium itinerary-generation studio for creating country-specific travel
-itinerary products and marketplace (Fiverr / Etsy / Gumroad) listing assets.
+The admin panel for creating and selling travel itinerary products — premium
+day-by-day itineraries, print-ready PDFs, and marketplace listing assets for
+Fiverr, Etsy, Gumroad, and direct sales.
 
-RouteCrafter is a **travel itinerary product factory** for creators who sell
-custom travel-planning services. It helps you repeatedly produce premium,
-editorial, configurable itinerary products for any country, traveler type, trip
-length, budget, and deliverable format — without hardcoding any single country.
+RouteCrafter is a **travel itinerary product factory**. One product = one
+country: a positioning, committed editions (duration × traveler type, each
+with a real multi-city route), a polished day-by-day itinerary, a designed
+PDF, and ready-to-paste listing copy. The headline feature is **Series** —
+multiply a finished product across countries with AI: the engine clones the
+product's structure, transposes the route to real destinations in each target
+country, regenerates the itinerary and listing in the same voice, and each
+country version becomes its own sellable product.
 
 Projects and assets live in a shared cloud workspace (Postgres + Vercel Blob)
 with a browser local cache for fast editing. Every artifact can still be
-produced through copy-paste prompts without an AI API key. Access to the app is
-protected by password or email-OTP authentication. Optional AI assist lets you
-use server-funded OpenAI by default or bring your own provider key (OpenAI,
-Anthropic, or Gemini) to draft content directly inside the app.
+produced through copy-paste prompts without an AI API key, and **API image
+generation is always opt-in** — every image slot offers upload and a
+copy-ready external prompt first. Access is protected by password or
+email-OTP authentication. AI assist uses server-funded OpenAI by default or a
+personal provider key (OpenAI, Anthropic, or Gemini).
+
+## Information architecture
+
+Two nouns, four editor tabs:
+
+| Surface | Purpose |
+|---|---|
+| `/` | **The Shelf** — image-forward product grid, groupable by country or series |
+| `/products/new` | One creation surface: blank, from template, or a multi-country **series** |
+| `/products/[id]` | **Product editor** — Trip · Itinerary · PDF · Listing tabs, plus Readiness (a checklist, never a gate) and Export in the header |
+| `/series/[id]` | **Series board** — per-country generation status, cost tally, retry/resume |
+| `/settings` | AI provider keys, defaults, and a short "How it works" |
 
 ## Tech stack
 
 - [Next.js 16](https://nextjs.org) (App Router) + React 19
-- TypeScript
-- Tailwind CSS v4
-- [Zod](https://zod.dev) schemas as the single source of truth for the data model
+- TypeScript, Tailwind CSS v4
+- [Zod](https://zod.dev) schemas as the single source of truth for the data model (`schemaVersion 5`)
 - Postgres/Vercel Blob shared workspace plus Zustand `localStorage` cache
-- Signed HttpOnly JWT sessions, Resend email OTP, and Upstash Redis rate limits
-- Hand-built UI component system (`src/components/ui`)
-- `lucide-react` icons, `clsx` + `tailwind-merge` for class composition
-- `html2pdf.js` for client-side PDF export
-- `vitest` + Testing Library for unit tests
+- Signed HttpOnly JWT sessions, Resend email OTP, Upstash Redis rate limits
+- Hand-built UI component system (`src/components/ui`, native `<dialog>` overlays)
+- Server-side PDF export: Playwright Chromium renders `/pdf/print` and calls `page.pdf()`
+- `vitest` + Testing Library for unit tests, Playwright for e2e
 
 ## Getting started
 
@@ -35,13 +51,13 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Demo projects are seeded on
-first run.
+Open [http://localhost:3000](http://localhost:3000). Demo projects are seeded
+on first run.
 
 ```bash
 npm run lint     # ESLint
 npm run test     # Vitest (unit tests)
-npm run test:e2e # Playwright authentication flows
+npm run test:e2e # Playwright e2e suite
 npm run build    # Production build
 ```
 
@@ -55,64 +71,58 @@ npm run build    # Production build
 ```
 src/
   app/
-    (main)/page.tsx          # Server dashboard shell
-    (main)/*/*Client.tsx     # Interactive client leaves
-    (main)/projects/         # List, new, and [id] workspace
-    api/projects/            # Shared project workspace API
-    api/ai/text/route.ts     # Server-side AI text proxy
-    api/ai/image/route.ts    # Server-side AI image proxy
-    layout.tsx, globals.css  # Shell + design system
+    (main)/page.tsx            # The Shelf (product grid)
+    (main)/products/new/       # Creation: blank / template / series
+    (main)/products/[id]/      # Product editor (4 tabs)
+    (main)/series/[id]/        # Series board
+    (main)/settings/           # AI settings + how-it-works
+    pdf/print/                 # Headless print route for PDF export
+    api/                       # projects, ai, assets, templates, pdf/export…
+    layout.tsx, globals.css    # Shell + design tokens
+    pdf.css                    # Printable document styles (single source)
   components/
-    layout/                  # AppShell, Sidebar, MobileNav, nav
-    ui/                       # Button, Card, Badge, fields, OutputBlock, etc.
-    workspace/               # Workspace tabs + panels (9 modules)
-    ai/                       # AiRunSheet, AiCostButton
-    dashboard/               # Dashboard-specific widgets
+    layout/                    # AppShell, TopBar, CommandPalette
+    ui/                        # Primitives incl. overlay/{Dialog,Popover,Menu}
+    editor/                    # Editor tabs, Readiness, Export, ImageSlot, MediaDrawer
+    series/                    # MultiplyDialog, SeriesBatchForm, board pieces
+    shelf/                     # ProductCard
+    workspace/                 # Itinerary/listing/PDF/route panels
+    ai/                        # AiRunSheet, AiCostButton
   lib/
-    schemas/                 # Zod schemas + data model (source of truth)
-    generation/              # Pure prompt-template + scaffold engine
-    ai/                       # AI clients, provider layer, JSON review helpers
-    client/                  # Typed browser API modules
-    projects/                # Project commands + cloud sync controller
-    itinerary/               # Pure itinerary editing/merge helpers
-    store/                   # Zustand facades (projects, ai-settings)
-    io/                       # Project JSON import/export
-    project-normalization.ts # Schema migration/normalization
-    seed-projects.ts         # First-run demo data
+    schemas/                   # Zod schemas + data model (source of truth)
+    series/                    # Cross-country engine: clone, engine, estimate
+    ai/                        # Clients, provider layer, transpose prompts
+    generation/                # Pure prompt-template + scaffold engine
+    editions.ts                # Edition & route helpers
+    readiness.ts               # Launch-readiness linting
+    project-normalization.ts   # Schema migration/normalization (lazy, on read)
 ```
 
 ## Documentation
 
 Full documentation lives in [`docs/`](docs/README.md):
 
-- **Product**
-  - [Product overview](docs/product/overview.md) — what it is, who it's for, features, principles
-- **Guides**
-  - [Getting started](docs/guides/getting-started.md) — install, scripts, local data, and the five-stage production route
-  - [User guide](docs/guides/user-guide.md) — five-stage workflow from Define through Publish
-  - [AI setup](docs/guides/ai-setup.md) — server OpenAI, personal overrides, models, estimates, safety
-- **Architecture**
-  - [Architecture overview](docs/architecture/overview.md) — system map and principles
-  - [Data model](docs/architecture/data-model.md) — entities, enums, normalization, import/export
-  - [Generation engine](docs/architecture/generation-engine.md) — templates, scaffolds, realism rules
-  - [AI integration](docs/architecture/ai-integration.md) — providers, tasks, API routes, security
-  - [State & persistence](docs/architecture/state-and-persistence.md) — Zustand stores, hydration
-  - [UI & design system](docs/architecture/ui-and-design-system.md) — components, tokens, PDF builder
-- **Development**
-  - [Contributing](docs/development/contributing.md) — conventions, testing, CI, extension guides
+- [Product overview](docs/product/overview.md) — what it is, the creator loop, series
+- [Series engine](docs/architecture/series-engine.md) — cross-country transposition pipeline
+- [Data model](docs/architecture/data-model.md) — entities, enums, v5 migration
+- [AI integration](docs/architecture/ai-integration.md) — providers, tasks, security
+- [Generation engine](docs/architecture/generation-engine.md) — templates, scaffolds, realism rules
+- [State & persistence](docs/architecture/state-and-persistence.md) — stores, sync, conflicts
+- [Contributing](docs/development/contributing.md) — conventions, testing, CI
 
 ## Design direction
 
-Warm ivory paper, sage + forest green, terracotta, warm brown, dusty teal, and
-muted gold accents. Editorial serif headings (Fraunces) with a clean sans body
-(Inter). Rounded cards, soft shadows, calm whitespace — a boutique itinerary
-studio, not a generic SaaS dashboard.
+Modern travel editorial: warm paper surfaces, quiet ink, sage as the single
+interactive accent, image-forward cards with a duotone scrim. Editorial serif
+headings (Fraunces) on a strict six-step type scale with a clean sans body
+(Inter). The tool stays calm; the itinerary PDFs carry the visual richness.
 
 ## Principles
 
-- Generation templates stay separate from UI.
-- Everything generated is editable and copyable.
-- No hardcoded single-country logic.
-- Never fabricate real-time prices, hours, or hotel availability — always remind
-  the user to verify before delivery.
-- The app is fully usable without an AI API key.
+- The creator loop is the IA: create → generate → design → list → export.
+- Readiness is a checklist, never a gate — export is always available.
+- Everything generated is editable and copyable; prompts work without a key.
+- API image generation is opt-in, always behind an explicit cost confirmation.
+- No hardcoded single-country logic; series multiply structure, not places.
+- Never fabricate live prices, hours, or availability — verification notes
+  exist so buyers know what to double-check.

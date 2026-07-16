@@ -11,6 +11,8 @@ import {
   type SalesChannel,
   type Template,
   type TravelerType,
+  type TravelStyle,
+  createEmptyTripConfig,
 } from "@/lib/schemas";
 import { normalizeProject } from "@/lib/project-normalization";
 import { realignItineraryDurationText } from "@/lib/generation/itinerary";
@@ -58,10 +60,9 @@ export interface CreateProjectInput {
   regions?: string[];
   positioning?: string;
   targetAudience?: string;
-  travelStyles?: Project["travelStyles"];
-  travelerTypes?: Project["travelerTypes"];
-  durations?: Project["durations"];
-  deliverables?: Project["deliverables"];
+  /** Seeds the first trip configuration (the authoritative home for styles). */
+  travelStyles?: TravelStyle[];
+  travelerTypes?: TravelerType[];
   brandStyle?: Partial<Project["brandStyle"]>;
   offerModel?: OfferModel;
   channels?: SalesChannel[];
@@ -179,10 +180,15 @@ export function createProjectCommand(input: CreateProjectInput, projectCount: nu
     regions: input.regions ?? [],
     positioning: input.positioning ?? "",
     targetAudience: input.targetAudience ?? "",
-    travelStyles: input.travelStyles ?? [],
-    travelerTypes: input.travelerTypes ?? [],
-    durations: input.durations ?? [],
-    deliverables: input.deliverables ?? [],
+    tripConfigs:
+      input.travelStyles?.length || input.travelerTypes?.length
+        ? [
+            createEmptyTripConfig({
+              travelStyles: input.travelStyles ?? [],
+              travelerType: input.travelerTypes?.[0] ?? "Couple",
+            }),
+          ]
+        : [],
     productionPlan: {
       offerModel: input.offerModel ?? "digital",
       channels: input.channels ?? ["etsy"],
@@ -378,10 +384,6 @@ export function createProjectFromTemplateCommand(
     regions: input.regions ?? template.project.regions,
     positioning: input.positioning ?? template.project.positioning,
     targetAudience: input.targetAudience ?? template.project.targetAudience,
-    travelStyles: input.travelStyles ?? template.project.travelStyles,
-    travelerTypes: input.travelerTypes ?? template.project.travelerTypes,
-    durations: input.durations ?? template.project.durations,
-    deliverables: input.deliverables ?? [],
     brandStyle: {
       ...template.project.brandStyle,
       ...input.brandStyle,
@@ -390,11 +392,27 @@ export function createProjectFromTemplateCommand(
         input.brandStyle?.voice ??
         template.project.brandStyle.voice,
     },
-    tripConfigs: template.project.tripConfigs.map((config) => ({
-      ...config,
-      id: crypto.randomUUID(),
-      updatedAt: timestamp,
-    })),
+    tripConfigs: template.project.tripConfigs.length
+      ? template.project.tripConfigs.map((config, index) => ({
+          ...config,
+          ...(index === 0
+            ? {
+                travelStyles: input.travelStyles ?? config.travelStyles,
+                travelerType:
+                  input.travelerTypes?.[0] ?? config.travelerType,
+              }
+            : {}),
+          id: crypto.randomUUID(),
+          updatedAt: timestamp,
+        }))
+      : input.travelStyles?.length || input.travelerTypes?.length
+        ? [
+            createEmptyTripConfig({
+              travelStyles: input.travelStyles ?? [],
+              travelerType: input.travelerTypes?.[0] ?? "Couple",
+            }),
+          ]
+        : [],
     productionPlan: {
       ...template.project.productionPlan,
       offerModel: input.offerModel ?? template.project.productionPlan.offerModel,

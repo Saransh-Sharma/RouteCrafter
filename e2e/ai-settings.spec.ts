@@ -54,9 +54,8 @@ test("uses RouteCrafter server OpenAI without a personal key", async ({
 }) => {
   await prepareApp(page, { projects: [fullProject] });
   await mockAiText(page, "Server-funded prompt result");
-  await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=prompts`,
-  );
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=listing`);
+  await page.getByText("Prompt studio", { exact: true }).click();
   await page.getByRole("button", { name: "Run with AI" }).click();
 
   await expect(page.getByText("AI request estimate")).toBeVisible();
@@ -80,9 +79,7 @@ test("previews and applies a mocked structured listing while recording usage", a
       "Mocked AI proposal for a rail-first Portugal culinary escape.",
   };
   await mockAiText(page, JSON.stringify(proposedListing));
-  await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`,
-  );
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=listing`);
 
   const shortDescription = page
     .getByText("Short description", { exact: true })
@@ -105,13 +102,19 @@ test("previews and applies a mocked structured listing while recording usage", a
   await page.getByRole("button", { name: "Apply selected fields" }).click();
   await expect(shortDescription).toHaveValue(/Mocked AI proposal/);
 
-  await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=exports`,
-  );
-  const usageRow = page
-    .getByText("AI usage appendix", { exact: true })
-    .locator("xpath=ancestor::div[contains(@class, 'rc-card')]");
-  await expect(usageRow.getByText("2", { exact: true })).toBeVisible();
+  await expect
+    .poll(async () =>
+      page.evaluate((id) => {
+        const raw = localStorage.getItem("routecrafter:v1");
+        if (!raw) return -1;
+        const projects = JSON.parse(raw).state?.projects ?? [];
+        const project = projects.find(
+          (item: { id: string }) => item.id === id,
+        );
+        return project?.aiRuns?.length ?? -1;
+      }, FULL_PROJECT_ID),
+    )
+    .toBe(2);
 });
 
 test("rejects invalid AI JSON and applies a mocked generated image only after review", async ({
@@ -119,9 +122,7 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
 }) => {
   await prepareApp(page, { projects: [fullProject], withAiKey: true });
   await mockAiText(page, '{"packages":"not-an-array"}');
-  await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`,
-  );
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=listing`);
   await page.getByRole("button", { name: "AI improve listing" }).first().click();
   await page.getByRole("button", { name: /Confirm run/ }).click();
   await expect(
@@ -133,9 +134,7 @@ test("rejects invalid AI JSON and applies a mocked generated image only after re
 
   await page.unroute("**/api/ai/text");
   await mockAiImage(page, mockImageDataUrl);
-  await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=visuals`,
-  );
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=listing`);
   await page.getByRole("button", { name: "AI create image" }).first().click();
   await expect(page.getByText("AI request estimate")).toBeVisible();
   await page.getByRole("button", { name: /Confirm run/ }).click();

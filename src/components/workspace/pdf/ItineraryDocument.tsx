@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import "@/app/pdf.css";
 import * as React from "react";
 import { Eye, Trash2 } from "lucide-react";
 import type {

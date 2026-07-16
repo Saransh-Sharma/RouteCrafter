@@ -11,7 +11,6 @@ import {
   buildImagePrompt,
   buildItinerary,
   buildListing,
-  buildMatrix,
 } from "../src/lib/generation";
 import {
   CURRENT_SCHEMA_VERSION,
@@ -740,10 +739,8 @@ function buildProject(scenario: Scenario): Project {
     },
     tripConfigs: [tripConfig],
     imagePrompts: [],
-    matrix: undefined,
     itineraries: [],
     listing: undefined,
-    generated: {},
     aiRuns: [],
     status: "In progress",
     accent: accentForCountry(scenario.country),
@@ -816,7 +813,6 @@ function buildProject(scenario: Scenario): Project {
 
   project = projectSchema.parse({
     ...project,
-    matrix: buildMatrix(context),
     listing: buildListing(context),
     imagePrompts,
     itineraries: [itinerary],

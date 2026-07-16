@@ -1,6 +1,4 @@
 import type { ItineraryOutput, Project } from "@/lib/types";
-import { templateRegistry } from "@/lib/generation";
-import { matrixToMarkdown } from "../matrix/export-matrix";
 import { itineraryToMarkdown } from "../itinerary/export-itinerary";
 import { listingToMarkdown } from "../listing/export-listing";
 import { exportImagePromptsMarkdown } from "../image-prompts/export-image-prompts";
@@ -8,24 +6,9 @@ import { exportImagePromptsMarkdown } from "../image-prompts/export-image-prompt
 /** True when the project has any exportable generated content. */
 export function hasAnyContent(project: Project): boolean {
   return Boolean(
-    project.matrix ||
-      project.itineraries.length ||
+    project.itineraries.length ||
       project.listing ||
-      project.imagePrompts.length ||
-      Object.keys(project.generated ?? {}).length,
-  );
-}
-
-/** Generated prompts (project.generated) -> Markdown. */
-export function promptsToMarkdown(project: Project): string {
-  const entries = Object.entries(project.generated ?? {});
-  if (!entries.length) return "";
-  const sections = entries.map(([id, text]) => {
-    const label = templateRegistry[id]?.label ?? id;
-    return `## ${label}\n\n${text}`;
-  });
-  return [`# ${project.country || "Country"} - Prompts\n`, ...sections].join(
-    "\n\n",
+      project.imagePrompts.length,
   );
 }
 
@@ -68,9 +51,6 @@ export function buildMarkdownBundle(
   ].filter(Boolean);
   parts.push(meta.join("\n"));
 
-  if (project.matrix) {
-    parts.push(matrixToMarkdown(project.matrix, project));
-  }
   for (const itinerary of project.itineraries) {
     parts.push(itineraryToMarkdown(itinerary, project));
   }
@@ -80,8 +60,6 @@ export function buildMarkdownBundle(
   if (project.imagePrompts.length) {
     parts.push(exportImagePromptsMarkdown(project));
   }
-  const prompts = promptsToMarkdown(project);
-  if (prompts) parts.push(prompts);
   if (options.includeAiUsage) {
     const appendix = buildAiUsageAppendix(project);
     if (appendix) parts.push(appendix);

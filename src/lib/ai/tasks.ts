@@ -1,6 +1,5 @@
 import type {
   DayPlan,
-  ItineraryMatrix,
   ItineraryOutput,
   MarketplaceListing,
   PortfolioImagePrompt,
@@ -57,27 +56,6 @@ Prompt to run:
 ${prompt}
 
 ${REALISM}`;
-}
-
-export function buildMatrixPrompt(project: Project, current?: ItineraryMatrix): string {
-  const ctx = buildContext(project);
-  return `Create a premium itinerary matrix for RouteCrafter.
-
-Project configuration:
-${configBlock(ctx)}
-
-Current matrix, if any:
-${current ? JSON.stringify(current, null, 2) : "None"}
-
-${NATURAL_LANGUAGE_RULES}
-
-Rules:
-- Cover the project's supported durations and traveler types.
-- Each cell should have three distinct, sellable variation spines.
-- Keep spines concise but specific.
-- ${REALISM}
-
-${jsonOnly("ItineraryMatrix")}`;
 }
 
 export function buildItineraryPrompt(

@@ -32,11 +32,15 @@ export function PromptStudioPanel({ project }: { project: Project }) {
   const [aiOpen, setAiOpen] = React.useState(false);
   const active = allTemplates.find((t) => t.id === activeId);
 
-  const generated = project.generated ?? {};
+  // Prompt output is ephemeral working material — regenerated on demand from
+  // the project, so it is session state rather than part of the project blob.
+  const [generated, setGeneratedMap] = React.useState<Record<string, string>>(
+    {},
+  );
   const value = generated[activeId] ?? "";
 
   function setGenerated(id: string, text: string) {
-    update(project.id, { generated: { ...project.generated, [id]: text } });
+    setGeneratedMap((current) => ({ ...current, [id]: text }));
   }
 
   function generate(id: string) {
@@ -46,9 +50,11 @@ export function PromptStudioPanel({ project }: { project: Project }) {
 
   function generateAll() {
     const ctx = buildContext(project);
-    const next = { ...project.generated };
-    for (const t of allTemplates) next[t.id] = renderTemplate(t.id, ctx);
-    update(project.id, { generated: next });
+    setGeneratedMap((current) => {
+      const next = { ...current };
+      for (const t of allTemplates) next[t.id] = renderTemplate(t.id, ctx);
+      return next;
+    });
   }
 
   function exportRaw() {
@@ -76,8 +82,8 @@ export function PromptStudioPanel({ project }: { project: Project }) {
         : mode === "fill-empty" && value
           ? value
           : text;
+    setGenerated(active.id, nextText);
     update(project.id, {
-      generated: { ...project.generated, [active.id]: nextText },
       aiRuns: appendAiRun(
         project,
         createAiRunMetadata({

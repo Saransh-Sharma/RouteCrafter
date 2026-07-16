@@ -472,7 +472,58 @@ export default function SettingsPage() {
           </Card>
         </div>
       </div>
+
+      <HowItWorks />
     </div>
+  );
+}
+
+const HOW_IT_WORKS: { title: string; body: string }[] = [
+  {
+    title: "The creator loop",
+    body: "Every product follows the same loop: define the trip and editions in the Trip tab, generate and edit the day-by-day itinerary, design the PDF, then grab the listing copy and export everything. The Readiness checklist in the editor header tracks what is left — it never blocks exporting.",
+  },
+  {
+    title: "Two ways to generate content",
+    body: "With an API key (or the built-in server key), generate directly in the app with cost shown before every run and a preview before anything is applied. Without a key, use the Prompt studio in the Listing tab: it produces copy-paste prompts for ChatGPT, Claude, or Gemini, and you paste the results back in.",
+  },
+  {
+    title: "Editions and series",
+    body: "An edition is one duration and traveler combination of a product (7 days · Couple) with its own route and itinerary. A series is a family of country versions of the same product — multiply a finished product to new countries and each version becomes its own sellable product.",
+  },
+  {
+    title: "Images without the API bill",
+    body: "Image generation via API is always opt-in. Every image slot offers three paths: upload your own file, copy a ready-made prompt to run in any external image tool for free, or generate via API with the cost confirmed first.",
+  },
+  {
+    title: "Where your work lives",
+    body: "Cloud storage (Postgres + blob) is the source of truth; the browser keeps a fast local cache. Export a JSON backup any time from the editor's Export menu. Live prices, hours, and availability are never invented — verification notes exist so buyers know what to double-check.",
+  },
+];
+
+function HowItWorks() {
+  return (
+    <section className="border-t border-border-soft pt-8">
+      <h2 className="rc-section-title">How RouteCrafter works</h2>
+      <div className="mt-4 divide-y divide-border-soft">
+        {HOW_IT_WORKS.map((item) => (
+          <details key={item.title} className="group py-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-ink">
+              <span>{item.title}</span>
+              <span className="text-xs font-medium text-ink-muted group-open:hidden">
+                Expand
+              </span>
+              <span className="hidden text-xs font-medium text-forest group-open:inline">
+                Collapse
+              </span>
+            </summary>
+            <p className="max-w-3xl pt-2 text-sm leading-6 text-ink-soft">
+              {item.body}
+            </p>
+          </details>
+        ))}
+      </div>
+    </section>
   );
 }
 

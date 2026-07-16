@@ -23,7 +23,8 @@ export {
   imagePromptToText,
   IMAGE_PROMPT_KINDS,
 } from "./templates/image-prompts";
-export { buildMatrix } from "./matrix";
+export { routeConcepts } from "./route-concepts";
+export type { RouteConcept } from "./route-concepts";
 export {
   buildItinerary,
   parseDays,

@@ -26,6 +26,9 @@ interface CommandItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
+/** Dispatched (e.g. by the TopBar search button) to open the palette. */
+export const OPEN_PALETTE_EVENT = "routecrafter:open-palette";
+
 export function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
@@ -60,8 +63,16 @@ export function CommandPalette() {
         setQuery("");
       }
     }
+    function onOpenEvent() {
+      setActive(0);
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener(OPEN_PALETTE_EVENT, onOpenEvent);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(OPEN_PALETTE_EVENT, onOpenEvent);
+    };
   }, []);
 
   React.useEffect(() => {
@@ -70,7 +81,7 @@ export function CommandPalette() {
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
-  const projectMatch = pathname.match(/^\/projects\/([^/]+)/)?.[1];
+  const projectMatch = pathname.match(/^\/(?:products|projects)\/([^/]+)/)?.[1];
   const projectId = projectMatch === "new" ? undefined : projectMatch;
   const commands = React.useMemo<CommandItem[]>(
     () => [
@@ -86,17 +97,17 @@ export function CommandPalette() {
         id: "new-project",
         label: "New project",
         group: "Create",
-        hint: "/projects/new",
+        hint: "/products/new",
         icon: Plus,
-        run: () => router.push("/projects/new"),
+        run: () => router.push("/products/new"),
       },
       {
         id: "templates",
         label: "Use a template",
         group: "Create",
-        hint: "/templates",
+        hint: "Template gallery",
         icon: LibraryBig,
-        run: () => router.push("/templates"),
+        run: () => router.push("/products/new?mode=template"),
       },
       {
         id: "settings-ai",
@@ -109,29 +120,36 @@ export function CommandPalette() {
       ...(projectId
         ? [
             {
-              id: "workspace-plan",
-              label: "Jump to Plan",
-              group: "Workspace",
-              hint: "Route and editions",
+              id: "editor-trip",
+              label: "Jump to Trip",
+              group: "Editor",
+              hint: "Brief, editions, and routes",
               icon: FolderOpen,
-              run: () => router.push(`/projects/${projectId}?stage=plan`),
+              run: () => router.push(`/products/${projectId}?tab=trip`),
             },
             {
-              id: "workspace-build",
-              label: "Jump to Build",
-              group: "Workspace",
-              hint: "Itinerary tools",
+              id: "editor-itinerary",
+              label: "Jump to Itinerary",
+              group: "Editor",
+              hint: "Day-by-day editor",
               icon: Sparkles,
-              run: () => router.push(`/projects/${projectId}?stage=build`),
+              run: () => router.push(`/products/${projectId}?tab=itinerary`),
             },
             {
-              id: "workspace-export",
-              label: "Jump to PDF export",
-              group: "Workspace",
-              hint: "Package stage",
+              id: "editor-pdf",
+              label: "Jump to PDF",
+              group: "Editor",
+              hint: "Design and export",
               icon: FileDown,
-              run: () =>
-                router.push(`/projects/${projectId}?stage=package&tool=pdf`),
+              run: () => router.push(`/products/${projectId}?tab=pdf`),
+            },
+            {
+              id: "editor-listing",
+              label: "Jump to Listing",
+              group: "Editor",
+              hint: "Marketplace copy and visuals",
+              icon: FolderOpen,
+              run: () => router.push(`/products/${projectId}?tab=listing`),
             },
           ]
         : []),

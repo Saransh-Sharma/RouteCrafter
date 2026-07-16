@@ -88,36 +88,31 @@ server console. Production fails closed when Redis or email delivery is missing.
 
 ## First steps
 
-1. From the **Dashboard**, click **New project** (or open one of the seeded demo
-   projects).
-2. Fill in the create-project form (name, country, regions, positioning, audience).
-3. You land in the **project workspace**, which is organized as a five-stage
-   production route: **Define**, **Plan**, **Build**, **Package**, and
-   **Publish**.
-4. Follow the recommended next action in the workspace header. Progress is derived
-   from completed content and readiness checks, not from manually checking off
-   steps.
-5. Confirm that RouteCrafter OpenAI is ready, or optionally add a personal provider
-   key override in **Settings** — see the [AI setup guide](ai-setup.md). Every panel
-   works with copy-paste prompts.
+1. From the **shelf** (`/`), click **New product** (or open one of the seeded
+   demo products).
+2. Fill in the create form (offer model, name, country, regions, positioning,
+   audience) — or pick a template, or start a multi-country series.
+3. You land in the **product editor**: four flat tabs — **Trip**,
+   **Itinerary**, **PDF**, and **Listing** — with **Readiness** and
+   **Export** in the header.
+4. Confirm that RouteCrafter OpenAI is ready, or optionally add a personal
+   provider key override in **Settings** — see the [AI setup guide](ai-setup.md).
+   Every panel also works with copy-paste prompts, no key needed.
 
 ## Build your first itinerary product
 
-RouteCrafter treats each project as a sellable itinerary product, not just a
-single document. The five stages describe the whole path from product brief to
-publish review:
+| Tab | What to do |
+| --- | --- |
+| **Trip** | Choose the offer model and channels, write the product promise, select the output package, and commit at least one **edition** (duration × traveler type) with its route. |
+| **Itinerary** | Create the itinerary for each edition, then fill and refine days, guides, and verification notes (AI or copy-paste prompts). |
+| **PDF** | Pick a theme, set the cover, adjust text and blocks in the live preview, and export a native PDF. |
+| **Listing** | Finish marketplace copy, packages/intake for service offers, and portfolio visual briefs. |
 
-| Stage | What to do | What counts as progress |
-| --- | --- | --- |
-| **Define** | Choose the offer model, sales channels, destination, buyer, product promise, brand voice, trip brief, and selected output package. | Destination, audience, positioning, trip configuration, channels, and the required marketplace listing output are present. |
-| **Plan** | Commit to the exact duration and traveler-type editions you intend to ship. | At least one planned edition exists. Each added edition becomes part of the launch workload. |
-| **Build** | Create one itinerary for each planned edition and complete its overview, days, selected guides, and verification notes. | Every planned edition has a linked itinerary with the required day count and required fields. |
-| **Package** | Prepare the marketplace listing, service packages/intake when needed, portfolio visuals, PDF, spreadsheet, exports, and production prompts. | Listing requirements are complete, selected visuals are finalized, and selected delivery outputs have usable content. |
-| **Publish** | Resolve blockers, review recommendations, verify live-data language, review final files, download a JSON backup, and mark the project ready. | No blockers remain and all three final confirmations are checked. |
-
-The stages are clickable and flexible. You can jump ahead to inspect later tools,
-but the route line, blocker list, and recommended next action will point back to
-the earliest stage that still needs launch-critical work.
+The **Readiness** popover in the header lists remaining blockers and
+improvements with deep links, plus the final confirmations and "Mark ready to
+sell". It never blocks exporting. When the product is done, use **Multiply**
+to recreate it for other countries — see the
+[user guide](user-guide.md#multiplying-across-countries).
 
 ## Next.js 16 note
 

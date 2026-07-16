@@ -29,7 +29,7 @@ export function ImportProjectButton() {
 
     try {
       const created = importProject(result.project);
-      router.push(`/projects/${created.id}`);
+      router.push(`/products/${created.id}`);
     } catch (importError) {
       setError(
         importError instanceof Error

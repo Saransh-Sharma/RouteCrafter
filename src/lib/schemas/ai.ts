@@ -5,18 +5,11 @@ export const aiAcceptedRunSchema = z.object({
   aiRunId: z.string().optional(),
   provider: z.enum(["openai", "anthropic", "gemini"]),
   model: z.string(),
-  taskType: z.enum([
-    "brief",
-    "prompt",
-    "itinerary",
-    "matrix",
-    "listing",
-    "imagePrompt",
-    "imageGeneration",
-    "guide",
-    "rewrite",
-    "dayDetails",
-  ]),
+  /**
+   * Free-form so historical runs recorded under since-removed task types
+   * (e.g. "matrix") keep parsing.
+   */
+  taskType: z.string(),
   label: z.string(),
   createdAt: z.string(),
   appliedAt: z.string(),

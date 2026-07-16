@@ -1,6 +1,5 @@
 import * as React from "react";
-import { Sidebar } from "./Sidebar";
-import { MobileNav } from "./MobileNav";
+import { TopBar } from "./TopBar";
 import { PersistenceNotice } from "./PersistenceNotice";
 import { ConflictBanner } from "./ConflictBanner";
 import { AuthProvider } from "./AuthProvider";
@@ -13,18 +12,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <AiConfigProvider>
         <ToastProvider>
-          <div className="flex min-h-dvh">
-            <Sidebar />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <MobileNav />
-              <main className="flex-1 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
-                <div className="mx-auto w-full max-w-7xl">
-                  <PersistenceNotice />
-                  <ConflictBanner />
-                  {children}
-                </div>
-              </main>
-            </div>
+          <div className="flex min-h-dvh flex-col">
+            <TopBar />
+            <main className="flex-1 px-5 py-8 sm:px-8 lg:py-10">
+              <div className="mx-auto w-full max-w-7xl">
+                <PersistenceNotice />
+                <ConflictBanner />
+                {children}
+              </div>
+            </main>
           </div>
           <CommandPalette />
         </ToastProvider>

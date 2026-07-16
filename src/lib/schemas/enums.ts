@@ -146,6 +146,7 @@ export const brandVoiceEnum = z.enum([
 ]);
 
 export const pdfThemeEnum = z.enum([
+  "editorial",
   "beige",
   "sage",
   "terracotta",

@@ -32,7 +32,7 @@ const TASK_OUTPUT_FLOOR: Record<AiTaskType, number> = {
   brief: 600,
   prompt: 500,
   itinerary: 1600,
-  matrix: 1200,
+  transpose: 700,
   listing: 800,
   imagePrompt: 400,
   imageGeneration: 0,

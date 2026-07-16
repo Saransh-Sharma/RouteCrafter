@@ -9,12 +9,12 @@ test("edits a linked itinerary and persists the deep editor location", async ({
   seededPage: page,
 }) => {
   await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=build&edition=e2e-edition&tool=overview`,
+    `/products/${FULL_PROJECT_ID}?tab=itinerary&edition=e2e-edition&section=overview`,
   );
   const title = page.locator("input").first();
   await title.fill("Portugal Rail and Food Escape");
   await page.getByRole("tab", { name: "Daily plan" }).click();
-  await expect(page).toHaveURL(/tool=days/);
+  await expect(page).toHaveURL(/section=days/);
 
   await page.getByRole("button", { name: "Expand day 1" }).click();
   const dayTitles = page.getByPlaceholder("Day title");
@@ -26,17 +26,14 @@ test("edits a linked itinerary and persists the deep editor location", async ({
   );
 });
 
-test("keeps embedded AI cost badges inside build overview buttons", async ({
+test("keeps embedded AI cost badges inside itinerary overview buttons", async ({
   seededPage: page,
 }) => {
   for (const width of [1280, 1024, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(
-      `/projects/${FULL_PROJECT_ID}?stage=build&edition=e2e-edition&tool=overview`,
+      `/products/${FULL_PROJECT_ID}?tab=itinerary&edition=e2e-edition&section=overview`,
     );
-    await expect(
-      page.getByRole("heading", { name: "Turn each edition into a complete itinerary" }),
-    ).toBeVisible();
 
     const aiButtons = [
       page.getByRole("button", { name: /AI fill empty sections/ }),
@@ -79,26 +76,27 @@ test("keeps embedded AI cost badges inside build overview buttons", async ({
   }
 });
 
-test("edits the marketplace listing and publishes after final confirmations", async ({
+test("edits the marketplace listing and publishes from the readiness checklist", async ({
   seededPage: page,
 }) => {
-  await page.goto(`/projects/${FULL_PROJECT_ID}?stage=package&tool=listing`);
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=listing`);
   const firstTitle = page.locator("input").first();
   await firstTitle.fill("I will plan a rail-first Portugal food itinerary");
 
-  await page.getByRole("tab", { name: /Publish/ }).first().click();
-  await expect(page.getByRole("heading", { name: "Review the launch package" })).toBeVisible();
+  await page.getByRole("button", { name: "Readiness checklist" }).click();
   for (const checkbox of await page.getByRole("checkbox").all()) {
     await checkbox.check();
   }
   await page.getByRole("button", { name: "Mark ready to sell" }).click();
-  await expect(page.getByText("Ready to sell", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("Ready to sell", { exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("updates the selected PDF presentation theme and cover", async ({
   seededPage: page,
 }) => {
-  await page.goto(`/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`);
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=pdf`);
   await expect(page.getByRole("heading", { name: "PDF builder" })).toBeVisible();
   const noir = page.getByRole("button", { name: "Noir" });
   await noir.click();
@@ -112,7 +110,7 @@ test("updates the selected PDF presentation theme and cover", async ({
 test("updates PDF presentation text from the sidebar preview controls", async ({
   seededPage: page,
 }) => {
-  await page.goto(`/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`);
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=pdf`);
   await expect(page.getByRole("heading", { name: "PDF builder" })).toBeVisible();
 
   const controls = page.getByRole("region", {
@@ -153,7 +151,7 @@ test("scrolls PDF presentation controls and preview independently", async ({
   seededPage: page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto(`/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`);
+  await page.goto(`/products/${FULL_PROJECT_ID}?tab=pdf`);
   await expect(page.getByRole("heading", { name: "PDF builder" })).toBeVisible();
 
   const controls = page.getByRole("region", {
@@ -217,16 +215,15 @@ test("scrolls PDF presentation controls and preview independently", async ({
   );
 });
 
-test("downloads portable JSON from the package files tool", async ({
+test("downloads portable JSON from the header export menu", async ({
   seededPage: page,
 }) => {
-  await page.goto(`/projects/${FULL_PROJECT_ID}?stage=package&tool=exports`);
-  await expect(page.getByRole("heading", { name: "Export your work" })).toBeVisible();
-  const fullExport = page
-    .getByText("Full project export", { exact: true })
-    .locator("xpath=ancestor::div[contains(@class, 'rc-card')]");
+  await page.goto(`/products/${FULL_PROJECT_ID}`);
+  await page.getByRole("button", { name: "Export" }).click();
   const downloadPromise = page.waitForEvent("download");
-  await fullExport.getByRole("button", { name: "JSON" }).click();
+  await page
+    .getByRole("menuitem", { name: "Portable JSON backup" })
+    .click();
   expect((await downloadPromise).suggestedFilename()).toBe(
     "portugal-editorial-escape.json",
   );

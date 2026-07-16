@@ -1,251 +1,86 @@
-# User Guide
+# User guide
 
-RouteCrafter turns a destination idea into a reviewed itinerary offer. Every
-generation feature works without an API key; optional AI results are previewed
-before application.
+RouteCrafter turns a destination idea into a sellable itinerary product. This
+walkthrough follows the creator loop end to end.
 
-## Start a project
+## The shelf (`/`)
 
-From **New project**, enter the product name, destination, buyer, positioning, and
-initial travel styles. Choose the offer model:
+Home is your product catalog: image-forward cards with country, status, and
+progress. Group by **country** or by **series**, search, import a JSON
+backup, or start a new product. "Continue where you left off" jumps back into
+the most recently edited product.
 
-- **Digital download** for a prebuilt Etsy, Gumroad, or direct-sale product.
-- **Custom service** for Fiverr or direct personalized planning after the buyer
-  sends a brief.
-- **Hybrid** for a downloadable base itinerary with paid personalization on top.
+## Creating a product (`/products/new`)
 
-Choose only the output files and sales assets you intend to finish. Marketplace
-listing is required for every offer.
+Three modes:
 
-## Follow the production route
+- **Start blank** — offer model, name, country, audience, positioning,
+  styles, brand voice, and the starter output package.
+- **From template** — the template gallery (traveler presets, country
+  starters, and templates you saved from any product's actions menu).
+- **Series (multi-country)** — one spec plus two or more countries; the
+  engine generates every country version in one run. See
+  [Multiplying across countries](#multiplying-across-countries).
 
-The workspace has five clickable stages. They are not locked, but RouteCrafter
-explains when an action is missing useful prerequisites. The route line and project
-header show derived progress and the recommended next action. Progress is based on
-real project content and review confirmations, not manual completion toggles.
+## The product editor (`/products/[id]`)
 
-Navigation is shareable and restorable through query parameters, for example:
+A flat editor with four tabs. The header shows the cover band, status,
+**Multiply**, **Readiness**, **Export**, and the actions menu (duplicate,
+save as template, change cover, delete).
 
-```text
-/projects/<id>?stage=build&edition=<edition-id>&tool=days
-```
+### Trip
 
-The `stage` parameter opens one of `define`, `plan`, `build`, `package`, or
-`publish`. Build-stage links can include an `edition` id and editor `tool`.
-Package-stage links can include a package `tool` such as `listing`, `visuals`,
-`pdf`, `exports`, or `prompts`.
+The commercial definition: offer model (digital / service / hybrid), sales
+channels, product fields, and the output package. Below it, **editions** —
+each a committed duration × traveler-type combination with an ordered
+nights-per-city route you can adjust on the map. Route concepts suggest
+angles; "Apply to itinerary" keeps a linked itinerary in sync after route
+changes. The collapsible deep trip brief holds pace, budget, logistics,
+interests, and constraints.
 
-RouteCrafter separates two kinds of issues:
+### Itinerary
 
-- **Blockers** prevent a project from being marked Ready to sell.
-- **Recommended improvements** improve quality but do not universally block
-  launch.
+The day-by-day product for one edition at a time (switch with the chips).
+"Create this itinerary" scaffolds the right number of days from the route;
+AI actions fill or improve sections with a cost estimate up front and a
+field-level review before anything is applied. "Local details" adds
+web-grounded recommendations per day.
 
-### 1. Define the Product
+### PDF
 
-Define turns the travel idea into a commercial product brief. Confirm the offer
-model and sales channels first because they affect later listing, package, and
-intake requirements. Complete the destination, target buyer, product promise,
-brand voice, and primary trip configuration.
+A live paged A4 preview with themes (try **Editorial** — it matches the
+app), text controls, block editing, and cover/day images. Export produces a
+native PDF server-side; native browser print also works.
 
-What to do:
+### Listing
 
-- Choose **Digital download**, **Custom service**, or **Hybrid offer**.
-- Select sales channels: Fiverr, Etsy, Gumroad, and/or direct sales.
-- Fill the product name, destination country, target buyer, brand voice, and
-  product promise.
-- Open the deep trip brief for pace, budget, logistics, interests, constraints,
-  and advanced brand details.
-- Select only the output package you intend to finish.
+Marketplace copy (titles, tags, descriptions, packages, FAQs, buyer
+requirements), portfolio visual briefs, and the **prompt studio** — copy any
+production prompt into an external AI and paste the result back, no API key
+needed.
 
-The output package is grouped into:
+## Readiness and export
 
-- **Core files:** PDF and spreadsheet.
-- **Included guides:** food, packing, and booking checklist.
-- **Sales assets:** marketplace listing and portfolio visuals.
+**Readiness** is a checklist, never a gate: blockers and improvements
+deep-link to the tab that owns them, deterministic fixes (like moving live
+price/hour claims into verification notes) apply with one click, and the
+final confirmations plus "Mark ready to sell" live at the bottom.
+**Export** always works: PDF, spreadsheet CSV per edition, listing copy,
+Markdown bundle, and a portable JSON backup.
 
-How readiness is decided:
+## Multiplying across countries
 
-- The project needs a destination country.
-- The project needs a primary trip configuration.
-- Define progress also counts regions or cities, positioning, target audience,
-  sales channels, and the required marketplace listing output.
-- Marketplace listing is always required and cannot be deselected.
+From any product, **Multiply** opens the country picker. Add countries, keep
+**Prompts only** (recommended) or opt into billable API images, review the
+itemized cost estimate, and generate. The **series board**
+(`/series/[id]`) shows one card per country with a live step checklist —
+route, itinerary, listing — plus retry for failures and a link into each
+generated product. Every country version is an independent product on the
+shelf, grouped under its series.
 
-Common pitfalls:
+## Images without the API bill
 
-- Selecting extra outputs creates more publish work. If you select portfolio
-  visuals, all five visual briefs must be finalized later.
-- Service and hybrid offers need buyer-facing intake and package details in the
-  Package stage.
-- The trip form auto-saves, so review each field after pasting generated content.
-
-Legacy Map Pins selections remain visible after import but are not offered for new
-projects because RouteCrafter does not yet generate a map-pin artifact.
-
-### 2. Plan the Editions
-
-Project durations and traveler types describe possible coverage. Planned editions
-are the exact combinations you commit to shipping.
-
-What to do:
-
-- Add the duration and traveler type combination most likely to sell.
-- Use custom days only when the standard duration label is not precise enough.
-- Review the route concepts for inspiration. They are not required selections.
-- Add more editions only when you intend to complete each one.
-
-How readiness is decided:
-
-- Plan is complete when at least one planned edition exists.
-- RouteCrafter prevents duplicate duration/traveler combinations.
-- Each planned edition becomes a Build-stage obligation.
-
-Additional editions become publish blockers until their itineraries are completed
-or the editions are removed.
-
-Common pitfalls:
-
-- Durations and traveler types in the project brief are broad ideas. Planned
-  editions are the actual products that must ship.
-- Removing an edition does not delete an already-created itinerary; it removes the
-  edition from the production plan.
-
-### 3. Build the Itineraries
-
-Use the persistent edition switcher to create or continue one itinerary per planned
-edition. Itineraries are linked by edition id, not inferred from text labels.
-
-The editor is organized into:
-
-- **Overview:** title, audience, overview, and route summary.
-- **Days:** the exact number of day plans, each with title, base, and meaningful
-  activity content.
-- **Included guides:** guide fields selected in the output package.
-- **Quality notes:** verification notes and optional depth.
-
-What to do:
-
-- Start the selected edition to create the correct number of editable days.
-- Complete the overview: title, audience, overview, and route summary.
-- Fill every day with a title, base, and at least one meaningful activity field.
-- Complete food, packing, and booking checklist fields when those outputs were
-  selected in Define.
-- Add personalization questions when the offer is a service or hybrid.
-- Add verification notes so buyers understand what needs live checking.
-
-How readiness is decided:
-
-- Every planned edition needs a linked itinerary.
-- The itinerary day count must exactly match the edition duration or custom day
-  count.
-- Title, overview, audience, route summary, each day title, each day base, and
-  day activity content are required.
-- Selected included guides become blockers if their matching itinerary fields are
-  empty.
-- Verification notes are required for every itinerary.
-
-Common pitfalls:
-
-- Adding an edition in Plan without completing it in Build blocks Publish.
-- Rainy-day alternatives and booking notes are recommended improvements when they
-  are thin, but they are not universal launch blockers.
-- Images and upgrades can improve the PDF and sales presentation, but the core
-  readiness checks focus on usable itinerary content.
-
-### 4. Package the Offer
-
-Package uses internal tools instead of adding more global workspace stages:
-
-- **Marketplace listing:** titles, tags, descriptions, and delivery notes.
-- **Packages and intake:** service pricing, buyer requirements, and personalization
-  questions for Custom service and Hybrid.
-- **Portfolio visuals:** five image briefs; all five must be marked final when this
-  output is selected. Generated images are optional.
-- **PDF presentation:** themed, print-ready itinerary output when selected.
-- **Files and spreadsheet:** JSON, Markdown, CSV, and available delivery artifacts.
-- **Production tools:** copy-paste prompt templates and optional AI drafting.
-
-What to do:
-
-- Finish marketplace title options, tags, short description, long description,
-  and delivery notes.
-- For service and hybrid offers, add at least one priced package and buyer
-  requirements.
-- For service and hybrid offers, make sure the itinerary includes
-  personalization questions.
-- If portfolio visuals are selected, create five briefs and mark all five final.
-- If PDF or spreadsheet outputs are selected, review the generated delivery files
-  after the Build-stage content is ready.
-- Use Production tools for copy-paste prompt templates and optional AI drafting.
-
-How readiness is decided:
-
-- Listing copy requires at least one title, at least one tag, a short
-  description, a full description, and delivery notes.
-- Service and hybrid offers require at least one package with both name and price,
-  plus at least one buyer requirement.
-- Selected portfolio visuals require exactly five image prompts and all five must
-  be marked final. Adding actual generated images is recommended, not required.
-- Selected PDF and spreadsheet outputs depend on at least one completed itinerary.
-
-Common pitfalls:
-
-- Package requirements adapt to the offer model. A digital download can be simpler
-  than a service, but it still needs clear delivery notes.
-- The Package stage does not create more itinerary content; fix itinerary blockers
-  in Build.
-- Optional tools shown as unselected can be enabled from Define by adding that
-  output to the package.
-
-### 5. Review and Publish
-
-Review is divided into **Blockers**, **Recommended improvements**, and completed
-checks. Every issue links back to its exact stage, edition, or package tool.
-
-Before marking a project **Ready to sell**, confirm:
-
-1. Live prices, hours, tickets, and availability are not represented as guaranteed.
-2. Final files and listing presentation were reviewed.
-3. A portable JSON backup was created.
-
-How readiness is decided:
-
-- All Define, Plan, Build, and Package blockers must be resolved.
-- All three final confirmations must be checked.
-- Clicking **Mark ready to sell** sets the project status to **Ready to sell** and
-  records the confirmation time.
-
-Readiness-sensitive edits clear these confirmations and return a ready project to
-In progress. AI settings, activity history, and export preferences do not invalidate
-readiness. Duplicated projects always start with fresh confirmations.
-
-Common pitfalls:
-
-- Publish cannot verify live travel data. It only asks you to confirm that prices,
-  hours, tickets, and availability are framed as details to verify.
-- A JSON backup is part of the final checklist as a portable restore point even
-  though the cloud is authoritative.
-- If a blocker appears in Publish, use its link instead of hunting through the
-  workspace manually.
-
-## Project actions
-
-Duplicate, JSON backup/export, delete, and activity history are grouped under
-**Project actions** in the workspace header. Auto-save state is shown once in that
-header rather than repeated as competing panel-level status.
-
-## Local data and backup
-
-Projects and assets are stored in the shared cloud workspace and mirrored to the
-browser cache under `routecrafter:v1`. API keys use a separate private settings
-store and are never included in project exports. Download JSON regularly from
-Project actions or Review and Publish, then use **Import project** on the
-dashboard to restore or move a project.
-
-## AI usage
-
-Prompt-output mode is always available. Direct AI uses RouteCrafter server OpenAI
-when configured, or a personal provider key override from Settings. It shows the
-payer and estimated USD range and requires preview before apply.
-See [AI setup](ai-setup.md) for provider configuration.
+Every image slot offers, in order: **upload** (or pick from the media
+library), **copy prompt** (a self-contained, country-adapted prompt for any
+external image tool), and **generate via API** — explicit opt-in behind a
+cost confirmation.
