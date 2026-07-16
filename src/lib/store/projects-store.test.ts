@@ -153,11 +153,13 @@ describe("projects store mutations", () => {
   it("rejects oversized updates and keeps the previous project", () => {
     const project = useProjectsStore.getState().projects[0];
     const result = useProjectsStore.getState().update(project.id, {
-      generated: { huge: "x".repeat(MAX_PERSISTED_STATE_CHARS) },
+      positioning: "x".repeat(MAX_PERSISTED_STATE_CHARS),
     });
 
     expect(result.ok).toBe(false);
-    expect(useProjectsStore.getState().projects[0].generated.huge).toBeUndefined();
+    expect(
+      useProjectsStore.getState().projects[0].positioning.length,
+    ).toBeLessThan(MAX_PERSISTED_STATE_CHARS);
     expect(useProjectsStore.getState().persistenceError).toContain(
       "browser-storage limit",
     );

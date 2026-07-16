@@ -51,11 +51,19 @@ export type {
   ProjectConflict,
 };
 
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+export interface SaveState {
+  status: SaveStatus;
+  error: string | null;
+}
+
 interface ProjectsState extends PersistedProjectsSlice {
   hasHydrated: boolean;
   cloudHydrated: boolean;
   syncStatus: "idle" | "syncing" | "synced" | "error";
   syncError: string | null;
+  saveState: SaveState;
   lastCloudRevisionByProject: Record<string, number>;
   conflictByProject: Record<string, ProjectConflict>;
   persistenceError: string | null;
@@ -136,16 +144,25 @@ function clearPersistedProjectsStorage(): void {
   }
 }
 
-function dispatchSaveState(
-  status: "idle" | "saving" | "saved" | "error",
-  error?: string | null,
-): void {
+function dispatchSaveState(status: SaveStatus, error?: string | null): void {
+  useProjectsStore.setState({
+    saveState: { status, error: error ?? null },
+  });
+  // Legacy window event, kept until all listeners move to useSyncStatus().
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("routecrafter:save-state", {
       detail: { status, error },
     }),
   );
+}
+
+/**
+ * Save/sync indicator state for the current workspace. Preferred over
+ * subscribing to the legacy "routecrafter:save-state" window event.
+ */
+export function useSyncStatus(): SaveState {
+  return useProjectsStore((state) => state.saveState);
 }
 
 export const useProjectsStore = createZustand<ProjectsState>()(
@@ -206,6 +223,7 @@ export const useProjectsStore = createZustand<ProjectsState>()(
         cloudHydrated: false,
         syncStatus: "idle",
         syncError: null,
+        saveState: { status: "idle", error: null },
         lastCloudRevisionByProject: {},
         conflictByProject: {},
         persistenceError: null,

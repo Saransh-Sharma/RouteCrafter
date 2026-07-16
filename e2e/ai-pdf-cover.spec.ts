@@ -14,7 +14,7 @@ test("opens the PDF cover AI sheet above the preview and sends the image request
   await prepareApp(page, { projects: [fullProject], withAiKey: true });
   await mockAiImage(page, mockImageDataUrl);
   await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`,
+    `/products/${FULL_PROJECT_ID}?tab=pdf`,
   );
 
   await page.getByRole("button", { name: "AI create cover image" }).click();
@@ -86,7 +86,7 @@ test("recovers from a transient image API error via Retry on the PDF cover flow"
   });
 
   await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`,
+    `/products/${FULL_PROJECT_ID}?tab=pdf`,
   );
   await page.getByRole("button", { name: "AI create cover image" }).click();
   await page.getByRole("button", { name: /Confirm run/ }).click();
@@ -107,7 +107,7 @@ test("closes the AI sheet with Escape and returns focus to the trigger", async (
 }) => {
   await prepareApp(page, { projects: [fullProject], withAiKey: true });
   await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=pdf`,
+    `/products/${FULL_PROJECT_ID}?tab=pdf`,
   );
 
   const trigger = page.getByRole("button", { name: "AI create cover image" });
@@ -154,7 +154,7 @@ test("recovers from a transient image API error via Retry on the portfolio visua
   });
 
   await page.goto(
-    `/projects/${FULL_PROJECT_ID}?stage=package&tool=visuals`,
+    `/products/${FULL_PROJECT_ID}?tab=listing`,
   );
   await page.getByRole("button", { name: "AI create image" }).first().click();
   await page.getByRole("button", { name: /Confirm run/ }).click();

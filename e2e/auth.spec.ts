@@ -6,9 +6,9 @@ test("protects pages and APIs from missing or forged sessions", async ({
   page,
   context,
 }) => {
-  await page.goto("/projects?view=recent");
+  await page.goto("/products/new?mode=template");
   await expect(page).toHaveURL(
-    /\/login\?redirect=%2Fprojects%3Fview%3Drecent$/,
+    /\/login\?redirect=%2Fproducts%2Fnew%3Fmode%3Dtemplate$/,
   );
 
   await context.addCookies([
@@ -21,8 +21,8 @@ test("protects pages and APIs from missing or forged sessions", async ({
   const apiResponse = await context.request.post("/api/ai/text", { data: {} });
   expect(apiResponse.status()).toBe(401);
 
-  await page.goto("/projects");
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fprojects$/);
+  await page.goto("/settings");
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings$/);
 });
 
 test("logs in with a password, sanitizes the return path, and logs out", async ({
@@ -48,6 +48,7 @@ test("logs in with a password, sanitizes the return path, and logs out", async (
       () => document.body.dataset.routecrafterXss ?? "not-executed",
     ),
   ).toBe("not-executed");
+  await page.getByRole("button", { name: "Open account menu" }).click();
   await expect(page.getByText("saransh1337@gmail.com")).toBeVisible();
 
   await page.getByRole("button", { name: "Logout" }).click();
@@ -120,7 +121,7 @@ test("exposes usable account controls on a mobile viewport", async ({
   await page.locator("#login-password").fill("admin-e2e-password");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  const menu = page.getByRole("button", { name: "Open user menu" });
+  const menu = page.getByRole("button", { name: "Open account menu" });
   await expect(menu).toBeVisible();
   await menu.click();
   await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();

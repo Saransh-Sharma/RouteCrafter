@@ -9,9 +9,6 @@ import {
   buildImagePrompts,
   buildItinerary,
   buildListing,
-  buildMatrix,
-  renderTemplate,
-  templates,
 } from "../src/lib/generation";
 import {
   createEmptyTripConfig,
@@ -105,7 +102,6 @@ export function buildFullProject(): Project {
 
   project = projectSchema.parse({
     ...project,
-    matrix: buildMatrix(context),
     itineraries: [itinerary],
     listing: {
       ...buildListing(context),
@@ -145,12 +141,6 @@ export function buildFullProject(): Project {
         backupConfirmed: false,
       },
     },
-    generated: Object.fromEntries(
-      templates.map((template) => [
-        template.id,
-        renderTemplate(template.id, context),
-      ]),
-    ),
     aiRuns: [
       {
         id: "e2e-ai-run",
@@ -174,11 +164,9 @@ export function buildEmptyProject(): Project {
     name: "Portugal Blank Canvas",
     status: "Draft",
     tripConfigs: [],
-    matrix: undefined,
     itineraries: [],
     listing: undefined,
     imagePrompts: [],
-    generated: {},
     aiRuns: [],
   });
 }

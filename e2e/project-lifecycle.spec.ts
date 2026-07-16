@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { CURRENT_SCHEMA_VERSION } from "../src/lib/schemas";
 import {
   EMPTY_PROJECT_ID,
   FULL_PROJECT_ID,
@@ -12,25 +13,19 @@ test("navigates the complete authenticated application shell", async ({
   seededPage: page,
 }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /Good (morning|afternoon|evening|night), Admin/ }),
-  ).toBeVisible();
-  await expect(page.getByText("Portugal Editorial Escape").first()).toBeVisible();
-
-  await page.getByRole("link", { name: "Projects" }).first().click();
-  await expect(page).toHaveURL(/\/projects$/);
-  await expect(
-    page.getByRole("heading", { name: "All country projects" }),
+    page.getByText("Portugal Editorial Escape").first(),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Templates" }).first().click();
-  await expect(page).toHaveURL(/\/templates$/);
-  await expect(page.getByRole("heading", { name: "Start closer to a sellable itinerary" })).toBeVisible();
-
-  await page.getByRole("link", { name: "Guide" }).first().click();
-  await expect(page).toHaveURL(/\/guide$/);
+  // Grouping toggles on the shelf
+  await page.getByRole("tab", { name: "By country" }).click();
   await expect(
-    page.getByRole("heading", { name: "RouteCrafter User Guide" }),
+    page.getByRole("heading", { name: "Portugal", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "By series" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Standalone products" }),
   ).toBeVisible();
 
   await page.getByRole("link", { name: "Settings" }).first().click();
@@ -38,15 +33,26 @@ test("navigates the complete authenticated application shell", async ({
   await expect(
     page.getByRole("heading", { name: "AI Studio Settings" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "How RouteCrafter works" }),
+  ).toBeVisible();
+
+  // Legacy URLs land in the new IA
+  await page.goto("/templates");
+  await expect(page).toHaveURL(/\/products\/new\?mode=template/);
+  await page.goto("/guide");
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goto("/projects");
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("creates, persists, duplicates, and deletes a project", async ({
   page,
 }) => {
   await prepareApp(page, { projects: [] });
-  await page.goto("/projects/new");
+  await page.goto("/products/new");
 
-  const createButton = page.getByRole("button", { name: "Create project" });
+  const createButton = page.getByRole("button", { name: "Create product" });
   await expect(createButton).toBeDisabled();
   await page.getByLabel("Project name").fill("Iceland Winter Weekend");
   await page.getByLabel("Country").fill("Iceland");
@@ -60,7 +66,7 @@ test("creates, persists, duplicates, and deletes a project", async ({
   await page.getByLabel("Brand voice").selectOption("premium");
   await createButton.click();
 
-  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/);
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]+$/);
   await expect(
     page.getByRole("heading", { name: "Iceland Winter Weekend" }),
   ).toBeVisible();
@@ -74,8 +80,8 @@ test("creates, persists, duplicates, and deletes a project", async ({
   ).toBeVisible();
 
   await page.getByLabel("Project actions").click();
-  await page.getByRole("button", { name: "Duplicate project" }).click();
-  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/);
+  await page.getByRole("menuitem", { name: "Duplicate product" }).click();
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]+$/);
   await expect(
     page.getByRole("heading", { name: "Iceland Winter Weekend (Copy)" }),
   ).toBeVisible();
@@ -84,7 +90,7 @@ test("creates, persists, duplicates, and deletes a project", async ({
 
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByLabel("Project actions").click();
-  await page.getByRole("button", { name: "Delete project" }).click();
+  await page.getByRole("menuitem", { name: "Delete product" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByText("Iceland Winter Weekend").first()).toBeVisible();
   await expect(page.getByText("Iceland Winter Weekend (Copy)")).toHaveCount(0);
@@ -109,30 +115,29 @@ test("validates imports, resolves id collisions, and exports portable JSON", asy
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(fullProject)),
   });
-  await expect(page).toHaveURL(new RegExp(`/projects/(?!${FULL_PROJECT_ID}$).+`));
+  await expect(page).toHaveURL(new RegExp(`/products/(?!${FULL_PROJECT_ID}$).+`));
   await expect(
     page.getByRole("heading", { name: "Portugal Editorial Escape" }),
   ).toBeVisible();
 
-  await page.getByLabel("Project actions").click();
-  await page.getByRole("button", { name: "Export" }).first().click();
+  await page.getByRole("button", { name: "Export" }).click();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("menuitem", { name: /Export JSON/ }).click();
+  await page.getByRole("menuitem", { name: "Portable JSON backup" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("portugal-editorial-escape.json");
   const exported = JSON.parse(await readFile(await download.path(), "utf8"));
   expect(exported.id).not.toBe(FULL_PROJECT_ID);
   expect(exported.name).toBe("Portugal Editorial Escape");
-  expect(exported.schemaVersion).toBe(4);
+  expect(exported.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
 });
 
 test("shows a recoverable not-found state for missing local projects", async ({
   page,
 }) => {
   await prepareApp(page, { projects: [] });
-  await page.goto(`/projects/${EMPTY_PROJECT_ID}`);
+  await page.goto(`/products/${EMPTY_PROJECT_ID}`);
   await expect(
-    page.getByRole("heading", { name: "Project not found" }),
+    page.getByRole("heading", { name: "Product not found" }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Back to dashboard" }).click();
   await expect(page).toHaveURL("/");
