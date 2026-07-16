@@ -59,7 +59,7 @@ The root entity, defined by `projectSchema`.
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `schemaVersion` | `number` (int) | `3` | Stamped on normalization. |
+| `schemaVersion` | `number` (int) | `5` | Stamped on normalization. |
 | `country` | `string` | `""` | |
 | `regions` | `string[]` | `[]` | Cities/regions. |
 | `positioning` | `string` | `""` | Product angle. |
@@ -83,7 +83,7 @@ The root entity, defined by `projectSchema`.
 The current schema version is defined as:
 
 ```17:17:src/lib/schemas/project.ts
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 5;
 ```
 
 ## `ProductionPlan`
@@ -276,7 +276,10 @@ commit. It exists to:
 Normalization parses current defaults, detects whether a production plan existed,
 maps legacy deliverables into authoritative output requirements, creates unique
 planned editions for legacy itineraries, and links both sides by id. It then stamps
-`schemaVersion: 3`. `normalizePersistedProjects` applies the same migration to the
+`schemaVersion: 5`. v5 removed top-level `matrix`, `generated`, `deliverables`,
+`travelStyles`, `travelerTypes`, and `durations` (the production plan and trip
+configs are authoritative), added `coverImage` and the optional `series` link
+(see [series-engine.md](series-engine.md)). `normalizePersistedProjects` applies the same migration to the
 whole Zustand slice (`{ projects, initialized }`).
 
 ## Import / export {#import--export}

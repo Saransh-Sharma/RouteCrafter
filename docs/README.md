@@ -19,8 +19,8 @@ want to understand or extend the code.
 
 | Doc | What it covers |
 | --- | --- |
-| [Getting started](guides/getting-started.md) | Prerequisites, install, dev scripts, where your data lives, seeded demo projects, and the five-stage production route. |
-| [User guide](guides/user-guide.md) | End-to-end walkthrough: dashboard, creating a project, and the Define, Plan, Build, Package, Publish workflow. |
+| [Getting started](guides/getting-started.md) | Prerequisites, install, dev scripts, where your data lives, and seeded demo projects. |
+| [User guide](guides/user-guide.md) | End-to-end walkthrough of the creator loop: the shelf, the four-tab product editor, readiness, export, and series. |
 | [AI setup (BYOK)](guides/ai-setup.md) | Configuring OpenAI / Anthropic / Gemini keys, model defaults, connection tests, preview-before-apply, merge modes, and security caveats. |
 
 ## Architecture
@@ -32,7 +32,8 @@ want to understand or extend the code.
 | [Generation engine](architecture/generation-engine.md) | The pure `src/lib/generation` engine: context, registry, the 13 prompt templates, the 4 scaffold builders, and realism rules. |
 | [AI integration](architecture/ai-integration.md) | The BYOK proxy: providers, task types, API routes, output parsing, the `AiRunSheet` workflow, and security. |
 | [State & persistence](architecture/state-and-persistence.md) | The shared cloud workspace, Zustand local cache, sync controller, conflict handling, and the SSR-safe mount pattern. |
-| [UI & design system](architecture/ui-and-design-system.md) | Routing, AppShell/nav, the `components/ui` primitives, the workspace tabs, design tokens, and the PDF builder. |
+| [Series engine](architecture/series-engine.md) | Cross-country product multiplication: clone, route transposition, style-referenced regeneration, cost, retry/resume. |
+| [UI & design system](architecture/ui-and-design-system.md) | Routing, AppShell/TopBar, the `components/ui` primitives, the editor tabs, design tokens, and the PDF builder. |
 
 ## Development
 

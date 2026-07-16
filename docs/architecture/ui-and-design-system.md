@@ -153,63 +153,31 @@ The PDF subsystem lives in
 
 | Piece | Role |
 | --- | --- |
-| `ItineraryDocument` | Renders a multi-page A4 document (cover, overview, day pages, guides, disclaimer) using `.rc-doc` and inline `--doc-*` theme variables. |
-| `themes.ts` | Five themes (beige, sage, terracotta, teal, noir) mapped to `--doc-*` CSS variables via `themeVars(theme)`. |
-| `PdfThemeControls` | Per-itinerary theme + cover/day images; upload (compressed via `compressImageFile`) or AI generation. |
-| `PdfBuilderPanel` | Orchestrates preview + export; tracks image-load completion. |
-
-The document styles live in `globals.css` (`.rc-doc`, `.rc-print-page`, cover scrim,
-print `@page` A4) and use concrete color values **independent of the app chrome** so
-`html2canvas` captures them correctly.
+| `ItineraryDocument` | Renders a multi-page A4 document (cover, overview, day pages, guides, disclaimer) using `.rc-doc` and inline `--doc-*` theme variables. Imports `src/app/pdf.css`, the single source of document/print styles. |
+| `pdf-page-model.ts` | Pagination model: splits days, detail continuations, and overlong tokens across pages. |
+| `themes.ts` | Six themes (editorial, beige, sage, terracotta, teal, noir) mapped to `--doc-*` CSS variables via `themeVars(theme)`. |
+| `PdfThemeControls` / `PdfTextControls` | Per-itinerary theme, cover/day images, and text controls beside the live preview. |
+| `PdfBuilderPanel` | Orchestrates the preview + export from the editor's PDF tab. |
 
 ### Export paths
 
-Two ways to produce a PDF:
-
-1. **Native print** — `window.print()`, with `@media print` rules that hide app
-   chrome (`.rc-no-print`), isolate the print root, force A4 page breaks, and enable
-   `print-color-adjust: exact`.
-2. **Download** — dynamic-imports `html2pdf.js`:
-
-```47:72:src/components/workspace/pdf/PdfBuilderPanel.tsx
-  async function downloadPdf() {
-    if (!docRef.current || !selected) return;
-    setDownloading(true);
-    setDownloadError(null);
-    try {
-      await prepareDocumentForPdf(docRef.current);
-      const html2pdf = (await import("html2pdf.js")).default;
-      const slug = (project.country || "project").toLowerCase();
-      await html2pdf()
-        .set({
-          margin: 0,
-          filename: `${slug}-${selected.duration.replace(/\s+/g, "")}-itinerary.pdf`,
-          image: { type: "jpeg", quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
-        })
-        .from(docRef.current)
-        .save();
-    } catch (error) {
-      // ...
-    }
-  }
-```
-
-`prepareDocumentForPdf` waits for `document.fonts.ready` and all images to load/decode,
-and probes remote images for CORS-safe canvas embeddability — if a remote image
-can't be captured, it throws and the user is directed to upload the image or use the
-native print path.
+1. **Server export (primary)** — the editor posts `{ project, itineraryId }`
+   to `POST /api/pdf/export`. The route launches Playwright Chromium,
+   injects the payload into `localStorage`, renders `/pdf/print`, waits for
+   fonts/images (`data-pdf-print-ready`), and returns `page.pdf()` as a
+   native A4 PDF. Vercel bundling for the Chromium headless shell is
+   configured in `next.config.ts`.
+2. **Native print** — `/pdf/print?autoprint=1` calls `window.print()`;
+   `@media print` rules in `pdf.css` hide app chrome, isolate the print
+   root, force A4 page breaks, and enable `print-color-adjust: exact`.
 
 ## Broader export (non-PDF)
 
-Beyond PDF, the [Export panel](../guides/user-guide.md) and the header
-`ExportButton` use helpers in
+The editor header's Export menu (`src/components/editor/ExportMenu.tsx`) uses
+helpers in
 [`export-bundle.ts`](../../src/components/workspace/export/export-bundle.ts)
-(`buildMarkdownBundle`, `itineraryToCsv`, `promptsToMarkdown`,
-`buildAiUsageAppendix`) and [`project-io.ts`](../../src/lib/io/project-io.ts) for JSON.
-PDF export remains in the Package stage's PDF presentation tool.
+(`buildMarkdownBundle`, `itineraryToCsv`, `buildAiUsageAppendix`) and
+[`project-io.ts`](../../src/lib/io/project-io.ts) for JSON.
 
 ## High-level UI map
 
@@ -217,13 +185,12 @@ PDF export remains in the Package stage's PDF presentation tool.
 flowchart TB
   Layout["layout.tsx (fonts + AppShell)"] --> Shell
   subgraph Shell[AppShell]
-    Nav["Sidebar / MobileNav"]
+    Nav[TopBar]
     Notice[PersistenceNotice]
     Main["max-w-7xl main"]
   end
-  Main --> Pages["Dashboard / Projects / New / Workspace / Settings"]
-  Pages --> Store["Zustand stores (localStorage)"]
-  Workspace["/projects/[id]"] --> Route["GuidedWorkspace: 5 stages"]
-  Route --> Tools["Edition editor + package tools"]
-  Tools --> PDF["PDF presentation -> html2pdf.js + ItineraryDocument"]
+  Main --> Pages["Shelf / products/new / products/[id] / series/[id] / Settings"]
+  Pages --> Store["Zustand stores (cloud + localStorage cache)"]
+  Editor["/products/[id]"] --> Tabs["Trip / Itinerary / PDF / Listing"]
+  Tabs --> PDFX["PDF tab -> ItineraryDocument -> /api/pdf/export (Playwright)"]
 ```
