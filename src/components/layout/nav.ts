@@ -1,13 +1,4 @@
-import {
-  LayoutDashboard,
-  FolderOpen,
-  Globe2,
-  LibraryBig,
-  Images,
-  BookOpen,
-  Settings,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutGrid, Settings, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   label: string;
@@ -17,42 +8,16 @@ export interface NavItem {
   match: (pathname: string) => boolean;
 }
 
+/**
+ * The whole IA is two nouns: Products (the shelf, which is home) and
+ * Settings. Everything else is contextual inside the product editor.
+ */
 export const navItems: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Products",
     href: "/",
-    icon: LayoutDashboard,
-    match: (p) => p === "/",
-  },
-  {
-    label: "Projects",
-    href: "/projects",
-    icon: FolderOpen,
-    match: (p) => p.startsWith("/projects"),
-  },
-  {
-    label: "Countries",
-    href: "/countries",
-    icon: Globe2,
-    match: (p) => p.startsWith("/countries"),
-  },
-  {
-    label: "Templates",
-    href: "/templates",
-    icon: LibraryBig,
-    match: (p) => p.startsWith("/templates"),
-  },
-  {
-    label: "Asset Library",
-    href: "/library",
-    icon: Images,
-    match: (p) => p.startsWith("/library"),
-  },
-  {
-    label: "Guide",
-    href: "/guide",
-    icon: BookOpen,
-    match: (p) => p.startsWith("/guide"),
+    icon: LayoutGrid,
+    match: (p) => p === "/" || p.startsWith("/products") || p.startsWith("/series"),
   },
   {
     label: "Settings",
