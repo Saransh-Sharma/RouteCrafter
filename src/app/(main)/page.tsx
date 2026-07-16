@@ -1,5 +1,5 @@
-import DashboardClient from "./DashboardClient";
+import ShelfClient from "./ShelfClient";
 
-export default function DashboardPage() {
-  return <DashboardClient />;
+export default function ShelfPage() {
+  return <ShelfClient />;
 }

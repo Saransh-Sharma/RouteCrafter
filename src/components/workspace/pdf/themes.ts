@@ -24,6 +24,21 @@ export interface DocTheme {
 
 export const DOC_THEMES: DocTheme[] = [
   {
+    // Matches the app's own travel-editorial identity: warm paper, quiet
+    // ink, sage accent.
+    id: "editorial",
+    label: "Editorial",
+    bg: "#efece3",
+    paper: "#fdfbf7",
+    ink: "#1f241f",
+    inkSoft: "#4e544c",
+    inkMuted: "#7e8378",
+    accent: "#4f7a55",
+    accentSoft: "#ebf0e3",
+    border: "#e3ddcd",
+    onAccent: "#fdfbf7",
+  },
+  {
     id: "beige",
     label: "Beige",
     bg: "#efe7d6",
@@ -93,7 +108,11 @@ export const DOC_THEMES: DocTheme[] = [
 export const DEFAULT_THEME_ID: PdfTheme = "beige";
 
 export function getTheme(id: PdfTheme | undefined): DocTheme {
-  return DOC_THEMES.find((t) => t.id === id) ?? DOC_THEMES[0];
+  return (
+    DOC_THEMES.find((t) => t.id === id) ??
+    DOC_THEMES.find((t) => t.id === DEFAULT_THEME_ID) ??
+    DOC_THEMES[0]
+  );
 }
 
 /** CSS custom properties consumed by the `.rc-doc` styles. */

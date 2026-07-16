@@ -117,7 +117,10 @@ export function ExpandedItineraryPanel({
     duration: expandHint?.duration ?? project.tripConfigs[0]?.duration ?? "7 days",
     customDays: expandHint ? undefined : project.tripConfigs[0]?.customDays,
     travelerType:
-      expandHint?.travelerType ?? project.travelerTypes[0] ?? "Couple",
+      expandHint?.travelerType ??
+      project.tripConfigs[0]?.travelerType ??
+      project.productionPlan.editions[0]?.travelerType ??
+      "Couple",
     style: "",
   }));
   const [selectedId, setSelectedId] = React.useState<string | null>(

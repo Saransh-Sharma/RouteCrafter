@@ -11,7 +11,6 @@ export { Badge } from "./Badge";
 export { SectionHeader } from "./SectionHeader";
 export { CopyButton } from "./CopyButton";
 export { OutputBlock } from "./OutputBlock";
-export { PreviewCard } from "./PreviewCard";
 export { ExportButton } from "./ExportButton";
 export { SelectableCard } from "./SelectableCard";
 export { CheckRow } from "./CheckRow";
@@ -26,3 +25,6 @@ export {
   Select,
   CheckboxChip,
 } from "./field";
+export { Dialog, DialogActions } from "./overlay/Dialog";
+export { Popover } from "./overlay/Popover";
+export { Menu } from "./overlay/Menu";
