@@ -2,7 +2,6 @@ import type { GenerationContext, PromptTemplate } from "./types";
 import { countryPositioningTemplate } from "./templates/country-positioning";
 import { visualDirectionTemplate } from "./templates/visual-direction";
 import { imagePromptsTemplate } from "./templates/image-prompts";
-import { itineraryMatrixTemplate } from "./templates/itinerary-matrix";
 import { expandedItineraryTemplate } from "./templates/expanded-itinerary";
 import { listingCopyTemplate } from "./templates/listing-copy";
 import { pdfVersionTemplate } from "./templates/pdf-version";
@@ -17,7 +16,6 @@ export const templates: PromptTemplate[] = [
   countryPositioningTemplate,
   visualDirectionTemplate,
   imagePromptsTemplate,
-  itineraryMatrixTemplate,
   expandedItineraryTemplate,
   pdfVersionTemplate,
   spreadsheetVersionTemplate,

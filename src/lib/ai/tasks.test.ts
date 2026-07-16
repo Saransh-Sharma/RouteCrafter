@@ -12,7 +12,6 @@ import {
   buildItineraryOverviewPrompt,
   buildItineraryPrompt,
   buildListingPrompt,
-  buildMatrixPrompt,
   buildPromptRunPrompt,
 } from "./tasks";
 
@@ -23,7 +22,6 @@ const itinerary = buildItinerary(buildContext(project));
 describe("natural-language guardrails in prose prompts", () => {
   it("are present in the prose- and copy-producing builders", () => {
     expect(buildPromptRunPrompt(project, "Write the overview")).toContain(NL);
-    expect(buildMatrixPrompt(project)).toContain(NL);
     expect(buildItineraryPrompt(project)).toContain(NL);
     expect(buildListingPrompt(project)).toContain(NL);
     expect(buildItineraryOverviewPrompt(project, itinerary)).toContain(NL);

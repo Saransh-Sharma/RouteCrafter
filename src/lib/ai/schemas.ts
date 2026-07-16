@@ -6,7 +6,7 @@ export const aiTaskTypeSchema = z.enum([
   "brief",
   "prompt",
   "itinerary",
-  "matrix",
+  "transpose",
   "listing",
   "imagePrompt",
   "imageGeneration",

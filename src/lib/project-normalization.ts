@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   CURRENT_SCHEMA_VERSION,
+  deliverableEnum,
   durationEnum,
   projectSchema,
   type Deliverable,
@@ -42,9 +43,34 @@ const OUTPUT_TO_LEGACY: Partial<Record<OutputRequirement, Deliverable>> = {
   "map-pins-legacy": "Map pins",
 };
 
-function legacyOutputs(project: Project): OutputRequirement[] {
+/**
+ * Fields that existed on pre-v5 projects at the top level. They were removed
+ * from `projectSchema` in v5 (production plan + trip configs are
+ * authoritative), so they must be read off the raw input before parsing —
+ * Zod strips them.
+ */
+interface LegacyProjectFields {
+  deliverables: Deliverable[];
+  durations: Duration[];
+}
+
+function readLegacyFields(raw: object): LegacyProjectFields {
+  const record = raw as Record<string, unknown>;
+  return {
+    deliverables: z
+      .array(deliverableEnum)
+      .catch([])
+      .parse(record.deliverables ?? []),
+    durations: z.array(durationEnum).catch([]).parse(record.durations ?? []),
+  };
+}
+
+function legacyOutputs(
+  project: Project,
+  legacy: LegacyProjectFields,
+): OutputRequirement[] {
   const deliverables = [
-    ...project.deliverables,
+    ...legacy.deliverables,
     ...(project.tripConfigs[0]?.deliverables ?? []),
   ];
   return [
@@ -80,15 +106,20 @@ function customDays(value: string): number | undefined {
     : days;
 }
 
-function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Project {
+function migrateProductionPlan(
+  project: Project,
+  legacy: LegacyProjectFields,
+  hadProductionPlan: boolean,
+): Project {
   const primaryConfig = project.tripConfigs[0];
-  const fallbackDuration = primaryConfig?.duration ?? project.durations[0] ?? "7 days";
+  const fallbackDuration =
+    primaryConfig?.duration ?? legacy.durations[0] ?? "7 days";
   const outputs = hadProductionPlan
     ? [
         "marketplace-listing" as const,
         ...project.productionPlan.outputs,
       ].filter((item, index, items) => items.indexOf(item) === index)
-    : legacyOutputs(project);
+    : legacyOutputs(project, legacy);
 
   const existingEditions = hadProductionPlan
     ? project.productionPlan.editions
@@ -150,25 +181,35 @@ function migrateProductionPlan(project: Project, hadProductionPlan: boolean): Pr
 
   return {
     ...project,
-    deliverables: legacyDeliverables,
     tripConfigs,
     itineraries,
     productionPlan: {
       ...project.productionPlan,
       offerModel: hadProductionPlan
         ? project.productionPlan.offerModel
-        : project.deliverables.includes("Fiverr listing copy")
+        : legacy.deliverables.includes("Fiverr listing copy")
           ? "service"
           : "digital",
       channels: hadProductionPlan
         ? project.productionPlan.channels
-        : project.deliverables.includes("Fiverr listing copy")
+        : legacy.deliverables.includes("Fiverr listing copy")
           ? ["fiverr"]
           : ["etsy"],
       outputs,
       editions,
     },
   };
+}
+
+/**
+ * v5: top-level matrix/generated/deliverables/travelStyles/travelerTypes/
+ * durations were removed (Zod strips them on parse); the shelf cover image
+ * is seeded from the first itinerary's PDF cover.
+ */
+function migrateV5(project: Project): Project {
+  if (project.coverImage) return project;
+  const cover = project.itineraries.find((item) => item.coverImage)?.coverImage;
+  return cover ? { ...project, coverImage: cover } : project;
 }
 
 /** Apply current nested defaults and stamp the current project schema version. */
@@ -178,12 +219,13 @@ export function normalizeProject(raw: unknown): Project {
   }
 
   const hadProductionPlan = Object.hasOwn(raw, "productionPlan");
+  const legacy = readLegacyFields(raw);
   const parsed = projectSchema.parse({
     ...raw,
     schemaVersion: CURRENT_SCHEMA_VERSION,
   });
   return projectSchema.parse(
-    migrateProductionPlan(parsed, hadProductionPlan),
+    migrateV5(migrateProductionPlan(parsed, legacy, hadProductionPlan)),
   );
 }
 

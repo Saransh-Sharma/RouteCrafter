@@ -1,10 +1,17 @@
-import type { Project } from "./schemas";
+import type {
+  Deliverable,
+  Duration,
+  Project,
+  TravelerType,
+  TravelStyle,
+} from "./schemas";
 import { normalizeProject } from "./project-normalization";
 
 /**
- * Example projects seeded into the store on first run. Each is parsed through
- * `projectSchema` so defaults (brandStyle, generated, empty arrays, etc.) are
- * filled in and the seeds are guaranteed valid.
+ * Example projects seeded into the store on first run. Each is written in the
+ * legacy pre-v5 shape on purpose — normalizeProject folds the legacy arrays
+ * into the production plan, exercising the same migration path real stored
+ * projects take.
  */
 function makeSeed(input: {
   id: string;
@@ -13,10 +20,10 @@ function makeSeed(input: {
   regions: string[];
   positioning: string;
   targetAudience: string;
-  travelStyles: Project["travelStyles"];
-  travelerTypes: Project["travelerTypes"];
-  durations: Project["durations"];
-  deliverables: Project["deliverables"];
+  travelStyles: TravelStyle[];
+  travelerTypes: TravelerType[];
+  durations: Duration[];
+  deliverables: Deliverable[];
   status: Project["status"];
   accent: Project["accent"];
   createdAt: string;

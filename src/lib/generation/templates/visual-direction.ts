@@ -12,7 +12,7 @@ Define the visual direction for a custom ${ctx.project.country || "country"} iti
 
 Context:
 - Country: ${ctx.project.country || "(set the country)"}
-- Travel styles: ${list(ctx.project.travelStyles.length ? ctx.project.travelStyles : ctx.config.travelStyles)}
+- Travel styles: ${list(ctx.config.travelStyles)}
 - Audience: ${ctx.project.targetAudience || "general premium travelers"}
 
 Produce:

@@ -14,9 +14,7 @@ export type {
   DayTrivia,
   CustomBlock,
   ItineraryOutput,
-  ItineraryMatrix,
-  MatrixCell,
-  MatrixVariation,
+  SeriesLink,
   PortfolioImagePrompt,
   ImagePromptKind,
   MarketplaceListing,
@@ -50,11 +48,3 @@ export type {
   TemplateCategory,
   TemplateProjectSkeleton,
 } from "./schemas";
-
-/** A module/section inside the project workspace (UI-only). */
-export interface WorkspaceModule {
-  id: string;
-  label: string;
-  description: string;
-  phase: number;
-}

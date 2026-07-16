@@ -5,7 +5,7 @@ export type AiTaskType =
   | "brief"
   | "prompt"
   | "itinerary"
-  | "matrix"
+  | "transpose"
   | "listing"
   | "imagePrompt"
   | "imageGeneration"
@@ -203,16 +203,5 @@ export interface AiImageDefaults {
   aspectRatio: string;
 }
 
-export interface AiAcceptedRun {
-  id: string;
-  aiRunId?: string;
-  provider: AiProviderId;
-  model: string;
-  taskType: AiTaskType;
-  label: string;
-  createdAt: string;
-  appliedAt: string;
-  usage?: AiUsage;
-  source?: string;
-  credentialSource?: AiCredentialSource;
-}
+/** Accepted-run metadata; the Zod schema in lib/schemas/ai.ts is canonical. */
+export type { AiAcceptedRun } from "@/lib/schemas/ai";

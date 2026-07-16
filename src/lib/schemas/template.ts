@@ -1,11 +1,5 @@
 import { z } from "zod";
-import {
-  accentEnum,
-  durationEnum,
-  pdfThemeEnum,
-  travelerTypeEnum,
-  travelStyleEnum,
-} from "./enums";
+import { accentEnum, pdfThemeEnum } from "./enums";
 import { brandStyleSchema } from "./project";
 import { tripConfigurationSchema } from "./trip-config";
 import { productionPlanSchema } from "./production-plan";
@@ -21,9 +15,6 @@ export const templateProjectSkeletonSchema = z.object({
   regions: z.array(z.string()).default([]),
   positioning: z.string().default(""),
   targetAudience: z.string().default(""),
-  travelStyles: z.array(travelStyleEnum).default([]),
-  travelerTypes: z.array(travelerTypeEnum).default([]),
-  durations: z.array(durationEnum).default([]),
   brandStyle: brandStyleSchema.default(brandStyleSchema.parse({})),
   productionPlan: productionPlanSchema.default(productionPlanSchema.parse({})),
   tripConfigs: z.array(tripConfigurationSchema).default([]),

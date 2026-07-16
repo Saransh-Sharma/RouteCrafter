@@ -1,21 +1,13 @@
 import { z } from "zod";
-import {
-  accentEnum,
-  brandVoiceEnum,
-  deliverableEnum,
-  durationEnum,
-  projectStatusEnum,
-  travelStyleEnum,
-  travelerTypeEnum,
-} from "./enums";
+import { accentEnum, brandVoiceEnum, projectStatusEnum } from "./enums";
 import { tripConfigurationSchema } from "./trip-config";
 import { portfolioImagePromptSchema } from "./image-prompt";
-import { itineraryOutputSchema, itineraryMatrixSchema } from "./itinerary";
+import { itineraryOutputSchema } from "./itinerary";
 import { marketplaceListingSchema } from "./listing";
 import { aiAcceptedRunSchema } from "./ai";
 import { productionPlanSchema } from "./production-plan";
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 export const brandStyleSchema = z.object({
   businessName: z.string().default(""),
@@ -29,6 +21,22 @@ export const brandStyleSchema = z.object({
 
 export type BrandStyle = z.infer<typeof brandStyleSchema>;
 
+/**
+ * Membership in a Series — a family of country versions of one product.
+ * The original and its AI-transposed variants all share a seriesId; each
+ * member remains an independently editable, sellable project.
+ */
+export const seriesLinkSchema = z.object({
+  seriesId: z.string(),
+  seriesName: z.string().default(""),
+  role: z.enum(["original", "variant"]).default("variant"),
+  /** The product this one was transposed from (variants only). */
+  sourceProductId: z.string().optional(),
+  addedAt: z.string(),
+});
+
+export type SeriesLink = z.infer<typeof seriesLinkSchema>;
+
 export const projectSchema = z.object({
   id: z.string(),
   schemaVersion: z.number().int().default(CURRENT_SCHEMA_VERSION),
@@ -39,22 +47,18 @@ export const projectSchema = z.object({
   positioning: z.string().default(""),
   targetAudience: z.string().default(""),
 
-  travelStyles: z.array(travelStyleEnum).default([]),
-  travelerTypes: z.array(travelerTypeEnum).default([]),
-  durations: z.array(durationEnum).default([]),
-  deliverables: z.array(deliverableEnum).default([]),
-
   brandStyle: brandStyleSchema.default(brandStyleSchema.parse({})),
   productionPlan: productionPlanSchema.default(productionPlanSchema.parse({})),
 
-  // Generated artifacts (filled in by later phases)
+  /** Shelf/cover image; falls back to itineraries[0].coverImage in the UI. */
+  coverImage: z.string().default(""),
+  series: seriesLinkSchema.optional(),
+
+  // Generated artifacts
   tripConfigs: z.array(tripConfigurationSchema).default([]),
   imagePrompts: z.array(portfolioImagePromptSchema).default([]),
-  matrix: itineraryMatrixSchema.optional(),
   itineraries: z.array(itineraryOutputSchema).default([]),
   listing: marketplaceListingSchema.optional(),
-  /** Raw generated prompt text keyed by template id. */
-  generated: z.record(z.string(), z.string()).default({}),
   /** Accepted billable AI outputs, without API keys or prompt payloads. */
   aiRuns: z.array(aiAcceptedRunSchema).default([]),
 

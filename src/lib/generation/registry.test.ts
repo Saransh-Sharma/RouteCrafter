@@ -9,7 +9,6 @@ const ctx = buildContext(seedProjects[0]);
 const proseTemplateIds = [
   "country-positioning",
   "expanded-itinerary",
-  "itinerary-matrix",
   "listing-copy",
   "pdf-version",
   "spreadsheet-version",

@@ -131,9 +131,6 @@ export function sanitizeProjectForTemplate(
       regions: project.regions,
       positioning: project.positioning,
       targetAudience: project.targetAudience,
-      travelStyles: project.travelStyles,
-      travelerTypes: project.travelerTypes,
-      durations: project.durations,
       brandStyle: project.brandStyle,
       productionPlan: {
         ...project.productionPlan,

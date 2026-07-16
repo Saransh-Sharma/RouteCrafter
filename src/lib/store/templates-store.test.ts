@@ -14,9 +14,6 @@ const template: Template = {
     regions: [],
     positioning: "",
     targetAudience: "",
-    travelStyles: [],
-    travelerTypes: [],
-    durations: [],
     brandStyle: {
       businessName: "",
       voice: "editorial",
